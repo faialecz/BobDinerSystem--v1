@@ -143,7 +143,7 @@
   justify-content: space-between; /* This pushes checkbox left and link right */
   align-items: center;
   width: 100%;
-  margin-top: -5px;   /* Slight adjustment to pull it closer to the input */
+  margin-top: -5px;   
   margin-bottom: 5px;
 }
 
@@ -152,14 +152,14 @@
   align-items: center;
   gap: 8px;           /* Space between checkbox and text */
   font-size: 12px;
-  color: #444;        /* Matches your loginLabel color */
+  color: #444;       
   cursor: pointer;
   font-weight: 500;
 }
 
 .forgotLink {
   font-size: 12px;
-  color: #3D86C7;     /* Matches your blue brand color */
+  color: #3D86C7;   
   text-decoration: none;
   font-weight: 600;
 }
@@ -247,9 +247,136 @@
   border: 1px solid #ccc; 
 }
 
-/* Optional: If you want the inputs to be narrower than the yellow box */
 .forgotContainer .loginField {
   width: 100%; 
   max-width: 320px;   
   margin: 0 auto;     
 }
+
+
+/* Container for the 6 input boxes */
+.otpInputGroup {
+  display: flex;
+  gap: 10px;           
+  justify-content: center;
+  margin-top: -5px;
+  margin-bottom: 30px;     
+}
+
+/* The individual white digit boxes */
+.otpBox {
+  width: 45px;
+  height: 55px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  border-radius: 10px;
+  border: none;      
+  background-color: white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); 
+  color: #333;
+  outline: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+  flex-shrink: 0;
+}
+
+.otpBox:focus {
+  box-shadow: 0 0 0 2px #164163, 0 4px 12px rgba(217, 211, 127, 0.2);
+  transform: translateY(-2px);
+}
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5); 
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  border-radius: 20px; 
+}
+
+.modalContent {
+  background: #fffcf2; 
+  width: 70%;
+  padding: 25px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  text-align: left;
+}
+
+.modalTitle {
+  font-size: 18px;
+  color: #164163; /* Deep blue */
+  margin-bottom: 12px;
+  font-weight: bold;
+}
+
+.modalText, .modalQuestion {
+  font-size: 14px;
+  color: #444;
+  line-height: 1.4;
+  margin-bottom: 15px;
+}
+
+.modalButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.closeBtn, .confirmBtn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.closeBtn {
+  background: #ccc;
+  color: #333;
+}
+
+.confirmBtn {
+  background: #164163; 
+  color: white;
+}
+
+.confirmBtn:hover {
+  background: #0d2b42;
+}
+
+.resendBtn {
+  background: none;      
+  border: none;          
+  margin-top: 5px;
+  color: #3D86C7;       
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+.resendBtn:hover {
+  color: #164163;
+}
+
+.timerText {
+  font-size: 14px;
+  color: #164163; 
+  font-weight: bold;
+}
+
+.emailResendWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -5px;
+  width: 100%;
+}
+
