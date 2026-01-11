@@ -1,0 +1,130 @@
+.dashboardContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem;
+  background-color: #fefcf6;
+  min-height: 100vh;
+}
+
+/* ===== Header ===== */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #ffd54f;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #164163;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: #164163;
+}
+
+.logoutButton {
+  background-color: #164163;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.6rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.logoutButton:hover {
+  background-color: #0e2a3b;
+}
+
+/* ===== Stats Grid ===== */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+
+.statCard {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all 0.25s ease;
+}
+
+.statCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(22, 65, 99, 0.25);
+}
+
+.statTitle {
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.statValue {
+  color: #164163;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-top: 0.5rem;
+}
+
+.statChange {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.positive {
+  color: #16a34a;
+}
+
+.negative {
+  color: #dc2626;
+}
+
+/* ===== Panels ===== */
+.panelsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .panelsGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.panel {
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  height: 300px;
+}
+
+.panelTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #164163;
+  margin-bottom: 1rem;
+}
+
+.placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 1rem;
+}
