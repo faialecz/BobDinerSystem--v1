@@ -11,8 +11,9 @@ export default function Home() {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Simplified: directly set logged in to true
-  const handleLogin = () => {
-    setIsLoggedIn(true);
+  const handleLogin = (data: string) => {
+    setUserInfo(data);     
+    setIsLoggedIn(true);   // This switches the view to the Dashboard
   };
 
   const handleLogout = () => {
@@ -40,7 +41,7 @@ export default function Home() {
             className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#fefcf6] p-0 
               ${isCollapsed ? "ml-*" : "ml-*"}`} 
           >
-            <Dashboard onLogout={handleLogout} />
+            <Dashboard role={userInfo} onLogout={handleLogout} />
           </div>
           </div>
       )} 

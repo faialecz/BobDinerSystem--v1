@@ -7,27 +7,28 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
-export default function Dashboard({ role = "User", onLogout }: DashboardProps) {
+export default function Dashboard({ role = "Admin", onLogout }: DashboardProps) {
   const stats = [
-    { title: "Sales Today", value: "₱23,840", change: "+7.2%" },
-    { title: "Orders", value: "248", change: "+3.8%" },
-    { title: "Low Stock", value: "10 SKUs", change: "-2.8%" },
+    { title: "Sales Today", value: "₱ 23,840", change: "+7.2%", positive: true },
+    { title: "Orders", value: "72", change: "+2.8%", positive: true },
+    { title: "Low Stock", value: "10 SKUs", change: "+2.8%", positive: false }, 
   ];
 
-  return (
+return (
     <div className={styles.dashboardContainer}>
-      {/* Header */}
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Dashboard</h1>
-          <p className={styles.subtitle}>
-            Welcome, <strong>{role}</strong> 👋
-          </p>
+      <header className={styles.header}>
+        <div className={styles.welcomeText}>
+          Welcome, <strong>{role}!</strong>
         </div>
-        <button onClick={onLogout} className={styles.logoutButton}>
-          Logout
-        </button>
-      </div>
+        <div className={styles.headerActions}>
+          <div className={styles.notificationWrapper}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          </div>
+          <div className={styles.avatarContainer} onClick={onLogout}>
+            <img src="/ae-logo.png" alt="Admin Logo" className={styles.avatarImage} />
+          </div>
+        </div>
+      </header>
 
       {/* Stats Section */}
       <div className={styles.statsGrid}>
@@ -35,11 +36,7 @@ export default function Dashboard({ role = "User", onLogout }: DashboardProps) {
           <div key={item.title} className={styles.statCard}>
             <p className={styles.statTitle}>{item.title}</p>
             <h2 className={styles.statValue}>{item.value}</h2>
-            <span
-              className={`${styles.statChange} ${
-                item.change.startsWith("+") ? styles.positive : styles.negative
-              }`}
-            >
+            <span className={`${styles.statChange} ${item.positive ? styles.positive : styles.negative}`}>
               {item.change}
             </span>
           </div>
@@ -48,20 +45,38 @@ export default function Dashboard({ role = "User", onLogout }: DashboardProps) {
 
       {/* Panels Section */}
       <div className={styles.panelsGrid}>
-        <div className={styles.panel}>
-          <h3 className={styles.panelTitle}>Sales Forecasting</h3>
-          <div className={styles.placeholder}>📊 Chart Placeholder</div>
+        
+        {/* Forecasting and Revenue */}
+        <div className={styles.column}>
+          <div className={styles.panel}>
+            <h3 className={styles.panelTitle}>Sales Forecasting</h3>
+            <div className={styles.placeholder}>📊 [Weekly/Quarterly Chart]</div>
+          </div>
+          <div className={styles.panel}>
+            <h3 className={styles.panelTitle}>Forecast Revenue</h3>
+            <div className={styles.placeholder}>📈 [Revenue Line Graph]</div>
+          </div>
         </div>
 
-        <div className={styles.panel}>
-          <h3 className={styles.panelTitle}>Quick POS</h3>
-          <div className={styles.placeholder}>🧾 Table Placeholder</div>
+        {/* Quick POS and Goal/Sales */}
+        <div className={styles.column}>
+          <div className={styles.panel}>
+            <h3 className={styles.panelTitle}>Quick POS</h3>
+            <div className={styles.placeholder}>🧾 [Table Placeholder]</div>
+          </div>
+          
+          <div className={styles.bottomRow}>
+            <div className={styles.miniPanel}>
+              <h3 className={styles.panelTitle}>Goal</h3>
+              <div className={styles.placeholder}>🎯 [60%]</div>
+            </div>
+            <div className={styles.miniPanel}>
+              <h3 className={styles.panelTitle}>Top Yearly Sales</h3>
+              <div className={styles.placeholder}>🏆 [List]</div>
+            </div>
+          </div>
+        </div>
 
-           <div className={styles.panel}>
-          <h3 className={styles.panelTitle}>Forecast Revenue</h3>
-          <div className={styles.placeholder}>📊 +7.2%</div>
-        </div>
-        </div>
       </div>
     </div>
   );

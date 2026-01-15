@@ -1,10 +1,8 @@
 .dashboardContainer {
+  background-color: #F8F3D9; /* The cream background from your Figma */
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 2rem;
-  background-color: #fefcf6;
-  min-height: 100vh;
 }
 
 /* ===== Header ===== */
@@ -12,43 +10,55 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #ffd54f;
-  border-radius: 10px;
-  padding: 1.25rem 1.5rem;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  background-color: #ffffff;
+  padding: 0 2rem;
+  height: 70px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem; /* Adds space before the cards */
 }
 
-.title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #164163;
+.welcomeText {
+  font-size: 1.1rem;
+  color: #333;
 }
 
-.subtitle {
-  font-size: 1rem;
-  color: #164163;
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
 }
 
-.logoutButton {
-  background-color: #164163;
-  color: #fff;
-  font-weight: 600;
-  padding: 0.6rem 1.25rem;
-  border: none;
-  border-radius: 6px;
+.notificationWrapper {
+  position: relative;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  color: #666;
 }
 
-.logoutButton:hover {
-  background-color: #0e2a3b;
+.avatarContainer {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  overflow: hidden; /* This makes the square JPG image circular */
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* This prevents the logo from stretching */
+}
+
 
 /* ===== Stats Grid ===== */
 .statsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1.25rem;
+  padding: 0 2rem 2rem 2rem;
 }
 
 .statCard {
@@ -94,27 +104,50 @@
 /* ===== Panels ===== */
 .panelsGrid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1.2fr 1fr; 
   gap: 1.5rem;
+  padding: 0 2rem 2rem 2rem;
 }
 
-@media (min-width: 1024px) {
+@media (max-width: 1024px) {
   .panelsGrid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
 
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .panel {
+background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px; 
+  padding: 1.5rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.bottomRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.miniPanel {
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  height: 300px;
+  border-radius: 16px;
+  padding: 1.25rem;
+  min-height: 280px;
 }
 
 .panelTitle {
-  font-size: 1.125rem;
+  font-size: 1.1rem;
   font-weight: 600;
   color: #164163;
   margin-bottom: 1rem;
