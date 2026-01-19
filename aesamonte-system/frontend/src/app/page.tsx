@@ -7,6 +7,7 @@ import Sidebar from "@/components/layout/SideNavBar";
 import Reports from "@/app/reports/reports";
 import Settings from "@/app/settings/settings";
 import Help from "@/app/help/help";
+import Inventory from "@/app/inventory/inventory"; 
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -41,7 +42,7 @@ export default function Home() {
             collapsed={isCollapsed} 
             setCollapsed={setIsCollapsed}
             activeTab={activeTab}
-            onTabChange={setActiveTab} // New prop to manage active tab 
+            onTabChange={setActiveTab} 
           />
           
           <div 
@@ -50,6 +51,8 @@ export default function Home() {
           >
             {activeTab === "Dashboard" ? (
               <Dashboard role={userInfo} onLogout={handleLogout} />
+            ) : activeTab === "Inventory" ? (
+              <Inventory role={userInfo} onLogout={handleLogout} />
             ) : activeTab === "Reports" ? (
               <Reports role={userInfo} onLogout={handleLogout} />
             ) : activeTab === "Settings" ? (
