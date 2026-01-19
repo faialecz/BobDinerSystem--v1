@@ -1,0 +1,102 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  background-color: #F8F3D9;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mainContent {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.headerActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.topGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.statCard {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.cardTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.bigNumber {
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: #164163;
+  line-height: 1.1;
+}
+
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.subText {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.pill {
+  font-size: 0.75rem;
+  background: #dcfce7;
+  color: #15803d;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid #bbf7d0;
+  font-weight: 600;
+}
+
+.list {
+  margin-top: 0.75rem;
+}
+
+.listRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.altRow {
+  background: #f8fafc;
+}
+
+/* ===== COLORS ===== */
+.green {
+  color: #16a34a;
+}
+
+.red {
+  color: #dc2626;
+}
+
+.blue {
+  color: #2563eb;
+}
