@@ -1,0 +1,16 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "aesamontedb",
+            "database": "aesamontedb",
+            "username": "postgres",
+            "password": "Aaa123",
+            "connectionTimeout": 30
+        }
+    ]
+}
