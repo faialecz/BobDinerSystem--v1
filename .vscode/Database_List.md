@@ -58,9 +58,9 @@ CREATE TABLE inventory (
 
     CONSTRAINT fk_inventory_supplier
         FOREIGN KEY (supplier_id)
-        REFERENCES supplier(supplier_id)
+        REFERENCES supplier(supplier_id),
 
     CONSTRAINT fk_inventory_employee
         FOREIGN KEY (employee_id)
-        REFERENCES employee(employee_id),
+        REFERENCES employee(employee_id)
 );
