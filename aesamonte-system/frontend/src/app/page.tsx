@@ -57,7 +57,7 @@ export default function Home() {
               <Inventory role={userInfo} onLogout={handleLogout} />
             ) : activeTab === "Sales" ? (
               <Sales role={userInfo} onLogout={handleLogout} />
-            ) : activeTab === "Orders" ? ( // Added Order condition here
+            ) : activeTab === "Orders" ? ( 
               <Orders role={userInfo} onLogout={handleLogout} />
             ) : activeTab === "Reports" ? (
               <Reports role={userInfo} onLogout={handleLogout} />

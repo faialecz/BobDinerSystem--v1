@@ -1,6 +1,6 @@
 'use client';
 
-import React from "react";
+import React, { useState } from "react"; // Added useState
 import {
   AiOutlineUser,
   AiOutlineSetting,
@@ -14,6 +14,8 @@ import { PiShoppingBag } from "react-icons/pi";
 import { RiBarChart2Line, RiLogoutBoxRLine } from "react-icons/ri";
 import { IoArrowUndoCircleOutline } from "react-icons/io5";
 import styles from "@/css/sidenavbar.module.css";
+
+import LogoutModal from "@/components/logout/logout";
 
 interface SidebarProps {
   roleOrName: string;
@@ -33,6 +35,8 @@ export default function Sidebar({
   onTabChange 
 }: SidebarProps) {
   
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const menuItems = [
     { name: "Dashboard", icon: <GoHome /> },
     { name: "Sales", icon: <GrLineChart /> },
@@ -71,7 +75,7 @@ export default function Sidebar({
           {menuItems.map((item) => (
             <button
               key={item.name}
-              onClick={() => onTabChange(item.name)} // Switch the view
+              onClick={() => onTabChange(item.name)}
               className={`${styles.navItem} ${collapsed ? styles.collapsedItem : ""} ${
                 activeTab === item.name ? styles.activeNavItem : ""
               }`}
@@ -90,12 +94,20 @@ export default function Sidebar({
             <span className={styles.navIcon}><AiOutlineQuestionCircle size={20} /></span>
             {!collapsed && <span className={styles.navText}>Help</span>}
           </button>
-          <button className={styles.bottomButton} onClick={onLogout}>
+          
+          {/* Changed onClick to open the modal instead of logging out immediately */}
+          <button className={styles.bottomButton} onClick={() => setIsModalOpen(true)}>
             <span className={styles.navIcon}><RiLogoutBoxRLine size={20} /></span>
             {!collapsed && <span className={styles.navText}>Logout</span>}
           </button>
         </div>
       </div>
+
+      <LogoutModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onConfirm={onLogout} 
+      />
     </div>
   );
 }
