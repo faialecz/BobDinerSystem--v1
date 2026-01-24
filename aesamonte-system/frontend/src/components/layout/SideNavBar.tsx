@@ -11,6 +11,7 @@ import { GoHome } from "react-icons/go";
 import { GrLineChart } from "react-icons/gr";
 import { MdOutlineInventory2 } from "react-icons/md";
 import { PiShoppingBag } from "react-icons/pi";
+import { BsPeople } from "react-icons/bs";
 import { RiBarChart2Line, RiLogoutBoxRLine } from "react-icons/ri";
 import { IoArrowUndoCircleOutline } from "react-icons/io5";
 import styles from "@/css/sidenavbar.module.css";
@@ -42,6 +43,7 @@ export default function Sidebar({
     { name: "Sales", icon: <GrLineChart /> },
     { name: "Inventory", icon: <MdOutlineInventory2 /> },
     { name: "Orders", icon: <PiShoppingBag /> },
+    { name: "Supplier", icon: <BsPeople /> },
     { name: "Reports", icon: <RiBarChart2Line /> },
     { name: "Settings", icon: <AiOutlineSetting /> },
   ];
