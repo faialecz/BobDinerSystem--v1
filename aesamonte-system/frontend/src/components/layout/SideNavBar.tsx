@@ -43,7 +43,7 @@ export default function Sidebar({
     { name: "Sales", icon: <GrLineChart /> },
     { name: "Inventory", icon: <MdOutlineInventory2 /> },
     { name: "Orders", icon: <PiShoppingBag /> },
-    { name: "Supplier", icon: <BsPeople /> },
+    { name: "Suppliers", icon: <BsPeople /> },
     { name: "Reports", icon: <RiBarChart2Line /> },
     { name: "Settings", icon: <AiOutlineSetting /> },
   ];

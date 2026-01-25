@@ -10,6 +10,7 @@ import Help from "@/app/help/help";
 import Inventory from "@/app/inventory/inventory";
 import Sales from "@/app/sales/sales"; 
 import Orders from "@/app/order/order";
+import Suppliers from "@/app/suppliers/suppliers";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -65,7 +66,11 @@ export default function Home() {
               <Settings role={userInfo} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (
               <Help role={userInfo} onLogout={handleLogout} />
-            ) : null}
+            ) : activeTab === "Suppliers" ? (
+              <Suppliers role={userInfo} onLogout={handleLogout} />
+            ) : null
+            
+            }
             
           </div>
         </div>
