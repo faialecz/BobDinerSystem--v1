@@ -1,13 +1,13 @@
-from flask import Flask, jsonify
+from flask import Flask
 from flask_cors import CORS
-from database.views.inventory import get_inventory
+from routes.inventory import inventory_bp
+from routes.orders import orders_bp
 
 app = Flask(__name__)
-CORS(app)  # IMPORTANT for frontend access
+CORS(app)
 
-@app.route("/api/inventory", methods=["GET"])
-def inventory():
-    return jsonify(get_inventory())
+app.register_blueprint(inventory_bp)
+app.register_blueprint(orders_bp)
 
 if __name__ == "__main__":
     app.run(debug=True)

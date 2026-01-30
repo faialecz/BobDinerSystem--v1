@@ -1,5 +1,9 @@
+from flask import Blueprint, jsonify
 from database.db_config import get_connection
 
+inventory_bp = Blueprint("inventory", __name__)
+
+@inventory_bp.route("/api/inventory", methods=["GET"])
 def get_inventory():
     conn = get_connection()
     cur = conn.cursor()
@@ -8,12 +12,14 @@ def get_inventory():
         SELECT
             inventory_id,
             inventory_item_name,
-            unit_of_measure,
+            brand,
             item_quantity,
+            unit_of_measure,
+            item_status,
             item_unit_price,
             item_selling_price
         FROM inventory
-        WHERE item_status = 'Available'
+        ORDER BY inventory_id ASC
     """)
 
     rows = cur.fetchall()
@@ -21,14 +27,16 @@ def get_inventory():
     cur.close()
     conn.close()
 
-    return [
+    return jsonify([
         {
             "id": str(r[0]),
-            "item": r[1],           
-            "uom": r[2],
+            "item": r[1],
+            "brand": r[2],
             "qty": r[3],
-            "unitPrice": float(r[4]),
-            "price": float(r[5])
+            "uom": r[4],
+            "status": r[5],      
+            "unitPrice": float(r[6]),
+            "price": float(r[7]),
         }
         for r in rows
-    ]
+    ])
