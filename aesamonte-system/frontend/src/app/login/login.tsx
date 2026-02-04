@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { AiFillEye, AiFillEyeInvisible } from "react-icons/ai";
 import { FaMobileAlt, FaEnvelope, FaArrowLeft } from "react-icons/fa"; 
@@ -9,6 +9,13 @@ import styles from "@/css/auth.module.css";
 interface LoginProps {
   onLogin: (role: string) => void;
 }
+
+const mockUsers = [
+  { employeeId: "A001", password: "admin123", role: "Admin", name: "Alain Samonte" },
+  { employeeId: "M001", password: "manager123", role: "Manager", name: "Kristine Samonte" },
+  { employeeId: "S001", password: "staff123", role: "Staff", name: "Heidi Legazpi" },
+  { employeeId: "H001", password: "head123", role: "Head", name: "Hannah Head" },
+];
 
 export default function Login({ onLogin }: LoginProps) {
   const [view, setView] = useState<"login" | "forgot" | "sms" |"sms_otp" | "email_info" | "email_otp">("login");
@@ -21,31 +28,6 @@ export default function Login({ onLogin }: LoginProps) {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(0); 
   const [showPop, setShowPop] = useState(false);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-        const response = await fetch('http://127.0.0.1:5000/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                employee_id: employeeId, // Matches backend data.get('employee_id')
-                password: password 
-            }),
-        });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // 3. Use the role from your database to grant access
-        onLogin(data.role); 
-      } else {
-        alert(data.message || "Invalid credentials");
-      }
-    } catch (err) {
-      alert("Connection failed. Ensure your Flask server is running on port 5000.");
-    }
-  };
   
   /* Time for Verification */
   useEffect(() => {
@@ -88,54 +70,24 @@ export default function Login({ onLogin }: LoginProps) {
       }
     };
 
-    const handleOtpVerify = async (otpValue: string) => {
-      try {
-        const response = await fetch('http://127.0.0.1:5000/api/auth/verify-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            otp: otpValue,
-            employeeId: employeeId,
-            method: view === "sms_otp" ? "sms" : "email"
-          }),
-        });
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const user = mockUsers.find((u) => u.employeeId === employeeId);
 
-        const data = await response.json();
+    if (!user) {
+      alert("User not found!");
+      return;
+    }
 
-        if (response.ok) {
-          setShowPop(true);
-        } else {
-          alert(data.message || "Invalid OTP");
-        }
-      } catch (err) {
-        alert("Connection failed. Ensure your Flask server is running on port 5000.");
-      }
-    };
+    if (user.password !== password) {
+      alert("Incorrect password!");
+      return;
+    }
 
-    const handleSendOtp = async (method: "sms" | "email") => {
-      try {
-        const response = await fetch('http://127.0.0.1:5000/api/auth/send-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            employeeId: employeeId,
-            contact: method === "sms" ? contactNumber : emailAddress,
-            method: method
-          }),
-        });
+    alert(`Welcome ${user.name} (${user.role})`);
+    onLogin(user.role);
+  };
 
-        const data = await response.json();
-
-        if (response.ok) {
-          setTimer(120);
-          setView(method === "sms" ? "sms_otp" : "email_otp");
-        } else {
-          alert(data.message || "Failed to send OTP");
-        }
-      } catch (err) {
-        alert("Connection failed. Ensure your Flask server is running on port 5000.");
-      }
-    };
   return (
     <div className={styles.loginContainer}>
       <div className={styles.loginLogo}>
@@ -153,7 +105,7 @@ export default function Login({ onLogin }: LoginProps) {
       <div className={styles.loginFormBox}>
         {/* --- LOGIN --- */}
         {view === "login" ? (
-          <form onSubmit={handleLogin} className={styles.loginForm}>
+          <form onSubmit={handleSubmit} className={styles.loginForm}>
             <div className={styles.loginField}>
               <label className={styles.loginLabel}>Employee ID</label>
               <input
@@ -162,7 +114,6 @@ export default function Login({ onLogin }: LoginProps) {
                 onChange={(e) => setEmployeeId(e.target.value)}
                 className={styles.loginInput}
                 required
-                suppressHydrationWarning={true}
               />
             </div>
 
