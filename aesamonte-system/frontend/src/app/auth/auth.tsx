@@ -37,6 +37,12 @@ export default function Login({ onLogin }: LoginProps) {
       const data = await response.json();
 
       if (response.ok) {
+        // 1. Store token in localStorage
+        if (rememberMe) {
+          localStorage.setItem("rememberedEmployeeId", employeeId);
+        } else {
+          localStorage.removeItem("rememberedEmployeeId");
+        }
         // 3. Use the role from your database to grant access
         onLogin(data.role); 
       } else {
@@ -45,7 +51,17 @@ export default function Login({ onLogin }: LoginProps) {
     } catch (err) {
       alert("Connection failed. Ensure your Flask server is running on port 5000.");
     }
+    
   };
+
+  // inside Login component in src/app/auth/auth.tsx
+  useEffect(() => {
+      const savedId = localStorage.getItem("rememberedEmployeeId");
+      if (savedId) {
+          setEmployeeId(savedId);
+          setRememberMe(true); // Keep the checkbox checked for the user
+      }
+  }, []);
   
   /* Time for Verification */
   useEffect(() => {
@@ -89,6 +105,7 @@ export default function Login({ onLogin }: LoginProps) {
     };
 
     const handleOtpVerify = async (otpValue: string) => {
+      e.preventDefault();
       try {
         const response = await fetch('http://127.0.0.1:5000/api/auth/verify-otp', {
           method: 'POST',
@@ -189,7 +206,7 @@ export default function Login({ onLogin }: LoginProps) {
                   checked={rememberMe} 
                   onChange={(e) => setRememberMe(e.target.checked)} 
                 />
-                <span>Remember Password</span>
+                <span>Remember Me</span>
               </label>
               <a href="#" className={styles.forgotLink} onClick={() => setView("forgot")}>
                 Forgot Password?
