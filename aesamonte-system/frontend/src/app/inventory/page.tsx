@@ -6,7 +6,7 @@ import TopHeader from '@/components/layout/TopHeader';
 import ExportButton from '@/components/features/ExportButton';
 import {
   LuSearch, LuEllipsisVertical, LuChevronUp, LuChevronDown,
-  LuPencil, LuArchive, LuDownload, LuChevronRight
+  LuArchive, LuChevronRight
 } from "react-icons/lu";
 
 /* ================= TYPES ================= */
@@ -35,15 +35,20 @@ interface InventorySummary {
   outOfStockCount: number;
 }
 
-/* ================= COMPONENT ================= */
-
 const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const s = styles as Record<string, string>;
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [data, setData] = useState<InventorySummary | null>(null);
+  const [data, setData] = useState<InventorySummary>({
+    totalProducts: 0,
+    totalProductsChange: 0,
+    weeklyInventory: 0,
+    monthlyInventory: 0,
+    yearlyInventory: 0,
+    outOfStockCount: 0,
+  });
+  
   const [searchTerm, setSearchTerm] = useState('');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Product | '';
     direction: 'asc' | 'desc' | null;
@@ -52,66 +57,65 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   /* ================= FETCH INVENTORY ================= */
 
   useEffect(() => {
-    fetch("http://127.0.0.1:5000/api/inventory")
-      .then(res => res.json())
-      .then((data: Product[]) => {
-        setProducts(data);
+    const fetchInventory = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:5000/api/inventory");
+        if (!res.ok) throw new Error("Failed to fetch");
+        const productData: Product[] = await res.json();
+        setProducts(productData);
 
-        const visible = data.filter(p => p.qty > 0);
-        const outOfStock = data.filter(p => p.qty === 0);
+        const visible = productData.filter(p => p.qty > 0);
+        const outOfStock = productData.filter(p => p.qty === 0);
 
         setData({
-          totalProducts: data.length,
+          totalProducts: productData.length,
           totalProductsChange: 2.8,
           weeklyInventory: visible.length,
           monthlyInventory: visible.length * 10,
           yearlyInventory: visible.length * 100,
           outOfStockCount: outOfStock.length,
         });
-      })
-      .catch(err => console.error("Inventory fetch error:", err));
+      } catch (err) {
+        console.error("Inventory fetch error:", err);
+      }
+    };
+    fetchInventory();
   }, []);
 
-  /* ================= DERIVED DATA ================= */
+  /* ================= HANDLERS ================= */
 
-  const visibleProducts = products.filter(p => p.qty > 0);
-  const outOfStockItems = products.filter(p => p.qty === 0);
+  const requestSort = (key: keyof Product) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
-  const filteredProducts = visibleProducts.filter(p =>
+  /* ================= DATA PROCESSING ================= */
+
+  const filteredProducts = products.filter(p =>
     p.item.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.id.includes(searchTerm)
+    p.id.toString().includes(searchTerm)
   );
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     if (!sortConfig.key || !sortConfig.direction) return 0;
-
-    const aValue = a[sortConfig.key];
-    const bValue = b[sortConfig.key];
-
-    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+    const aVal = a[sortConfig.key];
+    const bVal = b[sortConfig.key];
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
     return 0;
   });
-
-  const requestSort = (key: keyof Product, direction: 'asc' | 'desc') => {
-    setSortConfig({ key, direction });
-  };
-
-  if (!data) return null;
-
-  /* ================= UI ================= */
 
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
 
       <div className={s.mainContent}>
-        <div className={s.headerActions}>
-          <ExportButton />
-        </div>
+        <div className={s.headerActions}><ExportButton /></div>
 
-        {/* TOP CARDS */}
         <div className={s.topGrid}>
           <section className={s.statCard}>
             <p className={s.cardTitle}>Total Products</p>
@@ -125,59 +129,60 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
           <section className={s.statCard}>
             <p className={s.cardTitle}>Inventory Report</p>
             <div className={s.list}>
-              <div className={`${s.listRow} ${s.altRow}`}>
-                Weekly Inventory <span>{data.weeklyInventory}</span>
-              </div>
-              <div className={s.listRow}>
-                Monthly Inventory <span>{data.monthlyInventory}</span>
-              </div>
-              <div className={`${s.listRow} ${s.altRow}`}>
-                Yearly Inventory <span>{data.yearlyInventory}</span>
-              </div>
+              <div className={`${s.listRow} ${s.altRow}`}>Weekly Inventory <span>{data.weeklyInventory}</span></div>
+              <div className={s.listRow}>Monthly Inventory <span>{data.monthlyInventory}</span></div>
+              <div className={`${s.listRow} ${s.altRow}`}>Yearly Inventory <span>{data.yearlyInventory}</span></div>
             </div>
           </section>
 
           <section className={s.statCard}>
             <p className={s.cardTitle}>Out of Stock</p>
             <div className={s.outOfStockList}>
-              {outOfStockItems.map(p => (
-                <div key={p.id} className={s.outOfStockBadge}>
-                  {p.item}
-                </div>
-              ))}
+              {products.filter(p => p.qty === 0).length > 0 ? (
+                products.filter(p => p.qty === 0).map(p => <div key={p.id} className={s.outOfStockBadge}>{p.item}</div>)
+              ) : ( <p className={s.subText}>All items in stock</p> )}
             </div>
           </section>
         </div>
 
-        {/* TABLE */}
         <div className={s.tableContainer}>
           <div className={s.header}>
-            <h1>Product List</h1>
+            <h1 className={s.title}>Product List</h1>
             <div className={s.controls}>
               <LuArchive size={20} />
-              <input
-                className={s.searchInput}
-                placeholder="Search..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
+              <div className={s.searchWrapper}>
+                <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <LuSearch size={18} />
+              </div>
+              <button className={s.addButton} onClick={() => console.log("Add clicked")}>ADD</button>
             </div>
           </div>
 
           <table className={s.table}>
             <thead>
               <tr>
-                {['id', 'item', 'brand', 'qty', 'uom', 'unitPrice', 'price'].map(key => (
-                  <th key={key}>
-                    <span>{key.toUpperCase()}</span>
-                    <LuChevronUp onClick={() => requestSort(key as keyof Product, 'asc')} />
-                    <LuChevronDown onClick={() => requestSort(key as keyof Product, 'desc')} />
+                {[
+                  { label: 'ID', key: 'id' },
+                  { label: 'ITEM', key: 'item' },
+                  { label: 'BRAND', key: 'brand' },
+                  { label: 'QTY', key: 'qty' },
+                  { label: 'UOM', key: 'uom' },
+                  { label: 'UNIT PRICE', key: 'unitPrice' },
+                  { label: 'PRICE', key: 'price' }
+                ].map((col) => (
+                  <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
+                    <div className={s.sortableHeader}>
+                      <span>{col.label}</span>
+                      <div className={s.sortIconsStack}>
+                        <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                        <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                      </div>
+                    </div>
                   </th>
                 ))}
-                <th>Action</th>
+                <th className={s.actionHeader}>Action</th>
               </tr>
             </thead>
-
             <tbody>
               {sortedProducts.map(p => (
                 <tr key={p.id}>
@@ -186,10 +191,10 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                   <td>{p.brand}</td>
                   <td>{p.qty}</td>
                   <td>{p.uom}</td>
-                  <td>₱ {p.unitPrice}</td>
-                  <td>₱ {p.price}</td>
-                  <td>
-                    <LuEllipsisVertical onClick={() => setOpenMenuId(p.id)} />
+                  <td>₱ {p.unitPrice?.toLocaleString()}</td>
+                  <td>₱ {p.price?.toLocaleString()}</td>
+                  <td className={s.actionCell}>
+                    <LuEllipsisVertical className={s.moreIcon} />
                   </td>
                 </tr>
               ))}
@@ -197,7 +202,9 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
           </table>
 
           <div className={s.footer}>
-            Showing {sortedProducts.length} of {visibleProducts.length}
+            <div className={s.showDataText}>
+              Showing <span className={s.countBadge}>{sortedProducts.length}</span> of {products.length}
+            </div>
             <LuChevronRight />
           </div>
         </div>

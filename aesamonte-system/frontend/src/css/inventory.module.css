@@ -250,6 +250,21 @@
   justify-content: center;
 }
 
+/* NEW: HOVER EFFECT FOR ARROWS ONLY */
+.sortIconsStack svg {
+  transition: color 0.2s ease, transform 0.2s ease;
+  color: #cbd5e1; /* Default light color */
+}
+
+.sortIconsStack svg:hover {
+  color: #1a4263; /* Dark blue on hover */
+  transform: scale(1.3); /* Pop effect on the specific arrow */
+}
+
+.activeSort {
+  color: #1a4263 !important;
+}
+
 /* ACTION COLUMN & CENTERING */
 .actionHeader {
   text-align: center !important;
@@ -337,8 +352,6 @@
   padding: 2px 8px;
   border-radius: 10px;
 }
-
-
 
 .pagination {
   display: flex !important;
