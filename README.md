@@ -45,7 +45,7 @@ AESamonteWebSystem/
 ## 🚀 Technologies Used
 
 * **Frontend:** Next.js 16.1.0, React 19, Tailwind CSS.
-* **Backend:** Python Flask with MySQL Connector.
+* **Backend:** Python Flask
 * **Authentication:** Custom role-based logic (Admin/Staff) and `localStorage` session persistence.
 * **Database:** Supabase/SQL for real-time inventory tracking.
 
