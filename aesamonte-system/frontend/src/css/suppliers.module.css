@@ -14,7 +14,19 @@
   flex-direction: column;
   gap: 1rem;
   overflow-y: auto;
+    min-height: 0;
 }
+
+.loadingContainer {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #555;
+}
+
 
 /* TABLE CONTAINER */
 .tableContainer {
@@ -92,9 +104,21 @@
 
 .table th,
 .table td {
+  text-align: left; 
   padding: 15px;
   font-size: 0.9rem;
   border-bottom: 1px solid #f1f3f4;
+}
+
+.table th.actionHeader {
+  text-align: center;
+}
+
+.table th.actionHeader > * {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 
 .altRow {
@@ -108,9 +132,9 @@
 }
 
 .sortHeaderInner {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;        
   align-items: center;
+  gap: 6px;                  
 }
 
 .sortIconsStack {
@@ -139,11 +163,18 @@
   text-align: center;
 }
 
+.actionHeader > * {
+  margin: 0 auto;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .actionCell {
   position: relative;
-  display: flex;      
-  justify-content: center; 
-  align-items: center;     
+  display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 5px;
 }
 

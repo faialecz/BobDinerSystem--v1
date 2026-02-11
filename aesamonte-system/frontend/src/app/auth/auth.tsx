@@ -105,7 +105,7 @@ export default function Login({ onLogin }: LoginProps) {
     };
 
     const handleOtpVerify = async (otpValue: string) => {
-      e.preventDefault();
+      //e.preventDefault();
       try {
         const response = await fetch('http://127.0.0.1:5000/api/auth/verify-otp', {
           method: 'POST',

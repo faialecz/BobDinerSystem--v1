@@ -10,30 +10,36 @@ def get_suppliers():
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT
-            supplier_id,
-            supplier_name,
-            contact_person,
-            supplier_contact,
-            supplier_email,
-            supplier_address
-        FROM supplier
-        ORDER BY supplier_id DESC
+        SELECT 
+            s.supplier_id,
+            s.supplier_name,
+            s.contact_person,
+            s.supplier_contact,
+            s.supplier_email,
+            s.supplier_address,
+            st.status_name AS supplier_status
+        FROM supplier s
+        LEFT JOIN status_like st 
+            ON s.supplier_status = st.status_code 
+           AND s.supplier_status_scope = st.status_scope
+        ORDER BY s.supplier_id DESC
     """)
 
     rows = cur.fetchall()
     cur.close()
     conn.close()
 
-    suppliers = []
-    for r in rows:
-        suppliers.append({
+    suppliers = [
+        {
             "id": r[0],
             "supplierName": r[1],
             "contactPerson": r[2],
             "contactNumber": r[3],
             "email": r[4],
-            "address": r[5]
-        })
+            "address": r[5],
+            "status": r[6] 
+        }
+        for r in rows
+    ]
 
     return jsonify(suppliers)

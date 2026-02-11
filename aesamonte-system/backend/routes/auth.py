@@ -27,11 +27,11 @@ def login():
 
         if user and user['employee_password'] == password:
             # Audit log using the retrieved employee_id
-            cur.execute("""
+            '''cur.execute("""
                 INSERT INTO Employee_Audit_Log (employee_id, role_id, employee_audit_log_type)
                 VALUES (%s, %s, 'LOGIN')
             """, (user['employee_id'], user['role_id']))
-            conn.commit()
+            conn.commit()'''
             return jsonify({
                 "status": "success", 
                 "role": user['role_name']

@@ -7,9 +7,11 @@ import UserManagement from "./user-management"; // Create this file next
 import styles from "@/css/settings.module.css";
 import { AiOutlineUser } from "react-icons/ai";
 import { LuShieldCheck, LuLayoutTemplate, LuDatabaseBackup } from "react-icons/lu";
+import { LuClipboardList } from "react-icons/lu";
 import AccessControl from "./access-control"
 import AppPreferences from "./app-preferences";
 import BackupRestore from "./backup-restore";
+import AuditLog from "./audit-log";
 
 interface SettingsPageProps {
   role?: string;
@@ -17,7 +19,7 @@ interface SettingsPageProps {
 }
 
 export default function SettingsPage({ role = "Admin", onLogout }: SettingsPageProps) {
-  const [activeView, setActiveView] = useState<"main" | "users"| "access"| "appPreferences" | "backupRestore">("main");
+  const [activeView, setActiveView] = useState<"main" | "users"| "access"| "appPreferences" | "backupRestore"| "auditlog" >("main");
 
   const configItems = [
     { 
@@ -34,41 +36,53 @@ export default function SettingsPage({ role = "Admin", onLogout }: SettingsPageP
     { title: "Back Up and Restore Data", icon: <LuDatabaseBackup />, 
       action: () => setActiveView("backupRestore"),
     },
+    { title: "Audit Log", icon : <LuClipboardList />, 
+      action: () => setActiveView("auditlog"),
+    },
   ];
 
   return (
     <div className={styles.container}>
       <TopHeader role={role} onLogout={onLogout} />
-
       <main className={styles.mainContent}>
-        {activeView === "main" ? (
-          <div className={styles.settingsCard}>
-            <h3 className={styles.pageTitle}>Controls & Configurations</h3>
-            <div className={styles.configList}>
-              {configItems.map((item) => (
-                <button 
-                  key={item.title} 
-                  className={styles.configItem} 
-                  onClick={item.action}
-                >
-                  <div className={styles.iconBox}>
-                    {item.icon}
-                  </div>
-                  <span className={styles.itemTitle}>{item.title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : activeView === "users" ? (
-          <UserManagement onBack={() => setActiveView("main")} />
-        ) : activeView === "access" ? (
-          <AccessControl onBack={() => setActiveView("main")} />
-        ) : activeView === "appPreferences"? (
-          <AppPreferences onBack={() => setActiveView("main")} />
-        ) : (
-          <BackupRestore onBack={() => setActiveView("main")} />
-        )}
-      </main>
+  {activeView === "main" && (
+    <div className={styles.settingsCard}>
+      <h3 className={styles.pageTitle}>Controls & Configurations</h3>
+      <div className={styles.configList}>
+        {configItems.map((item) => (
+          <button
+            key={item.title}
+            className={styles.configItem}
+            onClick={item.action}
+          >
+            <div className={styles.iconBox}>{item.icon}</div>
+            <span className={styles.itemTitle}>{item.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
+
+  {activeView === "users" && (
+    <UserManagement onBack={() => setActiveView("main")} />
+  )}
+
+  {activeView === "access" && (
+    <AccessControl onBack={() => setActiveView("main")} />
+  )}
+
+  {activeView === "appPreferences" && (
+    <AppPreferences onBack={() => setActiveView("main")} />
+  )}
+
+  {activeView === "backupRestore" && (
+    <BackupRestore onBack={() => setActiveView("main")} />
+  )}
+
+  {activeView === "auditlog" && (
+    <AuditLog onBack={() => setActiveView("main")} />
+  )}
+</main>
     </div>
   );
 }
