@@ -25,7 +25,7 @@ type Supplier = {
   address: string;
 };
 
-type SortKey = keyof Supplier | null;
+type SortKey = keyof Supplier;
 
 const ROWS_PER_PAGE = 10;
 

@@ -20,10 +20,11 @@ def get_suppliers():
             st.status_name AS supplier_status
         FROM supplier s
         LEFT JOIN status_like st 
-            ON s.supplier_status = st.status_code 
-           AND s.supplier_status_scope = st.status_scope
+            ON s.supplier_status_id = st.status_id
+        WHERE st.status_scope = 'SUPPLIER_STATUS'
         ORDER BY s.supplier_id DESC
     """)
+
 
     rows = cur.fetchall()
     cur.close()

@@ -80,7 +80,7 @@ export default function SettingsPage({ role = "Admin", onLogout }: SettingsPageP
   )}
 
   {activeView === "auditlog" && (
-    <AuditLog onBack={() => setActiveView("main")} />
+    <AuditLog onBack={() => setActiveView("main")} onLogout={onLogout} />
   )}
 </main>
     </div>
