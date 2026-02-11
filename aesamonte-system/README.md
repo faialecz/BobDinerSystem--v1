@@ -74,13 +74,3 @@ Once everything is installed, you don't need to open multiple terminals. Simply 
 npm run dev
 
 ```
-
----
-
-### **What happens next?**
-
-* **Frontend**: Will be available at `http://localhost:3000`.
-* **Backend**: Will be active at `http://127.0.0.1:5000`.
-* **Live Features**: The **Enter** key for login will now work, the **Remember Me** checkbox will save your ID, and the dashboard will correctly display **Admin** roles.
-
-**Would you like me to help you set up the `.env` file for your database connection so the system can pull live data?**
