@@ -254,16 +254,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
             </div>
 
             <form onSubmit={handleSave} className={s.modalForm}>
-              {/* Company Info */}
-              <h4 className={s.sectionTitle}>Company Information</h4>
-              <div className={s.formGroup}>
-                <label>Supplier Name</label>
-                <input name="supplierName" onChange={handleInputChange} />
-              </div>
-              <div className={s.formRow}>
-                <div className={s.formGroup}><label>Brand</label><input name="brand" onChange={handleInputChange} /></div>
-                <div className={s.formGroup}><label>Internal SKU</label><input name="internalSku" onChange={handleInputChange} /></div>
-              </div>
 
               {/* Stocks */}
               <h4 className={s.sectionTitle}>Stocks</h4>

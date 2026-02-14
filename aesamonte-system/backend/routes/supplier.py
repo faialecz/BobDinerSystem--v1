@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 from database.db_config import get_connection
+from flask import request, jsonify
 
 supplier_bp = Blueprint("supplier", __name__, url_prefix="/api/suppliers")
 

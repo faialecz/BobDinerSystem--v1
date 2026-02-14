@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 from database.db_config import get_connection
+from flask import request
 
 inventory_bp = Blueprint("inventory", __name__)
 
@@ -44,3 +45,43 @@ def get_inventory():
     ]
 
     return jsonify(result)
+
+@inventory_bp.route("/api/inventory/add", methods=["POST"])
+def add_inventory_item():
+    data = request.get_json()
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            INSERT INTO suppliers (supplier_name, contact_person, contact_number)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (supplier_name) DO UPDATE 
+            SET supplier_name = EXCLUDED.supplier_name
+            RETURNING supplier_id;
+        """, (data['supplierName'], data['detailContactPerson'], data['detailContactNumber']))
+        
+        supplier_id = cur.fetchone()[0]
+
+        cur.execute("""
+            INSERT INTO inventory (
+                inventory_item_name, brand, internal_sku, item_quantity, 
+                unit_of_measure, reorder_point, item_unit_price, 
+                item_selling_price, supplier_id, item_status_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data['itemName'], data['brand'], data['internalSku'],
+            data['qty'], 1,
+            data['reorderPoint'], data['unitPrice'], data['sellingPrice'], 
+            supplier_id, 1
+        ))
+
+        conn.commit()
+        return jsonify({"message": "Successfully added item and supplier"}), 201
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
