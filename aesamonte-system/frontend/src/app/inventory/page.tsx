@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import styles from "@/css/inventory.module.css";
 import TopHeader from '@/components/layout/TopHeader';
 import ExportButton from '@/components/features/ExportButton';
 import {
   LuSearch, LuEllipsisVertical, LuChevronUp, LuChevronDown,
-  LuArchive, LuChevronLeft, LuChevronRight, LuX, LuPlus
+  LuArchive, LuChevronLeft, LuChevronRight, LuX, LuPlus, LuPencil
 } from "react-icons/lu";
 
 /* ================= TYPES ================= */
@@ -41,6 +41,7 @@ const ROWS_PER_PAGE = 10;
 const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const s = styles as Record<string, string>;
 
+  /* ================= STATE ================= */
   const [products, setProducts] = useState<Product[]>([]);
   const [data, setData] = useState<InventorySummary>({
     totalProducts: 0,
@@ -60,8 +61,13 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Modal States
   const [showModal, setShowModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
+  
+  // Action Menu State
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [formData, setFormData] = useState({
     itemName: '',
@@ -75,7 +81,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     sellingPrice: '',
     detailSupplierName: 'Select',
     detailContactPerson: '',
-    detailContactNumber: '', // Will be restricted to numbers 
+    detailContactNumber: '', 
     detailCostPrice: '',
     detailLeadTime: '',
     detailMinOrder: ''
@@ -85,40 +91,52 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     supplierName: '',
     address: '',
     contactPerson: '',
-    contact: '', // Will be restricted to numbers 
+    contact: '', 
     email: '',
     paymentTerms: 'Cash on Delivery'
   });
 
-  /* ================= FETCH DATA ================= */
+  /* ================= EFFECTS ================= */
 
+  // Fetch Inventory
   useEffect(() => {
-  const fetchInventory = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch("http://127.0.0.1:5000/api/inventory");
-      if (!res.ok) throw new Error("Failed to fetch");
-      const productData: Product[] = await res.json();
-      setProducts(productData);
+    const fetchInventory = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch("http://127.0.0.1:5000/api/inventory");
+        if (!res.ok) throw new Error("Failed to fetch");
+        const productData: Product[] = await res.json();
+        setProducts(productData);
 
-      const visible = productData.filter(p => p.qty > 0);
-      const outOfStock = productData.filter(p => p.qty === 0);
+        const visible = productData.filter(p => p.qty > 0);
+        const outOfStock = productData.filter(p => p.qty === 0);
 
-      setData({
-        totalProducts: productData.length,
-        totalProductsChange: 2.8,
-        weeklyInventory: visible.length,
-        monthlyInventory: visible.length * 10,
-        yearlyInventory: visible.length * 100,
-        outOfStockCount: outOfStock.length,
-      });
-    } catch (err) {
-      console.error("Failed to fetch Inventory", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  fetchInventory();
+        setData({
+          totalProducts: productData.length,
+          totalProductsChange: 2.8,
+          weeklyInventory: visible.length,
+          monthlyInventory: visible.length * 10,
+          yearlyInventory: visible.length * 100,
+          outOfStockCount: outOfStock.length,
+        });
+      } catch (err) {
+        console.error("Failed to fetch Inventory", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInventory();
+  }, []);
+
+  // Click Outside to close menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   /* ================= HANDLERS ================= */
@@ -127,10 +145,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // NEW: Restricted handler for numeric fields
   const handleNumericInputChange = (e: React.ChangeEvent<HTMLInputElement>, isSupplierReg = false) => {
     const { name, value } = e.target;
-     // Replace any character that is NOT a digit with an empty string
     const cleanValue = value.replace(/[^\d]/g, '');
     
     if (isSupplierReg) {
@@ -174,7 +190,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
       return arr.sort((a, b) => Number(a.id) - Number(b.id));
     }
 
-    const key = sortConfig.key as keyof Product; // <-- Type narrowing
+    const key = sortConfig.key as keyof Product;
     return arr.sort((a, b) => {
       const A = a[key];
       const B = b[key];
@@ -305,7 +321,20 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                     </span>
                   </td>
                   <td className={s.actionCell}>
-                    <LuEllipsisVertical className={s.moreIcon} />
+                    <LuEllipsisVertical 
+                       className={s.moreIcon} 
+                       onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
+                    />
+                    
+                    {/* ACTION POPOVER MENU */}
+                    {activeMenuId === p.id && (
+                      <div className={s.popoverMenu} ref={menuRef}>
+                        <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
+                        <button className={s.popEditBtn}><LuPencil size={12}/> Edit</button>
+                        <button className={s.popArchiveBtn}><LuArchive size={12}/> Archive</button>
+                        <LuX className={s.popCloseIcon} onClick={() => setActiveMenuId(null)} />
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -330,6 +359,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         </div>
       </div>
 
+      {/* --- ADD ITEM MODAL --- */}
       {showModal && (
         <div className={s.modalOverlay} style={{ zIndex: 1000 }}>
           <div className={s.modalContent}>
@@ -350,6 +380,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                   <select name="uom" value={formData.uom} onChange={handleInputChange}>
                     <option value="Select">Select</option>
                     <option value="PCS">PCS</option>
+                    <option value="PAD">PAD</option>
                   </select>
                 </div>
                 <div className={s.formGroup}><label>Reorder Point</label><input className={s.yellowInput} name="reorderPoint" value={formData.reorderPoint} onChange={handleInputChange} /></div>
@@ -372,15 +403,9 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                     <select name="detailSupplierName" value={formData.detailSupplierName} onChange={handleInputChange}><option>Select</option></select>
                   </div>
                   <div className={s.formGroup}><label>Contact Person</label><input name="detailContactPerson" value={formData.detailContactPerson} onChange={handleInputChange} /></div>
-                  
-                  {/* NUMERIC RESTRICTION*/}
                   <div className={s.formGroup}>
                     <label>Contact Number</label>
-                    <input 
-                      name="detailContactNumber" 
-                      value={formData.detailContactNumber} 
-                      onChange={handleNumericInputChange} 
-                    />
+                    <input name="detailContactNumber" value={formData.detailContactNumber} onChange={handleNumericInputChange} />
                   </div>
                 </div>
                 <div className={s.formRowThree}>
@@ -399,7 +424,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         </div>
       )}
 
-      {/* ================= REGISTER NEW SUPPLIER MODAL ================= */}
+      {/* --- REGISTER NEW SUPPLIER MODAL --- */}
       {showSupplierModal && (
         <div className={s.modalOverlaySupplier}>
           <div className={s.modalContentSupplier}>
@@ -419,7 +444,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                   <input name="supplierName" value={supplierFormData.supplierName} onChange={(e) => setSupplierFormData({...supplierFormData, supplierName: e.target.value})} />
                 </div>
               </div>
-              
               <div className={s.formGroupFull}>
                 <label>Address</label>
                 <input name="address" value={supplierFormData.address} onChange={(e) => setSupplierFormData({...supplierFormData, address: e.target.value})} />
@@ -431,14 +455,9 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                   <label>Contact Person</label>
                   <input name="contactPerson" value={supplierFormData.contactPerson} onChange={(e) => setSupplierFormData({...supplierFormData, contactPerson: e.target.value})} />
                 </div>
-                
                 <div className={s.formGroup}>
                   <label>Contact No.</label>
-                  <input 
-                    name="contact" 
-                    value={supplierFormData.contact} 
-                    onChange={(e) => handleNumericInputChange(e, true)} 
-                  />
+                  <input name="contact" value={supplierFormData.contact} onChange={(e) => handleNumericInputChange(e, true)} />
                 </div>
               </div>
 
@@ -457,12 +476,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
               </div>
 
               <div className={s.modalFooter}>
-                <button type="button" onClick={() => setShowSupplierModal(false)} className={s.cancelBtn}>
-                  Cancel
-                </button>
-                <button type="button" onClick={() => setShowSupplierModal(false)} className={s.createBtn}>
-                  Create Supplier
-                </button>
+                <button type="button" onClick={() => setShowSupplierModal(false)} className={s.cancelBtn}>Cancel</button>
+                <button type="button" onClick={() => setShowSupplierModal(false)} className={s.createBtn}>Create Supplier</button>
               </div>
             </div>
           </div>

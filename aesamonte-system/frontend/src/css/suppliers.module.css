@@ -150,6 +150,10 @@
   color: #cbd5e1;
   transition: all 0.2s;
 }
+.sortIconsStack svg:hover {
+  color: #1a4263;
+  transform: scale(1.2);
+}
 
 .activeSort {
   color: #1a4263 !important;
