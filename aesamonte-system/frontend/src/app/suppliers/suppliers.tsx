@@ -131,7 +131,7 @@ export default function Suppliers({
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
   const paginated = sorted.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+  //useEffect(() => { setCurrentPage(1); }, [searchTerm]);
 
   const changePage = (page: number) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
