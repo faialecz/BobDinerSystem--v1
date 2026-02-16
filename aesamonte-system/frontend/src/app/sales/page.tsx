@@ -6,10 +6,8 @@ import TopHeader from '@/components/layout/TopHeader'
 import ExportButton from '@/components/features/ExportButton'
 import {
   LuSearch,
-  LuEllipsisVertical,
   LuChevronUp,
   LuChevronDown,
-  LuChevronRight,
   LuArchive
 } from 'react-icons/lu'
 
@@ -50,7 +48,6 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null)
 
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Transaction | ''
@@ -251,10 +248,15 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
                       {tx.status}
                     </td>
                     <td className={s.actionCell}>
-                      <LuEllipsisVertical
-                        size={20}
-                        onClick={() => setOpenMenuId(openMenuId === tx.no ? null : tx.no)}
-                      />
+                      <div className={s.actionWrapper}>
+                        <button 
+                          className={s.archiveBtn}
+                          onClick={() => console.log('Archive transaction', tx.no)}
+                        >
+                          <LuArchive size={16} />
+                          <span>Archive</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
