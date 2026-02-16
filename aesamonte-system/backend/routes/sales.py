@@ -78,48 +78,45 @@ def sales_summary():
         "topClientChange": 3.8
     })
 
-
 # ===================== TRANSACTIONS =====================
 @sales_bp.route("/transactions", methods=["GET"])
 def sales_transactions():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
+    query = """
         SELECT
-            st.sales_id,
+            ot.order_id AS sales_id,
             c.customer_name,
             c.customer_address,
-            st.sales_date,
-            COUNT(ot.order_id) AS qty,
-            st.sales_id * 100 AS amount,  -- placeholder amount
-            st.sales_status
-        FROM sales_transaction st
-        JOIN order_transaction ot ON st.order_id = ot.order_id
+            ot.order_date AS sales_date,
+            (SELECT COUNT(*) FROM order_details od WHERE od.order_id = ot.order_id) as qty,
+            (SELECT COALESCE(SUM(od.order_total), 0) FROM order_details od WHERE od.order_id = ot.order_id) as amount,
+            'PAID' as sales_status 
+        FROM order_transaction ot
         JOIN customer c ON ot.customer_id = c.customer_id
-        GROUP BY
-            st.sales_id,
-            c.customer_name,
-            c.customer_address,
-            st.sales_date,
-            st.sales_status
-        ORDER BY st.sales_id DESC
-    """)
-
+        JOIN status_like sl ON ot.order_status_id = sl.status_id
+        WHERE sl.status_scope = 'ORDER_STATUS'
+          AND sl.status_code = 'RECEIVED'
+        ORDER BY ot.order_date DESC
+    """
+    
+    cur.execute(query)
     rows = cur.fetchall()
+    
     cur.close()
     conn.close()
 
     transactions = []
     for r in rows:
         transactions.append({
-            "no": r[0],
-            "name": r[1],
-            "address": r[2],
-            "date": r[3].strftime("%m/%d/%y"),
-            "qty": r[4],
-            "amount": r[5],
-            "status": r[6]
+            "no": r[0],               # Using order_id as the sales No.
+            "name": r[1],             # customer_name
+            "address": r[2],          # customer_address
+            "date": r[3].strftime("%m/%d/%y"), # order_date
+            "qty": r[4],              # Count of items
+            "amount": float(r[5]),    # Total Amount
+            "status": r[6]            # Hardcoded 'PAID' for Received orders
         })
 
     return jsonify(transactions)
