@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from database.db_config import get_connection
 from datetime import date, timedelta
+import json
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/api/orders")
 
@@ -13,58 +14,27 @@ def orders_summary():
     today = date.today()
     yesterday = today - timedelta(days=1)
 
-    # SHIPPED
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM order_transaction ot
-        JOIN status_like sl ON ot.order_status_id = sl.status_id
-        WHERE sl.status_scope = 'ORDER_STATUS'
-          AND sl.status_code = 'RECEIVED'
-          AND ot.order_date = %s
-    """, (today,))
-    shipped_today = cur.fetchone()[0]
+    def count_orders(status_code, for_date=None):
+        query = """
+            SELECT COUNT(*)
+            FROM order_transaction ot
+            JOIN status_like sl ON ot.order_status_id = sl.status_id
+            WHERE sl.status_scope = 'ORDER_STATUS'
+              AND sl.status_code = %s
+        """
+        params = [status_code]
+        if for_date:
+            query += " AND ot.order_date = %s"
+            params.append(for_date)
+        cur.execute(query, params)
+        return cur.fetchone()[0]
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM order_transaction ot
-        JOIN status_like sl ON ot.order_status_id = sl.status_id
-        WHERE sl.status_scope = 'ORDER_STATUS'
-          AND sl.status_code = 'RECEIVED'
-    """)
-    total_shipped = cur.fetchone()[0]
+    shipped_today = count_orders("RECEIVED", today)
+    shipped_yesterday = count_orders("RECEIVED", yesterday)
+    total_shipped = count_orders("RECEIVED")
+    cancelled_today = count_orders("CANCELLED", today)
+    cancelled_yesterday = count_orders("CANCELLED", yesterday)
 
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM order_transaction ot
-        JOIN status_like sl ON ot.order_status_id = sl.status_id
-        WHERE sl.status_scope = 'ORDER_STATUS'
-          AND sl.status_code = 'RECEIVED'
-          AND ot.order_date = %s
-    """, (yesterday,))
-    shipped_yesterday = cur.fetchone()[0]
-
-    # CANCELLED
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM order_transaction ot
-        JOIN status_like sl ON ot.order_status_id = sl.status_id
-        WHERE sl.status_scope = 'ORDER_STATUS'
-          AND sl.status_code = 'CANCELLED'
-          AND ot.order_date = %s
-    """, (today,))
-    cancelled_today = cur.fetchone()[0]
-
-    cur.execute("""
-        SELECT COUNT(*)
-        FROM order_transaction ot
-        JOIN status_like sl ON ot.order_status_id = sl.status_id
-        WHERE sl.status_scope = 'ORDER_STATUS'
-          AND sl.status_code = 'CANCELLED'
-          AND ot.order_date = %s
-    """, (yesterday,))
-    cancelled_yesterday = cur.fetchone()[0]
-
-    # TOTAL ORDERS
     cur.execute("SELECT COUNT(*) FROM order_transaction")
     total_orders = cur.fetchone()[0]
 
@@ -83,7 +53,7 @@ def orders_summary():
         },
         "totalOrders": {
             "count": total_orders,
-            "growth": 3.1
+            "growth": 3.1  # Placeholder; calculate dynamically if needed
         }
     })
 
@@ -92,7 +62,6 @@ def orders_summary():
 @orders_bp.route("/list", methods=["GET"])
 def orders_list():
     conn = get_connection()
-    # Use a dictionary cursor to make life easier
     cur = conn.cursor()
 
     cur.execute("""
@@ -106,9 +75,9 @@ def orders_list():
                     'inventory_id', od.inventory_id,
                     'order_quantity', od.order_quantity,
                     'available_quantity', i.item_quantity,
-                    'item_name', i.inventory_item_name
+                    'item_name', i.item_name
                 )
-            ) FILTER (WHERE od.order_id IS NOT NULL), '[]') AS items
+            ) FILTER (WHERE od.order_id IS NOT NULL), '[]') AS items_json
         FROM order_transaction ot
         JOIN customer c ON ot.customer_id = c.customer_id
         JOIN status_like sl ON ot.order_status_id = sl.status_id
@@ -127,22 +96,24 @@ def orders_list():
 
     for row in rows:
         order_id, customer_name, order_date, order_status, items_json = row
-        order_status_upper = order_status.upper()
+        order_status_upper = (order_status or "").upper()
+
+        # Ensure items_json is a Python list
+        if isinstance(items_json, str):
+            try:
+                items_list = json.loads(items_json)
+            except json.JSONDecodeError:
+                items_list = []
+        else:
+            items_list = items_json or []
 
         problematic_items = []
 
-        # Convert JSON string to Python list if needed
-        import json
-        if isinstance(items_json, str):
-            items_list = json.loads(items_json)
-        else:
-            items_list = items_json
-
         if order_status_upper == "PREPARING":
             for item in items_list:
-                order_qty = item['order_quantity'] or 0
-                available_qty = item['available_quantity'] or 0
-                item_name = item['item_name'] or 'Unknown'
+                order_qty = item.get('order_quantity') or 0
+                available_qty = item.get('available_quantity') or 0
+                item_name = item.get('item_name') or 'Unknown'
 
                 if available_qty < order_qty:
                     problematic_items.append(f"{item_name} ({available_qty}/{order_qty})")
@@ -152,7 +123,7 @@ def orders_list():
         orders.append({
             "id": order_id,
             "customer": customer_name,
-            "date": order_date.strftime("%m/%d/%y"),
+            "date": order_date.strftime("%m/%d/%y") if order_date else None,
             "status": order_status_upper.replace("_", " ").title(),
             "availabilityStatus": availability_status,
             "problematicItems": problematic_items

@@ -25,7 +25,9 @@ interface Supplier {
 
 interface Product {
   id: string;
-  item: string;
+  item_name: string;
+  item_description: string;
+  sku: string;
   brand: string;
   qty: number;
   uom: string;
@@ -245,7 +247,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   /* ================= DATA PROCESSING ================= */
 
   const filteredProducts = products.filter(p =>
-    p.item.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.id.toString().includes(searchTerm)
   );
@@ -321,7 +323,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
             <p className={s.cardTitle}>Out of Stock</p>
             <div className={s.outOfStockList}>
               {products.filter(p => p.qty === 0).length > 0 ? (
-                products.filter(p => p.qty === 0).map(p => <div key={p.id} className={s.outOfStockBadge}>{p.item}</div>)
+                products.filter(p => p.qty === 0).map(p => <div key={p.id} className={s.outOfStockBadge}>{p.item_name}</div>)
               ) : ( <p className={s.subText}>All items in stock</p> )}
             </div>
           </section>
@@ -344,21 +346,27 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
             <thead>
               <tr>
                 {[
-                { label: 'ID', key: 'id' },
-                { label: 'ITEM', key: 'item' }, 
-                { label: 'BRAND', key: 'brand' },
-                { label: 'QTY', key: 'qty' }, 
-                { label: 'UOM', key: 'uom' }, 
-                { label: 'UNIT PRICE', key: 'unitPrice' },
-                { label: 'PRICE', key: 'price' }, 
-                { label: 'STATUS', key: 'status' }
+                  { label: 'ID', key: 'id' },
+                  { label: 'ITEM', key: 'item_name' },
+                  { label: 'DESCRIPTION', key: 'item_description' },
+                  { label: 'SKU', key: 'sku' },
+                  { label: 'BRAND', key: 'brand' },
+                  { label: 'QTY', key: 'qty' },
+                  { label: 'UOM', key: 'uom' },
+                  { label: 'UNIT PRICE', key: 'unitPrice' },
+                  { label: 'PRICE', key: 'price' },
+                  { label: 'STATUS', key: 'status' },
                 ].map(col => (
                   <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
                     <div className={s.sortableHeader}>
                       <span>{col.label}</span>
                       <div className={s.sortIconsStack}>
-                        <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
-                        <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                        <LuChevronUp
+                          className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
+                        />
+                        <LuChevronDown
+                          className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
+                        />
                       </div>
                     </div>
                   </th>
@@ -370,29 +378,35 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
               {paginatedProducts.map(p => (
                 <tr key={p.id}>
                   <td>{p.id}</td>
-                  <td>{p.item}</td>
+                  <td>{p.item_name}</td>
+                  <td>{p.item_description}</td>
+                  <td>{p.sku}</td>
                   <td>{p.brand}</td>
                   <td>{p.qty}</td>
-                  <td>{p.uom}</td>
+                  <td>{p.uom || '—'}</td>
                   <td>₱ {p.unitPrice?.toLocaleString()}</td>
                   <td>₱ {p.price?.toLocaleString()}</td>
                   <td>
-                    <span className={
-                      p.status === "Available" ? s.pillGreen :
-                      p.status === "Low Stock" ? s.pillYellow :
-                      p.status === "Out of Stock" ? s.pillRed :
-                      ""
-                    }>
+                    <span
+                      className={
+                        p.status.includes("Available")
+                          ? s.pillGreen
+                          : p.status.includes("Low Stock")
+                          ? s.pillYellow
+                          : p.status.includes("Out of Stock")
+                          ? s.pillRed
+                          : ""
+                      }
+                    >
                       {p.status}
                     </span>
                   </td>
                   <td className={s.actionCell}>
-                    <LuEllipsisVertical 
-                       className={s.moreIcon} 
-                       onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
+                    <LuEllipsisVertical
+                      className={s.moreIcon}
+                      onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
                     />
-                    
-                    {/* ACTION POPOVER MENU */}
+
                     {activeMenuId === p.id && (
                       <div className={s.popoverMenu} ref={menuRef}>
                         <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
