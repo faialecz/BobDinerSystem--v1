@@ -174,11 +174,17 @@
 }
 
 .sortableHeader {
+  cursor: pointer;
+  user-select: none;
   display: flex !important;
-  flex-direction: row !important;
   align-items: center;
   gap: 6px;
-  white-space: nowrap;
+}
+
+.sortHeaderInner {
+  display: inline-flex;        
+  align-items: center;
+  gap: 6px;                  
 }
 
 .sortIconsStack {
@@ -188,6 +194,19 @@
   justify-content: center;
 }
 
+.sortIconsStack svg {
+  color: #cbd5e1;
+  transition: all 0.2s;
+}
+
+.sortIconsStack svg:hover {
+  color: #1a4263;
+  transform: scale(1.2);
+}
+
+.activeSort {
+  color: #1a4263 !important;
+}
 /* ACTION COLUMN - FIXED CENTERING */
 .actionHeader {
   text-align: center !important;
