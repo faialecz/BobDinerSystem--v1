@@ -216,32 +216,43 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     setSortConfig({ key, direction });
   };
 
-  const handleEditClick = (product: Product) => {
-    setSelectedProduct(product);
-    setShowEditModal(true);
-    setActiveMenuId(null);
-  };
+  const handleEditClick = async (product: Product) => {
+  try {
+    // Fetch full details (Supplier, Lead Time, etc.) before opening modal
+    const res = await fetch(`http://127.0.0.1:5000/api/inventory/${product.id}`);
+    if (res.ok) {
+      const fullData = await res.json();
+      setSelectedProduct(fullData); // Pass full data to modal
+      setShowEditModal(true);
+      setActiveMenuId(null);
+    } else {
+      alert("Failed to load item details.");
+    }
+  } catch (err) {
+    console.error("Error fetching item details:", err);
+  }
+};
 
   const handleUpdate = async (updatedItem: any) => {
-    try {
-      const res = await fetch(`http://127.0.0.1:5000/api/inventory/update/${updatedItem.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedItem),
-      });
+  try {
+    const res = await fetch(`http://127.0.0.1:5000/api/inventory/update/${updatedItem.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedItem),
+    });
 
-      if (res.ok) {
-        setShowEditModal(false);
-        alert("Item updated successfully!");
-        fetchInventory(); 
-      } else {
-        const err = await res.json();
-        alert(`Error updating: ${err.error}`);
-      }
-    } catch (err) {
-      console.error("Update error:", err);
+    if (res.ok) {
+      setShowEditModal(false);
+      alert("Item updated successfully!");
+      fetchInventory(); 
+    } else {
+      const err = await res.json();
+      alert(`Error updating: ${err.error}`);
     }
-  };
+  } catch (err) {
+    console.error("Update error:", err);
+  }
+};
 
   // NEW: Bulk Save Function
   const handleSave = async (items: any[]) => {
@@ -493,7 +504,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         onClose={() => setShowEditModal(false)}
         itemData={selectedProduct}
         onSave={handleUpdate}
-        suppliers={suppliers}
+        suppliers={suppliers} 
+        uoms={uoms}      
       />
 
       {showSupplierModal && (
