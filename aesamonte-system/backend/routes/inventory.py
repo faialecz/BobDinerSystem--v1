@@ -154,3 +154,152 @@ def get_uoms():
     ]
 
     return jsonify(uoms)
+
+# ================= Edit Inventory Item =================
+@inventory_bp.route("/api/inventory/<int:id>", methods=["GET"])
+def get_inventory_item(id):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT 
+            i.inventory_id,
+            i.item_name,
+            i.item_description,
+            i.item_sku,
+            i.brand,
+            i.item_quantity,
+            u.uom_code,
+            i.item_unit_price,
+            i.item_selling_price,
+            s.supplier_name,
+            s.contact_person,
+            s.supplier_contact,
+            ia.lead_time_days,
+            ia.min_order_qty,
+            ia.reorder_qty
+        FROM inventory i
+        LEFT JOIN supplier s ON i.supplier_id = s.supplier_id
+        LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
+        LEFT JOIN inventory_action ia ON i.inventory_id = ia.inventory_id
+        WHERE i.inventory_id = %s
+    """, (id,))
+
+    r = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if r:
+        return jsonify({
+            "id": r[0],
+            "itemName": r[1],
+            "itemDescription": r[2],
+            "sku": r[3],
+            "brand": r[4],
+            "qty": r[5],
+            "uom": r[6] or 'Select',
+            "unitPrice": float(r[7]),
+            "sellingPrice": float(r[8]),
+            "supplierName": r[9],
+            "contactPerson": r[10],
+            "contactNumber": r[11],
+            "leadTime": r[12] or 0,
+            "minOrder": r[13] or 0,
+            "reorderPoint": r[14] or 0
+        })
+    return jsonify({"error": "Item not found"}), 404
+
+@inventory_bp.route("/api/inventory/update/<int:id>", methods=["PUT"])
+def update_inventory_item(id):
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        data = request.get_json()
+        
+        # 1. Validate Suppliers & UOM (Required fields)
+        supplier_name = data.get('supplierName')
+        uom_code = data.get('uom')
+        
+        if not supplier_name: return jsonify({"error": "Supplier is required"}), 400
+        if not uom_code: return jsonify({"error": "UOM is required"}), 400
+
+        # Get Supplier ID
+        cur.execute("SELECT supplier_id FROM supplier WHERE supplier_name = %s", (supplier_name,))
+        sup_res = cur.fetchone()
+        if not sup_res: return jsonify({"error": "Supplier not found"}), 400
+        supplier_id = sup_res[0]
+
+        # Get UOM ID
+        cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_code = %s", (uom_code,))
+        uom_res = cur.fetchone()
+        if not uom_res: return jsonify({"error": "UOM not found"}), 400
+        uom_id = uom_res[0]
+
+        # 2. Update INVENTORY Table
+        # We use 'or 0' to safely handle empty strings "" from the frontend
+        cur.execute("""
+            UPDATE public.inventory
+            SET 
+                supplier_id = %s,
+                item_name = %s,
+                item_description = %s,
+                brand = %s,
+                unit_of_measure = %s,
+                item_quantity = %s,
+                item_unit_price = %s,
+                item_selling_price = %s
+            WHERE inventory_id = %s
+        """, (
+            supplier_id,
+            data.get('itemName'),
+            data.get('itemDescription'),
+            data.get('brand'),
+            uom_id,
+            int(data.get('qty') or 0),           # <--- Prevents crash on empty string
+            float(data.get('unitPrice') or 0),   # <--- Prevents crash
+            float(data.get('sellingPrice') or 0),# <--- Prevents crash
+            id
+        ))
+
+        # 3. Update or Insert INVENTORY_ACTION (Logistics)
+        # Try to update existing row first
+        cur.execute("""
+            UPDATE public.inventory_action
+            SET 
+                lead_time_days = %s,
+                min_order_qty = %s,
+                reorder_qty = %s
+            WHERE inventory_id = %s
+        """, (
+            int(data.get('leadTime') or 0),
+            int(data.get('minOrder') or 0),
+            int(data.get('reorderPoint') or 0),
+            id
+        ))
+        
+        # If no row existed to update, insert a new one
+        if cur.rowcount == 0:
+            from datetime import datetime
+            cur.execute("""
+                INSERT INTO public.inventory_action (
+                    inventory_id, suggestion_date, stockout_predict, 
+                    lead_time_days, min_order_qty, reorder_qty
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                id, datetime.now(), False,
+                int(data.get('leadTime') or 0),
+                int(data.get('minOrder') or 0),
+                int(data.get('reorderPoint') or 0)
+            ))
+
+        conn.commit()
+        return jsonify({"message": "Item updated successfully"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        print("Update Error:", str(e)) # <--- Check your Python terminal for this!
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()

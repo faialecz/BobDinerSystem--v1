@@ -216,7 +216,13 @@ export default function Login({ onLogin }: LoginProps) {
               </a>
             </div>
 
-            <button type="submit" className={styles.loginSubmit}>LOGIN</button>
+            <button
+              suppressHydrationWarning={true}
+              type="submit"
+              className={styles.loginSubmit}
+            >
+              LOGIN
+            </button>
           </form>
         ) : view === "forgot" ? (
           /* --- CHOOSE --- */
