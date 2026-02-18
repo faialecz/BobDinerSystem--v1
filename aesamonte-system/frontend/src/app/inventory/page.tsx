@@ -254,10 +254,10 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         itemDescription: item.itemDescription,
         qty: Number(item.qty),
         uom: item.uom,
-        reorderPoint: Number(item.reorderPoint),
         unitPrice: Number(item.unitPrice),    // Cost Price
         sellingPrice: Number(item.sellingPrice),
-        supplierName: item.detailSupplierName, // Shared Supplier
+        detailSupplierName: item.detailSupplierName, // Shared Supplier
+        reorderPoint: Number(item.reorderPoint) || 0,
         detailLeadTime: Number(item.detailLeadTime) || 0,
         detailMinOrder: Number(item.detailMinOrder) || 0
       }));

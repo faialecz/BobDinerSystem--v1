@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from database.db_config import get_connection
+from datetime import datetime
 
 inventory_bp = Blueprint("inventory", __name__)
 
@@ -56,65 +57,65 @@ def add_inventory_batch():
     
     try:
         items = request.get_json()
-        
         if not items or not isinstance(items, list):
-            return jsonify({"error": "Invalid data format. Expected a list."}), 400
+            return jsonify({"error": "Invalid data format."}), 400
 
         for item in items:
-            # 1. Look up Supplier ID
-            # Ensure your frontend sends 'detailSupplierName' correctly
-            if not item.get('detailSupplierName') or item.get('detailSupplierName') == 'Select':
-                raise Exception(f"Please select a valid supplier for item: {item.get('itemName')}")
-
-            cur.execute("SELECT supplier_id FROM supplier WHERE supplier_name = %s", (item['detailSupplierName'],))
-            supplier_res = cur.fetchone()
-            if not supplier_res:
-                raise Exception(f"Supplier '{item['detailSupplierName']}' not found.")
-            supplier_id = supplier_res[0]
-
-            # 2. Look up Unit of Measure ID
-            # Frontend sends codes like 'PCS', 'BOX'. We check against uom_code.
-            uom_val = item.get('uom')
-            if uom_val == 'Select' or not uom_val:
-                raise Exception(f"Please select a Unit of Measure for item: {item.get('itemName')}")
-
-            cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_code = %s", (uom_val,))
-            uom_res = cur.fetchone()
+            # --- 1. Validation & Lookups ---
+            supplier_name = item.get('detailSupplierName') # Fixed key
+            uom_code = item.get('uom')
             
-            if not uom_res:
-                raise Exception(f"Unit of Measure '{uom_val}' not defined in database.")
+            if not supplier_name or supplier_name == 'Select':
+                raise Exception(f"Supplier missing for {item.get('itemName')}")
+            if not uom_code or uom_code == 'Select':
+                raise Exception(f"UOM missing for {item.get('itemName')}")
+
+            # Get Supplier ID
+            cur.execute("SELECT supplier_id FROM supplier WHERE supplier_name = %s", (supplier_name,))
+            sup_res = cur.fetchone()
+            if not sup_res: raise Exception(f"Supplier '{supplier_name}' not found.")
+            supplier_id = sup_res[0]
+
+            # Get UOM ID
+            cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_code = %s", (uom_code,))
+            uom_res = cur.fetchone()
+            if not uom_res: raise Exception(f"UOM '{uom_code}' not found.")
             uom_id = uom_res[0]
 
-            # 3. Insert into Inventory
-            # We explicitly map frontend fields to the database columns
+            # --- 2. Insert into INVENTORY Table ---
+            # (Basic Item Details Only)
             cur.execute("""
                 INSERT INTO public.inventory (
-                    supplier_id, 
-                    item_name, 
-                    item_description, 
-                    item_sku, 
-                    brand, 
-                    unit_of_measure, 
-                    item_quantity, 
-                    item_unit_price, 
-                    item_selling_price,
-                    item_status_id,
-                    lead_time,
-                    moq,
-                    reorder_point
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s)
+                    supplier_id, item_name, item_description, item_sku, brand, 
+                    unit_of_measure, item_quantity, item_unit_price, item_selling_price,
+                    item_status_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
+                RETURNING inventory_id
             """, (
-                supplier_id,
-                item['itemName'], 
-                item['itemDescription'], 
-                item['internalSku'], 
-                item['brand'],
-                uom_id,
-                int(item['qty']), 
-                float(item['unitPrice']), 
-                float(item['sellingPrice']),
-                # lead_time, moq, reorder_point (Make sure these cols exist in DB now)
-                int(item.get('detailLeadTime') or 0), 
+                supplier_id, item['itemName'], item.get('itemDescription'), 
+                item.get('internalSku'), item.get('brand'), uom_id,
+                int(item.get('qty', 0)), float(item.get('unitPrice', 0)), 
+                float(item.get('sellingPrice', 0))
+            ))
+            
+            new_inventory_id = cur.fetchone()[0]
+
+            # --- 3. Insert into INVENTORY_ACTION Table ---
+            # (Lead time, MOQ, Reorder Point)
+            cur.execute("""
+                INSERT INTO public.inventory_action (
+                    inventory_id, 
+                    suggestion_date, 
+                    stockout_predict, 
+                    lead_time_days, 
+                    min_order_qty, 
+                    reorder_qty
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                new_inventory_id,
+                datetime.now(), # suggestion_date (Required by your schema)
+                False,          # stockout_predict (Required by your schema)
+                int(item.get('detailLeadTime') or 0),
                 int(item.get('detailMinOrder') or 0),
                 int(item.get('reorderPoint') or 0)
             ))
@@ -124,12 +125,13 @@ def add_inventory_batch():
 
     except Exception as e:
         conn.rollback()
-        print("Batch Save Error:", str(e)) # Check your backend terminal for this log
+        print("Batch Save Error:", str(e))
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()
 
+# ================= GET UOMs =================
 @inventory_bp.route("/api/uom", methods=["GET"])
 def get_uoms():
     conn = get_connection()
