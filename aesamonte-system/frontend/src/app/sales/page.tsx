@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import styles from '@/css/sales.module.css'
 import TopHeader from '@/components/layout/TopHeader'
 import ExportButton from '@/components/features/ExportButton'
-import ExportModal from './exportModal' // Ensure the filename casing matches your file system
+import ExportModal from './exportModal' 
 import {
   LuSearch,
   LuChevronUp,

@@ -10,7 +10,6 @@ interface ExportModalProps {
 
 const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => {
   const [format, setFormat] = useState("");
-  // Changed to isDropdownOpen for clearer intent
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const s = styles as Record<string, string>;
 

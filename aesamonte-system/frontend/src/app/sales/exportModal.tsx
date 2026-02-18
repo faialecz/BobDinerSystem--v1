@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import s from "@/css/sales.module.css"; // Reusing the established styles
+import styles from "@/css/sales.module.css";
 
 interface SalesExportModalProps {
   isOpen: boolean;
@@ -9,6 +9,8 @@ interface SalesExportModalProps {
 }
 
 const SalesExportModal: React.FC<SalesExportModalProps> = ({ isOpen, onClose }) => {
+  const s = styles as Record<string, string>;
+  
   const [format, setFormat] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -20,6 +22,7 @@ const SalesExportModal: React.FC<SalesExportModalProps> = ({ isOpen, onClose }) 
       return;
     }
     console.log(`Exporting Sales Report as ${format}...`);
+    setFormat(""); 
     onClose(); 
   };
 
@@ -40,7 +43,7 @@ const SalesExportModal: React.FC<SalesExportModalProps> = ({ isOpen, onClose }) 
                 setIsDropdownOpen(false); 
               }}
               className={s.exportSelect}
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              onFocus={() => setIsDropdownOpen(true)}
               onBlur={() => setIsDropdownOpen(false)}
             >
               <option value="" disabled>Select</option>
