@@ -6,9 +6,11 @@ import styles from "@/css/inventory.module.css";
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // Updated interface to support both success and error types
+  onSuccess: (message: string, type?: 'success' | 'error') => void; 
 }
 
-const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => {
+const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [format, setFormat] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const s = styles as Record<string, string>;
@@ -16,11 +18,20 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const handleExportClick = () => {
+    // 1. Professional Error Handling: Triggers the red 'Oops!' pop-up
     if (!format) {
-      alert("Please select a format");
+      onSuccess("Please select a format before exporting.", "error");
       return;
     }
+    
+    // 2. Logic execution
     console.log(`Downloading ${format} file...`);
+    
+    // 3. Trigger the professional green Success pop-up
+    onSuccess(`Inventory Report Exported as ${format}!`, "success"); 
+    
+    // 4. Reset and Cleanup
+    setFormat("");
     onClose(); 
   };
 

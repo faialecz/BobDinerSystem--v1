@@ -79,7 +79,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
 
-  //Supplier States
+  // Supplier States
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   // UOM States
@@ -91,6 +91,11 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const [showEditModal, setShowEditModal] = useState(false); 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null); 
   const [showExportModal, setShowExportModal] = useState(false);
+
+  // States for Alert Modal (Consolidated)
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [isError, setIsError] = useState(false); 
   
   // Action Menu State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -123,7 +128,13 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     paymentTerms: 'Cash on Delivery'
   });
 
-  /* ================= EFFECTS ================= */
+  /* ================= HANDLERS ================= */
+
+  const handleExportSuccess = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(msg);
+    setIsError(type === 'error');
+    setShowToast(true);
+  };
 
   const fetchInventory = async () => {
     setIsLoading(true);
@@ -195,7 +206,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* ================= HANDLERS ================= */
+  /* ================= HANDLERS CONTINUED ================= */
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -220,11 +231,10 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
 
   const handleEditClick = async (product: Product) => {
   try {
-    // Fetch full details (Supplier, Lead Time, etc.) before opening modal
     const res = await fetch(`http://127.0.0.1:5000/api/inventory/${product.id}`);
     if (res.ok) {
       const fullData = await res.json();
-      setSelectedProduct(fullData); // Pass full data to modal
+      setSelectedProduct(fullData); 
       setShowEditModal(true);
       setActiveMenuId(null);
     } else {
@@ -245,21 +255,19 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
 
     if (res.ok) {
       setShowEditModal(false);
-      alert("Item updated successfully!");
+      handleExportSuccess("Item updated successfully!");
       fetchInventory(); 
     } else {
       const err = await res.json();
-      alert(`Error updating: ${err.error}`);
+      handleExportSuccess(`Error updating: ${err.error}`, 'error');
     }
   } catch (err) {
     console.error("Update error:", err);
   }
 };
 
-  // NEW: Bulk Save Function
   const handleSave = async (items: any[]) => {
     try {
-      // 1. Format the data to match Backend expectations
       const formattedItems = items.map(item => ({
         itemName: item.itemName,
         brand: item.brand,
@@ -267,33 +275,29 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         itemDescription: item.itemDescription,
         qty: Number(item.qty),
         uom: item.uom,
-        unitPrice: Number(item.unitPrice),    // Cost Price
+        unitPrice: Number(item.unitPrice), 
         sellingPrice: Number(item.sellingPrice),
-        detailSupplierName: item.detailSupplierName, // Shared Supplier
+        detailSupplierName: item.detailSupplierName, 
         reorderPoint: Number(item.reorderPoint) || 0,
         detailLeadTime: Number(item.detailLeadTime) || 0,
         detailMinOrder: Number(item.detailMinOrder) || 0
       }));
 
-      // 2. Send ONE request with the array
       const res = await fetch("http://127.0.0.1:5000/api/inventory/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formattedItems), // Send the list directly
+        body: JSON.stringify(formattedItems), 
       });
 
       if (res.ok) {
         const result = await res.json();
-        alert(result.message); // "Successfully added X items"
+        handleExportSuccess(result.message); 
         setShowModal(false);
-        await fetchInventory(); // Refresh the table
+        await fetchInventory(); 
       } else {
         const err = await res.json();
-        alert(`Error: ${err.error}`);
+        handleExportSuccess(`Error: ${err.error}`, 'error');
       }
-      setShowModal(false);
-      alert("All items saved successfully!"); // Changed message to reflect multiple items
-      fetchInventory();
     } catch (err) {
       console.error("Submission error:", err);
     }
@@ -355,10 +359,34 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
 
+      {/* DYNAMIC ALERT POP-UP (Success/Error) */}
+      {showToast && (
+        <div className={s.toastOverlay}>
+          <div className={s.alertBox}>
+            <div className={`${s.alertHeader} ${isError ? s.alertHeaderError : ''}`}>
+              <div className={`${s.checkCircle} ${isError ? s.checkCircleError : ''}`}>
+                {isError ? '!' : '✓'}
+              </div>
+            </div>
+            
+            <div className={s.alertBody}>
+              <h2 className={s.alertTitle}>{isError ? 'Oops!' : 'Success!'}</h2>
+              <p className={s.alertMessage}>{toastMessage}</p>
+              <button 
+                className={`${s.okButton} ${isError ? s.okButtonError : ''}`} 
+                onClick={() => setShowToast(false)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className={s.mainContent}>
         <div className={s.headerActions} 
-         onClick={() => setShowExportModal(true)}>
-         <ExportButton />
+          onClick={() => setShowExportModal(true)}>
+          <ExportButton />
       </div>
 
         <div className={s.topGrid}>
@@ -496,10 +524,11 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
       </div>
 
 
-      {/* --- ADDED: Export Modal --- */}
+      {/* --- Export Modal with onSuccess logic --- */}
       <ExportModal 
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
+        onSuccess={handleExportSuccess}
       />
 
       
@@ -509,7 +538,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         onSave={handleSave}
         onOpenSupplierModal={() => setShowSupplierModal(true)}
         suppliers={suppliers}
-        uoms={uoms} // <--- Pass the data here
+        uoms={uoms} 
       />
 
       <EditInventoryModal 

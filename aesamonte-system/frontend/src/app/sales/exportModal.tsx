@@ -6,9 +6,11 @@ import styles from "@/css/sales.module.css";
 interface SalesExportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // Updated to accept an optional type for handling errors
+  onSuccess: (message: string, type?: 'success' | 'error') => void; 
 }
 
-const SalesExportModal: React.FC<SalesExportModalProps> = ({ isOpen, onClose }) => {
+const SalesExportModal: React.FC<SalesExportModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const s = styles as Record<string, string>;
   
   const [format, setFormat] = useState("");
@@ -17,11 +19,19 @@ const SalesExportModal: React.FC<SalesExportModalProps> = ({ isOpen, onClose }) 
   if (!isOpen) return null;
 
   const handleExportClick = () => {
+    // 1. Updated Error handling: No more browser alert
     if (!format) {
-      alert("Please select a format");
+      onSuccess("Please select a format before exporting.", "error"); 
       return;
     }
+    
+    // 2. Logic execution
     console.log(`Exporting Sales Report as ${format}...`);
+    
+    // 3. Trigger the success message with default 'success' type
+    onSuccess(`Sales Report Exported as ${format}!`, "success"); 
+    
+    // 4. Cleanup and close
     setFormat(""); 
     onClose(); 
   };

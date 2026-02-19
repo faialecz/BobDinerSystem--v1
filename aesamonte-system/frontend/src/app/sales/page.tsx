@@ -50,13 +50,25 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   
-  // FIXED: Added missing state for the Export Modal
   const [showExportModal, setShowExportModal] = useState(false)
+  
+  // States for Alert Modal
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [isError, setIsError] = useState(false) // Track if it's an error pop-up
 
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Transaction | ''
     direction: 'asc' | 'desc' | null
   }>({ key: '', direction: null })
+
+  /* ================= HANDLERS ================= */
+
+  const handleExportSuccess = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage(msg)
+    setIsError(type === 'error')
+    setShowToast(true)
+  }
 
   /* ================= FETCH ================= */
 
@@ -130,9 +142,32 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
 
+      {/* DYNAMIC ALERT POP-UP (Success/Error) */}
+      {showToast && (
+        <div className={s.toastOverlay}>
+          <div className={s.alertBox}>
+            <div className={`${s.alertHeader} ${isError ? s.alertHeaderError : ''}`}>
+              <div className={`${s.checkCircle} ${isError ? s.checkCircleError : ''}`}>
+                {isError ? '!' : '✓'}
+              </div>
+            </div>
+            
+            <div className={s.alertBody}>
+              <h2 className={s.alertTitle}>{isError ? 'Oops!' : 'Success!'}</h2>
+              <p className={s.alertMessage}>{toastMessage}</p>
+              <button 
+                className={`${s.okButton} ${isError ? s.okButtonError : ''}`} 
+                onClick={() => setShowToast(false)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className={s.mainContent}>
         <div className={s.headerActions}>
-          {/* IMPROVEMENT: Pass the setter to the ExportButton if it controls the modal */}
           <div onClick={() => setShowExportModal(true)}>
             <ExportButton />
           </div>
@@ -290,6 +325,7 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
       <ExportModal 
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
+        onSuccess={handleExportSuccess} 
       />
     </div>
   )
