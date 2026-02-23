@@ -21,6 +21,12 @@ interface AddInventoryModalProps {
   uoms: { id: number; code: string; name: string }[];
 }
 
+interface Item {
+  itemName: string;
+  internalSku: string;
+  skuSuffix?: string;
+}
+
 // Fields specific to an Item
 const INITIAL_ITEM = {
   itemName: '',
@@ -76,27 +82,43 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     setItems(newItems);
   };
 
-  const handleItemChange = (index: number, field: string, value: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    
-    // Auto-SKU Logic
-    if (field === 'itemName') {
-      const name = value.trim().toUpperCase();
-      if (name && !newItems[index].internalSku) {
-        let prefix = "";
-        const words = name.split(/\s+/);
-        if (words.length >= 3) {
-          prefix = words.slice(0, 3).map((w: string) => w[0]).join('');
+  const handleItemChange = (index: number, field: string, value: string) => {
+    setItems(prevItems => {
+      const newItems = [...prevItems];
+      const item = { ...newItems[index] };
+
+      item[field] = value;
+
+      if (field === 'itemName') {
+        const name = (value || '').trim().toUpperCase();
+        if (name.length > 0) {
+          const words = name.split(/\s+/).filter((w: string) => w.length > 0);
+
+          let prefix = '';
+          for (let i = 0; i < Math.min(3, words.length); i++) {
+            prefix += words[i][0];
+          }
+          if (prefix.length < 3) prefix = prefix.padEnd(3, 'X');
+
+          if (!item.skuSuffix) {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let suffix = '';
+            for (let i = 0; i < 3; i++) {
+              suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            item.skuSuffix = suffix;
+          }
+
+          item.internalSku = `${prefix}-${item.skuSuffix}`;
         } else {
-          prefix = name.replace(/[^A-Z]/g, '').substring(0, 3);
+          item.internalSku = '';
+          item.skuSuffix = undefined;
         }
-        if (prefix.length < 3) prefix = prefix.padEnd(3, 'X');
-        const suffix = Math.random().toString(36).substring(2, 5).toUpperCase();
-        newItems[index].internalSku = `${prefix}-${suffix}`;
       }
-    }
-    setItems(newItems);
+
+      newItems[index] = item;
+      return newItems;
+    });
   };
 
   const handleSupplierChange = (field: string, value: any) => {

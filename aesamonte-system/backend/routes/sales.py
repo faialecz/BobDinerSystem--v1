@@ -1,9 +1,8 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from database.db_config import get_connection
 from datetime import date, timedelta
 
 sales_bp = Blueprint("sales", __name__, url_prefix="/api/sales")
-
 
 # ===================== SUMMARY =====================
 @sales_bp.route("/summary", methods=["GET"])
@@ -22,7 +21,8 @@ def sales_summary():
             SELECT COALESCE(SUM(od.order_total), 0)
             FROM sales_transaction st
             JOIN order_details od ON st.order_id = od.order_id
-            WHERE st.sales_status = 'PAID'
+            JOIN static_status ss ON st.sales_status_id = ss.status_id
+            WHERE ss.status_code = 'PAID'
         """
         params = []
         if since:
@@ -43,7 +43,8 @@ def sales_summary():
         JOIN order_transaction ot ON st.order_id = ot.order_id
         JOIN customer c ON ot.customer_id = c.customer_id
         JOIN order_details od ON ot.order_id = od.order_id
-        WHERE st.sales_status = 'PAID'
+        JOIN static_status ss ON st.sales_status_id = ss.status_id
+        WHERE ss.status_code = 'PAID'
         GROUP BY c.customer_name
         ORDER BY total_sales DESC
         LIMIT 1
@@ -79,13 +80,13 @@ def sales_transactions():
             st.sales_date,
             COALESCE(SUM(od.order_quantity), 0) AS qty,
             COALESCE(SUM(od.order_total), 0) AS amount,
-            st.sales_status
+            ss.status_code AS status
         FROM sales_transaction st
+        JOIN static_status ss ON st.sales_status_id = ss.status_id
         JOIN order_transaction ot ON st.order_id = ot.order_id
         JOIN customer c ON ot.customer_id = c.customer_id
         JOIN order_details od ON ot.order_id = od.order_id
-        WHERE st.sales_status = 'PAID'
-        GROUP BY st.sales_id, c.customer_name, c.customer_address, st.sales_date, st.sales_status
+        GROUP BY st.sales_id, c.customer_name, c.customer_address, st.sales_date, ss.status_code
         ORDER BY st.sales_date DESC
     """
 
