@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo } from 'react';
 import styles from '@/css/order.module.css';
 import TopHeader from '@/components/layout/TopHeader';
 import OrderEditModal from './editOrderModal';
+import AddOrderModal from './addOrderModal';
 import {
   LuSearch,
   LuEllipsisVertical,
@@ -17,15 +18,14 @@ import {
   LuPlus
 } from 'react-icons/lu';
 
-/* ===================== CONSTANTS ===================== */
+/* ===================== CONSTANTS (Moved Outside to Fix Lint Errors) ===================== */
 const STATUS_PRIORITY: Record<string, number> = {
-  'PENDING': 1,
-  'PROCESSING': 2,
-  'COMPLETED': 3,
-  'CANCELLED': 4
+  'TO SHIP': 1,
+  'RECEIVED': 2,
+  'CANCELLED': 3
 };
 
-const STATUS_ORDER: string[] = ['PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED'];
+const STATUS_ORDER: string[] = ['TO SHIP', 'RECEIVED', 'CANCELLED'];
 
 const ITEM_STATUS_MAP: Record<number, string> = {
   1: 'AVAILABLE',
@@ -81,6 +81,7 @@ interface OrderFormData {
 
 type SortKey = 'id' | 'customer' | 'date' | 'status' | null;
 
+/* ===================== COMPONENT ===================== */
 export default function OrderPage({ role, onLogout }: { role: string; onLogout: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -89,16 +90,11 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   const [sortConfig, setSortConfig] = useState<{ key: Exclude<SortKey, null> | null; direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [statusCycleIndex, setStatusCycleIndex] = useState(0);
-  const [showModal, setShowModal] = useState(false);
+  const [showAddModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<any>(null);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastTitle, setToastTitle] = useState('');
-  const [isError, setIsError] = useState(false);
-  
-  /* Holds the data specifically for the Success Alert */
-  const [submittedData, setSubmittedData] = useState<any>(null);
+  const [orderStatuses, setOrderStatuses] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
   const [formData, setFormData] = useState<OrderFormData>({
     name: '',
@@ -109,6 +105,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
 
   const s = styles;
 
+  /* ===================== FETCH DATA ===================== */
   useEffect(() => {
     fetch('http://127.0.0.1:5000/api/orders/list')
       .then(res => res.json())
@@ -118,6 +115,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
             ...item,
             item_status: (item.item_status || ITEM_STATUS_MAP[item.item_status_id] || 'NOT_AVAILABLE').toUpperCase()
           }));
+
           return { ...order, items };
         });
         setOrders(mappedOrders);
@@ -130,6 +128,27 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
       .catch(err => console.error('Error fetching summary:', err));
   }, []);
 
+  useEffect(() => {
+    const fetchDropdowns = async () => {
+      try {
+        // Corrected URL: /api/orders/status
+        const statusRes = await fetch("http://127.0.0.1:5000/api/orders/status?scope=ORDER_STATUS");
+        if (statusRes.ok) setOrderStatuses(await statusRes.json());
+
+        // Corrected URL: /api/orders/status
+        const paymentRes = await fetch("http://127.0.0.1:5000/api/orders/status?scope=PAYMENT_METHOD");
+        if (paymentRes.ok) setPaymentMethods(await paymentRes.json());
+
+      } catch (err) {
+        console.error("Failed to fetch dropdowns", err);
+      }
+    };
+    fetchDropdowns();
+  }, []);
+
+  /* ===================== HANDLERS ===================== */
+  
+  // FIX: Reset page here instead of using useEffect
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
     setCurrentPage(1); 
@@ -163,40 +182,16 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name || formData.items[0].item === '') {
-      setToastTitle("Oops!");
-      setToastMessage("Please provide the customer name and item details.");
-      setIsError(true);
-      setShowToast(true);
-      return;
-    }
-
-    setSubmittedData({
-      customer: formData.name,
-      total: formData.items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
-      method: formData.items[0]?.paymentMethod || '—',
-      dateTime: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-
+    console.log('Saving order data:', formData);
     setShowModal(false);
-    setToastTitle("Order Submitted!");
-    setToastMessage("Your new order has been successfully added.");
-    setIsError(false);
-    setShowToast(true);
-    
-    setFormData({
-      name: '', contact: '', address: '',
-      items: [{ item: '', itemDescription: '', quantity: '', amount: '', orderStatus: '', paymentMethod: '' }]
-    });
   };
 
   const handleOpenEdit = (order: Order) => {
     setSelectedOrderForEdit({
       id: order.id,
-      Customer: order.customer,
+      name: order.customer,
       contact: '', 
-      Delivery: order.address, 
+      address: order.address, 
       item: order.items?.[0]?.item_name || '', 
       quantity: order.totalQty,
       amount: order.totalAmount, 
@@ -207,36 +202,10 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
     setShowEditModal(true);
   };
 
-  /* UPDATED EDIT HANDLER WITH ERROR CHECKING */
   const handleUpdateSave = (updatedOrder: any) => {
-    // 1. Check for Empty Inputs
-    if (!updatedOrder.customerName || !updatedOrder.status) {
-        setToastTitle("Oops!");
-        setToastMessage("No changes to save.");
-        setIsError(true);
-        setShowToast(true);
-        return;
-    }
-
-    // 2. Check for No Changes
-    const original = orders.find(o => o.id === updatedOrder.id);
-    if (original?.customer === updatedOrder.customerName && original?.status === updatedOrder.status) {
-        setToastTitle("No Changes Detected");
-        setToastMessage("No updates were made to the order.");
-        setIsError(true);
-        setShowToast(true);
-        setShowEditModal(false);
-        return;
-    }
-
-    // 3. Successful Update Logic
+    console.log('Update saved:', updatedOrder);
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, customer: updatedOrder.customerName, status: updatedOrder.status } : o));
     setShowEditModal(false);
-    setToastTitle("Updated Successfully!");
-    setToastMessage("Order details updated successfully.");
-    setIsError(false);
-    setShowToast(true);
-    setSubmittedData(null); // Ensure summary table doesn't show for edits
   };
 
   const handleSort = (key: Exclude<SortKey, null>) => {
@@ -251,6 +220,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
     }
   };
 
+  /* ===================== FILTER & SORT ===================== */
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return orders.filter(o =>
@@ -298,9 +268,9 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
     if (!status || status.trim() === '' || status.toLowerCase() === 'select') return baseClass;
 
     switch (status.toUpperCase()) {
-      case 'PENDING': return `${baseClass} ${s.pillBlue}`;
-      case 'PROCESSING': return `${baseClass} ${s.pillYellow}`;
-      case 'COMPLETED': return `${baseClass} ${s.pillGreen}`;
+      case 'PREPARING': return `${baseClass} ${s.pillBlue}`;
+      case 'TO SHIP': return `${baseClass} ${s.pillYellow}`;
+      case 'RECEIVED': return `${baseClass} ${s.pillGreen}`;
       case 'CANCELLED': return `${baseClass} ${s.pillRed}`;
       default: return baseClass;
     }
@@ -314,59 +284,10 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
     >{i + 1}</div>
   ));
 
+  /* ===================== RENDER ===================== */
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
-
-      {/* SUCCESS/ERROR ALERT MODAL */}
-      {showToast && (
-        <div className={s.toastOverlay}>
-          <div className={s.alertBox}>
-            <div className={`${s.alertHeader} ${isError ? s.alertHeaderError : ''}`}>
-              <div className={`${s.checkCircle} ${isError ? s.checkCircleError : ''}`}>
-                {isError ? '!' : '✓'}
-              </div>
-            </div>
-            
-            <div className={s.alertBody}>
-              <h2 className={s.alertTitle}>{toastTitle}</h2>
-              <p className={s.alertMessage}>{toastMessage}</p>
-
-              {!isError && submittedData && (
-                <div className={s.alertDataTable}>
-                  <div className={s.alertDataRow}>
-                    <span>Customer:</span>
-                    <strong>{submittedData.customer}</strong>
-                  </div>
-                  <div className={s.alertDataRow}>
-                    <span>Total Amount:</span>
-                    <strong>₱{submittedData.total.toLocaleString()}</strong>
-                  </div>
-                  <div className={s.alertDataRow}>
-                    <span>Payment Method:</span>
-                    <strong>{submittedData.method}</strong>
-                  </div>
-                  <div className={s.alertDataRow}>
-                    <span>Date & Time:</span>
-                    <strong>{submittedData.dateTime}</strong>
-                  </div>
-                </div>
-              )}
-
-              <button 
-                className={`${s.okButton} ${isError ? s.okButtonError : ''}`} 
-                onClick={() => {
-                  setShowToast(false);
-                  setSubmittedData(null);
-                }}
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className={s.mainContent}>
         <div className={s.topGrid}>
           <section className={s.statCard}>
@@ -404,14 +325,62 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
           <table className={s.table}>
             <thead>
               <tr>
-                <th onClick={() => handleSort('id')} className={s.sortableHeader}>ID</th>
-                <th onClick={() => handleSort('customer')} className={s.sortableHeader}>CUSTOMER</th>
-                <th className={s.headerText}>ADDRESS</th>
-                <th className={s.headerText}>QTY</th>
-                <th className={s.headerText}>TOTAL</th>
-                <th className={s.headerText}>PAYMENT</th>
-                <th onClick={() => handleSort('date')} className={s.sortableHeader}>DATE</th>
-                <th onClick={() => handleSort('status')} className={s.sortableHeader}>STATUS</th>
+                {/* ID: Center */}
+                <th onClick={() => handleSort('id')} className={s.sortableHeader} style={{ textAlign: 'center' }}>
+                  <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
+                    <span>ID</span>
+                    <div className={s.sortIconsStack}>
+                      <LuChevronUp className={sortConfig.key === 'id' && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                      <LuChevronDown className={sortConfig.key === 'id' && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                    </div>
+                  </div>
+                </th>
+
+                {/* CUSTOMER: Left */}
+                <th onClick={() => handleSort('customer')} className={s.sortableHeader} style={{ textAlign: 'left', paddingLeft: '1rem' }}>
+                  <div className={s.sortHeaderInner} style={{ justifyContent: 'flex-start' }}>
+                    <span>CUSTOMER</span>
+                    <div className={s.sortIconsStack}>
+                       <LuChevronUp className={sortConfig.key === 'customer' && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                       <LuChevronDown className={sortConfig.key === 'customer' && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                    </div>
+                  </div>
+                </th>
+
+                {/* ADDRESS: Left (Matches data) */}
+                <th className={s.headerText} style={{ textAlign: 'left' }}>ADDRESS</th>
+
+                {/* QTY: Center */}
+                <th className={s.headerText} style={{ textAlign: 'center' }}>QTY</th>
+
+                {/* TOTAL: Right (Standard for currency) */}
+                <th className={s.headerText} style={{ textAlign: 'right' }}>TOTAL</th>
+
+                {/* PAYMENT: Center */}
+                <th className={s.headerText} style={{ textAlign: 'center' }}>PAYMENT</th>
+
+                {/* DATE: Center */}
+                <th onClick={() => handleSort('date')} className={s.sortableHeader} style={{ textAlign: 'center' }}>
+                   <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
+                    <span>DATE</span>
+                    <div className={s.sortIconsStack}>
+                       <LuChevronUp className={sortConfig.key === 'date' && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                       <LuChevronDown className={sortConfig.key === 'date' && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                    </div>
+                  </div>
+                </th>
+
+                {/* STATUS: Center */}
+                <th onClick={() => handleSort('status')} className={s.sortableHeader} style={{ textAlign: 'center' }}>
+                  <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
+                    <span>STATUS</span>
+                    <div className={s.sortIconsStack}>
+                       <LuChevronUp className={sortConfig.key === 'status' && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                       <LuChevronDown className={sortConfig.key === 'status' && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                    </div>
+                  </div>
+                </th>
+
                 <th className={`${s.actionHeader} text-center`}>ACTION</th>
               </tr>
             </thead>
@@ -419,14 +388,42 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
             <tbody>
               {paginated.map((o, i) => (
                 <tr key={o.id} className={i % 2 ? s.altRow : ''}>
-                  <td>{o.id}</td>
-                  <td><strong>{o.customer}</strong></td>
-                  <td>{o.address}</td>
-                  <td>{o.totalQty}</td>
-                  <td>₱{o.totalAmount?.toLocaleString()}</td>
-                  <td>{o.paymentMethod}</td>
-                  <td>{o.date}</td>
-                  <td><span className={getStatusStyle(o.status)}>{o.status}</span></td>
+                  
+                  {/* ID */}
+                  <td style={{ textAlign: 'center' }}>{o.id}</td>
+
+                  {/* Customer */}
+                  <td style={{ textAlign: 'left', paddingLeft: '1rem' }}>
+                    <div className="font-bold">{o.customer}</div>
+                  </td>
+
+                  {/* Address */}
+                  <td style={{ 
+                    textAlign: 'left', 
+                    maxWidth: '200px', 
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis' 
+                  }}>
+                    {o.address}
+                  </td>
+
+                  {/* Qty */}
+                  <td style={{ textAlign: 'center' }}>{o.totalQty}</td>
+
+                  {/* Total */}
+                  <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₱{o.totalAmount?.toLocaleString()}</td>
+
+                  {/* Payment */}
+                  <td style={{ textAlign: 'center' }}>{o.paymentMethod}</td>
+
+                  {/* Date */}
+                  <td style={{ textAlign: 'center' }}>{o.date}</td>
+
+                  {/* Status */}
+                  <td style={{ textAlign: 'center' }}><span className={getStatusStyle(o.status)}>{o.status}</span></td>
+
+                  {/* Action */}
                   <td className={`${s.actionCell} text-center`}>
                     <LuEllipsisVertical
                       className={s.moreIcon}
@@ -461,77 +458,23 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
         </div>
       </div>
 
-      {showModal && (
-        <div className={s.modalOverlay}>
-          <div className={s.modalContent}>
-            <div className={s.modalHeader}>
-              <h3 className={s.headerTitle}>General Information</h3>
-              <div className={s.headerActions}>
-                <span className={getStatusStyle(formData.items[0]?.orderStatus)}>
-                  {formData.items[0]?.orderStatus ? formData.items[0].orderStatus.toUpperCase() : 'STATUS'}
-                </span>
-                <LuX onClick={() => setShowModal(false)} className={s.closeIcon} />
-              </div>
-            </div>
-
-            <form onSubmit={handleSave} className={s.modalForm}>
-              <div className={s.formGridTwo}>
-                <div className={s.formGroup}><label>Customer Name</label><input name="name" value={formData.name} onChange={handleInputChange} /></div>
-                <div className={s.formGroup}><label>Contact Number</label><input name="contact" value={formData.contact} onChange={handleInputChange} /></div>
-              </div>
-              <div className={s.formGroupFull}><label>Delivery Address</label><input name="address" value={formData.address} className={s.addressInput} onChange={handleInputChange} /></div>
-              <hr className={s.divider} />
-              <div className={s.sectionHeader}>
-                <h4 className={s.sectionTitle}>Order</h4>
-                <button type="button" onClick={addItem} className={s.addLinkBtn}><LuPlus size={14} /> Add Item</button>
-              </div>
-
-              {formData.items.map((itemRow, index) => (
-                <div key={index} className={s.itemRowContainer}>
-                  {index > 0 && <hr className={s.itemDivider} />}
-                  <div className={s.formGridThree}>
-                    <div className={s.formGroup}><label>Item</label><input name="item" value={itemRow.item} onChange={(e) => handleItemChange(index, e)} /></div>
-                    <div className={s.formGroup}><label>Item Description</label><input name="itemDescription" value={itemRow.itemDescription} onChange={(e) => handleItemChange(index, e)} /></div>
-                    <div className={s.formGroup}><label>Quantity</label><input type="number" name="quantity" value={itemRow.quantity} onChange={(e) => handleItemChange(index, e)} /></div>
-                  </div>
-                  <div className={s.formGridThree}>
-                    <div className={s.formGroup}><label>Amount</label><input name="amount" value={itemRow.amount} onChange={(e) => handleItemChange(index, e)} /></div>
-                    <div className={s.formGroup}>
-                      <label>Status</label>
-                      <select name="orderStatus" value={itemRow.orderStatus} onChange={(e) => handleItemChange(index, e)}>
-                        <option value="">Select</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Processing">Processing</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                    </div>
-                    <div className={s.formGroup}>
-                      <label>Payment Method</label>
-                      <select name="paymentMethod" value={itemRow.paymentMethod} onChange={(e) => handleItemChange(index, e)}>
-                        <option value=""></option>
-                        <option value="cash">Cash</option>
-                        <option value="gcash">G-Cash</option>
-                        <option value="bank">Bank Transfer</option>
-                      </select>
-                    </div>
-                  </div>
-                  {formData.items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(index)} className={s.removeItemBtn}>Remove Item</button>
-                  )}
-                </div>
-              ))}
-              <button type="submit" className={s.saveBtn}>Save</button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ================= MODALS ================= */}
+      
+      <AddOrderModal 
+        isOpen={showAddModal} 
+        onClose={() => setShowModal(false)} 
+        onSave={handleSave}
+        statuses={orderStatuses} 
+        paymentMethods={paymentMethods} 
+      />
 
       <OrderEditModal 
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         orderData={selectedOrderForEdit}
         onSave={handleUpdateSave}
+        statuses={orderStatuses} 
+        paymentMethods={paymentMethods} 
       />
     </div>
   );

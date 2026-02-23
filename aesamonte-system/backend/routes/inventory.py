@@ -156,7 +156,7 @@ def get_uoms():
     return jsonify(uoms)
 
 # ================= Edit Inventory Item =================
-@inventory_bp.route("/api/inventory/<int:id>", methods=["GET"])
+@inventory_bp.route("/api/inventory/<string:id>", methods=["GET"])
 def get_inventory_item(id):
     conn = get_connection()
     cur = conn.cursor()
@@ -209,7 +209,7 @@ def get_inventory_item(id):
         })
     return jsonify({"error": "Item not found"}), 404
 
-@inventory_bp.route("/api/inventory/update/<int:id>", methods=["PUT"])
+@inventory_bp.route("/api/inventory/update/<string:id>", methods=["PUT"])
 def update_inventory_item(id):
     conn = get_connection()
     cur = conn.cursor()

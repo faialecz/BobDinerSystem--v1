@@ -167,3 +167,31 @@ def check_columns():
 
 if __name__ == "__main__":
     check_columns()
+
+# ================= GET STATUSES (For Dropdowns) =================
+@orders_bp.route("/status", methods=["GET"])
+def get_order_statuses():
+    scope = request.args.get('scope') # pyright: ignore[reportUndefinedVariable] # e.g., 'ORDER_STATUS' or 'PAYMENT_METHOD'
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        if scope:
+            # Removed the "AND is_active = true" condition
+            # This ensures "Received" and all other options are fetched
+            cur.execute("SELECT status_id, status_name FROM static_status WHERE status_scope = %s", (scope,))
+        else:
+            cur.execute("SELECT status_id, status_name FROM static_status")
+            
+        rows = cur.fetchall()
+        
+        result = [{"status_id": r[0], "status_name": r[1]} for r in rows]
+        return jsonify(result), 200
+
+    except Exception as e:
+        print("Error fetching statuses:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
