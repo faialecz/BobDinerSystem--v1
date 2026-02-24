@@ -33,6 +33,7 @@ interface Transaction {
   qty: number
   amount: number
   status: 'PAID' | 'PENDING'
+  is_archived?: boolean // Add this flag
 }
 
 interface SalesProps {
@@ -49,8 +50,8 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  
   const [showExportModal, setShowExportModal] = useState(false)
+  const [isArchiveView, setIsArchiveView] = useState(false)
   
   // States for Alert Modal
   const [showToast, setShowToast] = useState(false)
@@ -69,6 +70,19 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
     setIsError(type === 'error')
     setShowToast(true)
   }
+
+  const handleToggleArchive = (txNo: number) => {
+  setTransactions(prev => 
+    prev.map(tx => 
+      tx.no === txNo ? { ...tx, is_archived: !tx.is_archived } : tx
+    )
+  );
+
+  const targetTx = transactions.find(t => t.no === txNo);
+  
+  const actionMsg = targetTx?.is_archived ? "Restored from Archive" : "Moved to Archive";
+  handleExportSuccess(actionMsg);
+};
 
   /* ================= FETCH ================= */
 
@@ -118,23 +132,28 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
   /* ================= FILTER + SORT ================= */
 
   const filteredTx = transactions.filter(tx => {
-    const searchStr = `${tx.no} ${tx.name} ${tx.address}`.toLowerCase()
-    return searchStr.includes(searchTerm.toLowerCase())
-  })
+    const matchesArchiveView = isArchiveView ? tx.is_archived === true : !tx.is_archived;
+
+    const searchStr = `${tx.no} ${tx.name} ${tx.address}`.toLowerCase();
+    const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+
+    return matchesArchiveView && matchesSearch;
+  });
 
   const sortedTx = [...filteredTx].sort((a, b) => {
-    if (!sortConfig.key || !sortConfig.direction) return 0
-    const aVal = a[sortConfig.key]
-    const bVal = b[sortConfig.key]
+    if (!sortConfig.key || !sortConfig.direction) return 0;
+    
+    const aVal = a[sortConfig.key] ?? '';
+    const bVal = b[sortConfig.key] ?? '';
 
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
-    return 0
-  })
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   const requestSort = (key: keyof Transaction, direction: 'asc' | 'desc') => {
-    setSortConfig({ key, direction })
-  }
+    setSortConfig({ key, direction });
+  };
 
   /* ================= UI ================= */
 
@@ -297,10 +316,10 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
                       <div className={s.actionWrapper}>
                         <button 
                           className={s.archiveBtn}
-                          onClick={() => console.log('Archive transaction', tx.no)}
+                          onClick={() => handleToggleArchive(tx.no)}
                         >
                           <LuArchive size={16} />
-                          <span>Archive</span>
+                          <span>{isArchiveView ? 'Restore' : 'Archive'}</span>
                         </button>
                       </div>
                     </td>
