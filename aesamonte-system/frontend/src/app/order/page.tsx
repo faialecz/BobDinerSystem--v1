@@ -18,7 +18,7 @@ import {
   LuPlus
 } from 'react-icons/lu';
 
-/* ===================== CONSTANTS (Moved Outside to Fix Lint Errors) ===================== */
+/* ===================== CONSTANTS ===================== */
 const STATUS_PRIORITY: Record<string, number> = {
   'TO SHIP': 1,
   'RECEIVED': 2,
@@ -98,12 +98,11 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
 
-  const [formData, setFormData] = useState<OrderFormData>({
-    name: '',
-    contact: '',
-    address: '',
-    items: [{ item: '', itemDescription: '', quantity: '', amount: '', orderStatus: '', paymentMethod: '' }]
-  });
+  const [showToast, setShowToast] = useState(false);
+  const [toastTitle, setToastTitle] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+  const [isError, setIsError] = useState(false);
+  const [submittedData, setSubmittedData] = useState<any>(null);
 
   const s = styles;
 
@@ -117,7 +116,6 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
             ...item,
             item_status: (item.item_status || ITEM_STATUS_MAP[item.item_status_id] || 'NOT_AVAILABLE').toUpperCase()
           }));
-
           return { ...order, items };
         });
         setOrders(mappedOrders);
@@ -133,34 +131,12 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   useEffect(() => {
     const fetchDropdowns = async () => {
       try {
-        // Corrected URL: /api/orders/status
         const statusRes = await fetch("http://127.0.0.1:5000/api/orders/status?scope=ORDER_STATUS");
         if (statusRes.ok) setOrderStatuses(await statusRes.json());
-
-        // Corrected URL: /api/orders/status
         const paymentRes = await fetch("http://127.0.0.1:5000/api/orders/status?scope=PAYMENT_METHOD");
         if (paymentRes.ok) setPaymentMethods(await paymentRes.json());
-
-      } catch (err) {
-        console.error("Failed to fetch dropdowns", err);
-      }
-    };
-    fetchDropdowns();
-  }, []);
-
-  useEffect(() => {
-    const fetchDropdowns = async () => {
-      try {
-        const statusRes = await fetch("http://127.0.0.1:5000/api/orders/status?scope=ORDER_STATUS");
-        if (statusRes.ok) setOrderStatuses(await statusRes.json());
-
-        const paymentRes = await fetch("http://127.0.0.1:5000/api/orders/status?scope=PAYMENT_METHOD");
-        if (paymentRes.ok) setPaymentMethods(await paymentRes.json());
-
-        // ---> NEW: Fetch Inventory Items for the Dropdowns
         const invRes = await fetch("http://127.0.0.1:5000/api/inventory");
         if (invRes.ok) setInventoryItems(await invRes.json());
-
       } catch (err) {
         console.error("Failed to fetch dropdowns", err);
       }
@@ -169,42 +145,13 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   }, []);
 
   /* ===================== HANDLERS ===================== */
-  
-  // FIX: Reset page here instead of using useEffect
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
     setCurrentPage(1); 
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleItemChange = (index: number, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [name]: value };
-    setFormData(prev => ({ ...prev, items: newItems }));
-  };
-
-  const addItem = () => {
-    setFormData(prev => ({
-      ...prev,
-      items: [...prev.items, { item: '', itemDescription: '', quantity: '', amount: '', orderStatus: '', paymentMethod: '' }]
-    }));
-  };
-
-  const removeItem = (index: number) => {
-    if (formData.items.length > 1) {
-      const newItems = formData.items.filter((_, i) => i !== index);
-      setFormData(prev => ({ ...prev, items: newItems }));
-    }
-  };
-
   const handleSave = async (newOrderData: any) => {
     try {
-      // 1. Send the newly created order data to Python
       const response = await fetch(`http://127.0.0.1:5000/api/orders/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +159,6 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
       });
 
       if (response.ok) {
-        // 2. Re-fetch instantly to update table visually
         const listRes = await fetch('http://127.0.0.1:5000/api/orders/list');
         const data: Order[] = await listRes.json();
         const mappedOrders = data.map(order => {
@@ -224,20 +170,26 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
         });
         setOrders(mappedOrders);
         
-        // 3. Close the modal
+        const total = newOrderData.items?.reduce((sum: number, itm: any) => sum + Number(itm.amount || 0), 0) || 0;
+        const now = new Date();
+        const dateTimeStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        setSubmittedData({
+          customer: newOrderData.name || newOrderData.customer || '', 
+          total: total,
+          method: newOrderData.paymentMethod || (newOrderData.items && newOrderData.items[0]?.paymentMethod) || 'Cash',
+          dateTime: dateTimeStr
+        });
+        /* --- FIX END --- */
+
+        setToastTitle("Order Submitted!");
+        setToastMessage("Your new order has been successfully added.");
+        setIsError(false);
+        setShowToast(true);
         setShowModal(false);
-      } else {
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await response.json();
-          alert(`Failed to save: ${errorData.error}`);
-        } else {
-          alert("Server error. Check your Python terminal!");
-        }
       }
     } catch (err) {
       console.error("Error adding order:", err);
-      alert("Network Error: Is Flask running?");
     }
   };
 
@@ -245,7 +197,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
     setSelectedOrderForEdit({
       id: order.id,
       name: order.customer,
-      contact: order.contact || '', // <--- FIXED mapping
+      contact: order.contact || '',
       address: order.address, 
       status: order.status,
       paymentMethod: order.paymentMethod,
@@ -256,40 +208,50 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   };
   
   const handleUpdateSave = async (updatedOrder: any) => {
+    const hasChanged = 
+      updatedOrder.name !== selectedOrderForEdit.name ||
+      updatedOrder.address !== selectedOrderForEdit.address ||
+      updatedOrder.status !== selectedOrderForEdit.status ||
+      updatedOrder.paymentMethod !== selectedOrderForEdit.paymentMethod ||
+      JSON.stringify(updatedOrder.items) !== JSON.stringify(selectedOrderForEdit.items);
+
+    if (!hasChanged) {
+      setToastTitle("Oops!");
+      setToastMessage("No changes were detected to save.");
+      setIsError(true);
+      setSubmittedData(null);
+      setShowToast(true);
+      return;
+    }
+
     try {
-      // 1. Send the edited data to Python
       const response = await fetch(`http://127.0.0.1:5000/api/orders/update/${updatedOrder.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedOrder),
       });
 
       if (response.ok) {
-        // 2. If successful, instantly re-fetch the table list so the screen updates!
-        fetch('http://127.0.0.1:5000/api/orders/list')
-          .then(res => res.json())
-          .then((data: Order[]) => {
-            const mappedOrders = data.map(order => {
-              const items = order.items?.map(item => ({
-                ...item,
-                item_status: (item.item_status || ITEM_STATUS_MAP[item.item_status_id] || 'NOT_AVAILABLE').toUpperCase()
-              }));
-              return { ...order, items };
-            });
-            setOrders(mappedOrders);
-          });
+        fetch('http://127.0.0.1:5000/api/orders/list').then(res => res.json()).then(data => {
+            const mapped = data.map((order: any) => ({
+                ...order,
+                items: order.items?.map((item: any) => ({
+                    ...item,
+                    item_status: (item.item_status || ITEM_STATUS_MAP[item.item_status_id] || 'NOT_AVAILABLE').toUpperCase()
+                }))
+            }));
+            setOrders(mapped);
+        });
           
-        // 3. Close the modal
+        setToastTitle("Updated!");
+        setToastMessage("The order record has been updated.");
+        setIsError(false);
+        setSubmittedData(null);
+        setShowToast(true);
         setShowEditModal(false);
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to save: ${errorData.error}`);
       }
     } catch (err) {
-      console.error("Error updating order:", err);
-      alert("Something went wrong while saving.");
+      console.error(err);
     }
   };
 
@@ -345,13 +307,11 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
 
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE) || 1;
   const paginated = sorted.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
-
   const changePage = (page: number) => { if (page >= 1 && page <= totalPages) setCurrentPage(page); };
 
   const getStatusStyle = (status: string | undefined) => {
     const baseClass = s.statusBadge;
     if (!status || status.trim() === '' || status.toLowerCase() === 'select') return baseClass;
-
     switch (status.toUpperCase()) {
       case 'PREPARING': return `${baseClass} ${s.pillBlue}`;
       case 'TO SHIP': return `${baseClass} ${s.pillYellow}`;
@@ -373,6 +333,34 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
+
+      {showToast && (
+        <div className={s.toastOverlay}>
+          <div className={s.alertBox}>
+            <div className={`${s.alertHeader} ${isError ? s.alertHeaderError : ''}`}>
+               <div className={`${s.checkCircle} ${isError ? s.checkCircleError : ''}`}>
+                {isError ? '!' : '✓'}
+              </div>
+            </div>
+            <div className={s.alertBody}>
+              <h2 className={s.alertTitle}>{toastTitle}</h2>
+              <p className={s.alertMessage}>{toastMessage}</p>
+
+              {!isError && submittedData && (
+                <div className={s.alertDataTable}>
+                  <div className={s.alertDataRow}><span>Customer:</span><strong>{submittedData.customer}</strong></div>
+                  <div className={s.alertDataRow}><span>Total Amount:</span><strong>₱{submittedData.total.toLocaleString()}</strong></div>
+                  <div className={s.alertDataRow}><span>Payment Method:</span><strong>{submittedData.method}</strong></div>
+                  <div className={s.alertDataRow}><span>Date & Time:</span><strong>{submittedData.dateTime}</strong></div>
+                </div>
+              )}
+
+              <button className={`${s.okButton} ${isError ? s.okButtonError : ''}`} onClick={() => setShowToast(false)}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className={s.mainContent}>
         <div className={s.topGrid}>
           <section className={s.statCard}>
@@ -410,7 +398,6 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
           <table className={s.table}>
             <thead>
               <tr>
-                {/* ID: Center */}
                 <th onClick={() => handleSort('id')} className={s.sortableHeader} style={{ textAlign: 'center' }}>
                   <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
                     <span>ID</span>
@@ -420,8 +407,6 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                     </div>
                   </div>
                 </th>
-
-                {/* CUSTOMER: Left */}
                 <th onClick={() => handleSort('customer')} className={s.sortableHeader} style={{ textAlign: 'left', paddingLeft: '1rem' }}>
                   <div className={s.sortHeaderInner} style={{ justifyContent: 'flex-start' }}>
                     <span>CUSTOMER</span>
@@ -431,22 +416,12 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                     </div>
                   </div>
                 </th>
-
-                {/* ADDRESS: Left (Matches data) */}
-                <th className={s.headerText} style={{ textAlign: 'left' }}>ADDRESS</th>
-
-                {/* QTY: Center */}
-                <th className={s.headerText} style={{ textAlign: 'center' }}>QTY</th>
-
-                {/* TOTAL: Right (Standard for currency) */}
-                <th className={s.headerText} style={{ textAlign: 'right' }}>TOTAL</th>
-
-                {/* PAYMENT: Center */}
-                <th className={s.headerText} style={{ textAlign: 'center' }}>PAYMENT</th>
-
-                {/* DATE: Center */}
+                <th style={{ textAlign: 'left' }}>ADDRESS</th>
+                <th style={{ textAlign: 'center' }}>QTY</th>
+                <th style={{ textAlign: 'right' }}>TOTAL</th>
+                <th style={{ textAlign: 'center' }}>PAYMENT</th>
                 <th onClick={() => handleSort('date')} className={s.sortableHeader} style={{ textAlign: 'center' }}>
-                   <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
+                    <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
                     <span>DATE</span>
                     <div className={s.sortIconsStack}>
                        <LuChevronUp className={sortConfig.key === 'date' && sortConfig.direction === 'asc' ? s.activeSort : ''} />
@@ -454,8 +429,6 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                     </div>
                   </div>
                 </th>
-
-                {/* STATUS: Center */}
                 <th onClick={() => handleSort('status')} className={s.sortableHeader} style={{ textAlign: 'center' }}>
                   <div className={s.sortHeaderInner} style={{ justifyContent: 'center' }}>
                     <span>STATUS</span>
@@ -465,50 +438,22 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                     </div>
                   </div>
                 </th>
-
                 <th className={`${s.actionHeader} text-center`}>ACTION</th>
               </tr>
             </thead>
-
             <tbody>
               {paginated.map((o, i) => (
                 <tr key={o.id} className={i % 2 ? s.altRow : ''}>
-                  
-                  {/* ID */}
                   <td style={{ textAlign: 'center' }}>{o.id}</td>
-
-                  {/* Customer */}
                   <td style={{ textAlign: 'left', paddingLeft: '1rem' }}>
                     <div className="font-bold">{o.customer}</div>
                   </td>
-
-                  {/* Address */}
-                  <td style={{ 
-                    textAlign: 'left', 
-                    maxWidth: '200px', 
-                    whiteSpace: 'nowrap', 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis' 
-                  }}>
-                    {o.address}
-                  </td>
-
-                  {/* Qty */}
+                  <td style={{ textAlign: 'left', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.address}</td>
                   <td style={{ textAlign: 'center' }}>{o.totalQty}</td>
-
-                  {/* Total */}
                   <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₱{o.totalAmount?.toLocaleString()}</td>
-
-                  {/* Payment */}
                   <td style={{ textAlign: 'center' }}>{o.paymentMethod}</td>
-
-                  {/* Date */}
                   <td style={{ textAlign: 'center' }}>{o.date}</td>
-
-                  {/* Status */}
                   <td style={{ textAlign: 'center' }}><span className={getStatusStyle(o.status)}>{o.status}</span></td>
-
-                  {/* Action */}
                   <td className={`${s.actionCell} text-center`}>
                     <LuEllipsisVertical
                       className={s.moreIcon}
@@ -543,15 +488,13 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
         </div>
       </div>
 
-      {/* ================= MODALS ================= */}
-      
       <AddOrderModal 
         isOpen={showAddModal} 
         onClose={() => setShowModal(false)} 
         onSave={handleSave}
         statuses={orderStatuses} 
         paymentMethods={paymentMethods} 
-        inventoryItems={inventoryItems} /* <--- ADD THIS LINE */
+        inventoryItems={inventoryItems}
       />
 
       <OrderEditModal 
