@@ -72,6 +72,7 @@ def sales_transactions():
     conn = get_connection()
     cur = conn.cursor()
 
+    # THE FIX: Removed the fake boolean column. We just read your static_status table!
     query = """
         SELECT
             st.sales_id,
@@ -98,6 +99,10 @@ def sales_transactions():
 
     transactions = []
     for r in rows:
+        status_code = r[6]
+        # SMART LOGIC: If the database says INACTIVE, tell React it is archived!
+        is_arch = (status_code == "INACTIVE") 
+        
         transactions.append({
             "no": r[0],
             "name": r[1] or "Unknown",
@@ -105,7 +110,54 @@ def sales_transactions():
             "date": r[3].strftime("%m/%d/%y") if r[3] else None,
             "qty": int(r[4] or 0),
             "amount": float(r[5] or 0),
-            "status": r[6] or "PENDING"
+            "status": status_code,
+            "is_archived": is_arch 
         })
 
     return jsonify(transactions)
+
+
+# ===================== TOGGLE ARCHIVE =====================
+# THE FIX: Changed <int:sales_id> to <string:sales_id>
+@sales_bp.route("/archive/<string:sales_id>", methods=["PUT", "OPTIONS"])
+def toggle_archive(sales_id):
+    if request.method == "OPTIONS":
+        return jsonify({"message": "CORS OK"}), 200
+
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        # 1. Find out the current status of the transaction
+        cur.execute("""
+            SELECT ss.status_code 
+            FROM sales_transaction st
+            JOIN static_status ss ON st.sales_status_id = ss.status_id
+            WHERE st.sales_id = %s
+        """, (sales_id,))
+        current_status = cur.fetchone()[0]
+        
+        # 2. Toggle the logic dynamically using your exact static_status architecture
+        if current_status == 'INACTIVE':
+            # It's currently archived. Restore it by finding the ID for 'PENDING'
+            cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'SALES_STATUS' AND status_code = 'PENDING'")
+            new_status_id = cur.fetchone()[0]
+            is_archived = False
+        else:
+            # It's active. Archive it by finding the ID for 'INACTIVE'
+            cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'SALES_STATUS' AND status_code = 'INACTIVE'")
+            new_status_id = cur.fetchone()[0]
+            is_archived = True
+
+        # 3. Update the database's actual status column!
+        cur.execute("UPDATE sales_transaction SET sales_status_id = %s WHERE sales_id = %s", (new_status_id, sales_id))
+        conn.commit()
+        
+        return jsonify({"message": "Archive status updated", "is_archived": is_archived}), 200
+    except Exception as e:
+        conn.rollback()
+        print("Error archiving:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()

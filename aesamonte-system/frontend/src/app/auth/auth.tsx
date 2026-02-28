@@ -195,6 +195,7 @@ export default function Login({ onLogin }: LoginProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   className={styles.loginInput}
                   required
+                  suppressHydrationWarning={true}
                 />
                 <span className={styles.eyeIcon} onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <AiFillEyeInvisible /> : <AiFillEye />}

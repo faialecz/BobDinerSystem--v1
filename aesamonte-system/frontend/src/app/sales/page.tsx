@@ -5,6 +5,7 @@ import styles from '@/css/sales.module.css'
 import TopHeader from '@/components/layout/TopHeader'
 import ExportButton from '@/components/features/ExportButton'
 import ExportModal from './exportModal' 
+import ArchiveTable from './archiveModal'
 import {
   LuSearch,
   LuChevronUp,
@@ -71,18 +72,41 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
     setShowToast(true)
   }
 
-  const handleToggleArchive = (txNo: number) => {
-  setTransactions(prev => 
-    prev.map(tx => 
-      tx.no === txNo ? { ...tx, is_archived: !tx.is_archived } : tx
-    )
-  );
+  const handleToggleArchive = async (txNo: number) => {
+    try {
+      // 1. Send the command to the Python Database
+      const response = await fetch(`http://127.0.0.1:5000/api/sales/archive/${txNo}`, {
+        method: 'PUT',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // 2. Update the React state with the TRUE database status
+        setTransactions(prev => 
+          prev.map(tx => 
+            tx.no === txNo ? { ...tx, is_archived: data.is_archived } : tx
+          )
+        );
+
+        // 3. Show Success Message
+        const actionMsg = data.is_archived ? "Moved to Archive" : "Restored from Archive";
+        handleExportSuccess(actionMsg, 'success');
+      } else {
+        handleExportSuccess("Failed to update archive status in database.", "error");
+      }
+    } catch (error) {
+      console.error(error);
+      handleExportSuccess("Network error. Is Flask running?", "error");
+    }
 
   const targetTx = transactions.find(t => t.no === txNo);
   
   const actionMsg = targetTx?.is_archived ? "Restored from Archive" : "Moved to Archive";
   handleExportSuccess(actionMsg);
 };
+
+
 
   /* ================= FETCH ================= */
 
@@ -242,103 +266,117 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
         </div>
 
         {/* ================= TABLE ================= */}
-        <div className={s.tableContainer}>
-          <div className={s.header}>
-            <h1 className={s.title}>Transactions</h1>
+        {/* ================= CONDITIONAL TABLE RENDERING ================= */}
+        
+        {isArchiveView ? (
+          
+          <ArchiveTable 
+            transactions={transactions} 
+            onRestore={handleToggleArchive} 
+            onBack={() => setIsArchiveView(false)} 
+          />
 
-            <div className={s.controls}>
-              <button className={s.archiveIconBtn}>
-                <LuArchive size={20} />
-              </button>
+        ) : (
+          
+          <div className={s.tableContainer}>
+            <div className={s.header}>
+              <h1 className={s.title}>Transactions</h1>
 
-              <div className={s.searchWrapper}>
-                <input
-                  className={s.searchInput}
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-                <LuSearch size={18} />
+              <div className={s.controls}>
+                {/* YOUR SPECIFIC BUTTON TRIGGERS THE COMPONENT */}
+                <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives">
+                  <LuArchive size={20} />
+                </button>
+
+                <div className={s.searchWrapper}>
+                  <input
+                    className={s.searchInput}
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                  />
+                  <LuSearch size={18} />
+                </div>
               </div>
             </div>
-          </div>
 
-          <table className={s.table}>
-            <thead>
-              <tr>
-                {[
-                  { label: 'No.', key: 'no' },
-                  { label: 'NAME', key: 'name' },
-                  { label: 'ADDRESS', key: 'address' },
-                  { label: 'DATE', key: 'date' },
-                  { label: 'QTY', key: 'qty' },
-                  { label: 'AMOUNT', key: 'amount' },
-                  { label: 'STATUS', key: 'status' }
-                ].map(col => (
-                  <th key={col.key}>
-                    <div className={s.sortableHeader}>
-                      <span>{col.label}</span>
-                      <div className={s.sortIconsStack}>
-                        <span 
-                          className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
-                          onClick={() => requestSort(col.key as keyof Transaction, 'asc')}
-                        >
-                          <LuChevronUp size={12} />
-                        </span>
-                        <span 
-                          className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
-                          onClick={() => requestSort(col.key as keyof Transaction, 'desc')}
-                        >
-                          <LuChevronDown size={12} />
-                        </span>
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  {[
+                    { label: 'No.', key: 'no' },
+                    { label: 'NAME', key: 'name' },
+                    { label: 'ADDRESS', key: 'address' },
+                    { label: 'DATE', key: 'date' },
+                    { label: 'QTY', key: 'qty' },
+                    { label: 'AMOUNT', key: 'amount' },
+                    { label: 'STATUS', key: 'status' }
+                  ].map(col => (
+                    <th key={col.key}>
+                      <div className={s.sortableHeader}>
+                        <span>{col.label}</span>
+                        <div className={s.sortIconsStack}>
+                          <span 
+                            className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
+                            onClick={() => requestSort(col.key as keyof Transaction, 'asc')}
+                          >
+                            <LuChevronUp size={12} />
+                          </span>
+                          <span 
+                            className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
+                            onClick={() => requestSort(col.key as keyof Transaction, 'desc')}
+                          >
+                            <LuChevronDown size={12} />
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </th>
-                ))}
-                <th className={s.actionHeader}>Action</th>
-              </tr>
-            </thead>
+                    </th>
+                  ))}
+                  <th className={s.actionHeader}>Action</th>
+                </tr>
+              </thead>
 
-            <tbody>
-              {sortedTx.length ? (
-                sortedTx.map((tx, i) => (
-                  <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''}>
-                    <td>{tx.no}</td>
-                    <td style={{ fontWeight: 600 }}>{tx.name}</td>
-                    <td>{tx.address}</td>
-                    <td>{tx.date}</td>
-                    <td>{tx.qty}</td>
-                    <td>₱ {tx.amount.toLocaleString()}</td>
-                    <td className={tx.status === 'PAID' ? s.statusPaid : s.statusPending}>
-                      {tx.status}
-                    </td>
-                    <td className={s.actionCell}>
-                      <div className={s.actionWrapper}>
-                        <button 
-                          className={s.archiveBtn}
-                          onClick={() => handleToggleArchive(tx.no)}
-                        >
-                          <LuArchive size={16} />
-                          <span>{isArchiveView ? 'Restore' : 'Archive'}</span>
-                        </button>
-                      </div>
+              <tbody>
+                {sortedTx.length ? (
+                  sortedTx.map((tx, i) => (
+                    <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''}>
+                      <td>{tx.no}</td>
+                      <td style={{ fontWeight: 600 }}>{tx.name}</td>
+                      <td>{tx.address}</td>
+                      <td>{tx.date}</td>
+                      <td>{tx.qty}</td>
+                      <td>₱ {tx.amount.toLocaleString()}</td>
+                      <td className={tx.status === 'PAID' ? s.statusPaid : s.statusPending}>
+                        {tx.status}
+                      </td>
+                      <td className={s.actionCell}>
+                        <div className={s.actionWrapper}>
+                          <button 
+                            className={s.archiveBtn}
+                            onClick={() => handleToggleArchive(tx.no)}
+                          >
+                            <LuArchive size={16} />
+                            <span>Archive</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
+                      No active transactions found.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
-                    No transactions available.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
 
-          <div className={s.footer}>
-            Showing {sortedTx.length} of {transactions.length}
+            <div className={s.footer}>
+              Showing {sortedTx.length} active transactions
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       <ExportModal 

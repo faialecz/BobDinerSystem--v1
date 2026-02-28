@@ -10,6 +10,7 @@ def get_inventory():
     conn = get_connection()
     cur = conn.cursor()
 
+    # THE FIX: Added s.status_code to the SELECT statement
     cur.execute("""
         SELECT 
             i.inventory_id,
@@ -21,7 +22,8 @@ def get_inventory():
             u.uom_code AS uom,  -- Fetching uom_code (e.g., 'PCS') to match frontend
             s.status_name AS item_status,
             i.item_unit_price,
-            i.item_selling_price
+            i.item_selling_price,
+            s.status_code
         FROM inventory i
         LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
         LEFT JOIN static_status s ON i.item_status_id = s.status_id AND s.status_scope='INVENTORY_STATUS'
@@ -34,6 +36,10 @@ def get_inventory():
 
     result = []
     for r in rows:
+        status_code = r[10]
+        # SMART LOGIC: If the database says INACTIVE, tell React it is archived!
+        is_arch = (status_code == 'INACTIVE')
+        
         result.append({
             "id": str(r[0]),
             "item_name": r[1],
@@ -42,12 +48,67 @@ def get_inventory():
             "brand": r[4],
             "qty": r[5],
             "uom": r[6] or '—',
-            "status": "Out of Stock" if r[5] <= 0 else f"Low Stock ({r[5]})" if r[5] <= 5 else "Available",
+            "status": r[7] or 'Unknown',
             "unitPrice": float(r[8]),
-            "price": float(r[9])
+            "price": float(r[9]),
+            "is_archived": is_arch
         })
 
     return jsonify(result)
+
+# ================= TOGGLE ARCHIVE =================
+@inventory_bp.route("/api/inventory/archive/<string:inventory_id>", methods=["PUT", "OPTIONS"])
+def toggle_inventory_archive(inventory_id):
+    if request.method == "OPTIONS":
+        return jsonify({"message": "CORS OK"}), 200
+
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        # 1. Get current status and quantity
+        cur.execute("""
+            SELECT ss.status_code, i.item_quantity
+            FROM inventory i
+            LEFT JOIN static_status ss ON i.item_status_id = ss.status_id
+            WHERE i.inventory_id = %s
+        """, (inventory_id,))
+        row = cur.fetchone()
+        
+        if not row:
+            return jsonify({"error": "Item not found"}), 404
+            
+        current_status = row[0]
+        qty = row[1]
+        
+        # 2. Toggle dynamically using your exact static_status architecture
+        if current_status == 'INACTIVE':
+            # Restore logic: If qty > 0 it's AVAILABLE, else OUT_OF_STOCK
+            if qty > 0:
+                cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'AVAILABLE'")
+            else:
+                cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK'")
+            new_status_id = cur.fetchone()[0]
+            is_archived = False
+        else:
+            # Archive logic: Find the ID for INACTIVE
+            cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'INACTIVE'")
+            new_status_id = cur.fetchone()[0]
+            is_archived = True
+
+        # 3. Update the database's actual status column!
+        cur.execute("UPDATE inventory SET item_status_id = %s WHERE inventory_id = %s", (new_status_id, inventory_id))
+        conn.commit()
+        
+        return jsonify({"message": "Archive status updated", "is_archived": is_archived}), 200
+    except Exception as e:
+        conn.rollback()
+        print("Error archiving inventory:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
 
 # ================= ADD BATCH INVENTORY =================
 @inventory_bp.route("/api/inventory/add", methods=["POST"])
@@ -62,7 +123,7 @@ def add_inventory_batch():
 
         for item in items:
             # --- 1. Validation & Lookups ---
-            supplier_name = item.get('detailSupplierName') # Fixed key
+            supplier_name = item.get('detailSupplierName') 
             uom_code = item.get('uom')
             
             if not supplier_name or supplier_name == 'Select':
@@ -113,8 +174,8 @@ def add_inventory_batch():
                 ) VALUES (%s, %s, %s, %s, %s, %s)
             """, (
                 new_inventory_id,
-                datetime.now(), # suggestion_date (Required by your schema)
-                False,          # stockout_predict (Required by your schema)
+                datetime.now(), # suggestion_date 
+                False,          # stockout_predict 
                 int(item.get('detailLeadTime') or 0),
                 int(item.get('detailMinOrder') or 0),
                 int(item.get('reorderPoint') or 0)
@@ -256,9 +317,9 @@ def update_inventory_item(id):
             data.get('itemDescription'),
             data.get('brand'),
             uom_id,
-            int(data.get('qty') or 0),           # <--- Prevents crash on empty string
-            float(data.get('unitPrice') or 0),   # <--- Prevents crash
-            float(data.get('sellingPrice') or 0),# <--- Prevents crash
+            int(data.get('qty') or 0),           
+            float(data.get('unitPrice') or 0),   
+            float(data.get('sellingPrice') or 0),
             id
         ))
 
@@ -298,7 +359,7 @@ def update_inventory_item(id):
 
     except Exception as e:
         conn.rollback()
-        print("Update Error:", str(e)) # <--- Check your Python terminal for this!
+        print("Update Error:", str(e)) 
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()

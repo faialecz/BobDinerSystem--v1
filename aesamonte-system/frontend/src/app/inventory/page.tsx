@@ -8,6 +8,7 @@ import ExportButton from '@/components/features/ExportButton';
 import AddInventoryModal from './addInventoryModal';
 import EditInventoryModal from './editInventoryModal'; 
 import ExportModal from './exportModal'; 
+import ArchiveTable from './archiveModal'; // <--- IMPORTED ARCHIVE TABLE
 import {
   LuSearch, 
   LuEllipsisVertical, 
@@ -38,7 +39,7 @@ interface UOM {
   name: string;
 }
 
-interface Product {
+export interface Product {
   id: string;
   item_name: string;
   item_description: string;
@@ -49,6 +50,7 @@ interface Product {
   unitPrice: number;
   price: number;
   status: string;
+  is_archived?: boolean; // <--- ADDED FLAG
 }
 
 interface InventorySummary {
@@ -84,6 +86,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isArchiveView, setIsArchiveView] = useState(false); // <--- ADDED STATE
 
   // Supplier States
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -98,7 +101,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null); 
   const [showExportModal, setShowExportModal] = useState(false);
 
-  // States for Alert Modal (Consolidated)
+  // States for Alert Modal
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isError, setIsError] = useState(false); 
@@ -150,11 +153,13 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
       const productData: Product[] = await res.json();
       setProducts(productData);
 
-      const visible = productData.filter(p => p.qty > 0);
-      const outOfStock = productData.filter(p => p.qty === 0);
+      // ONLY count active items!
+      const activeProducts = productData.filter(p => !p.is_archived);
+      const visible = activeProducts.filter(p => p.qty > 0);
+      const outOfStock = activeProducts.filter(p => p.qty === 0);
 
       setData({
-        totalProducts: productData.length,
+        totalProducts: activeProducts.length,
         totalProductsChange: 2.8,
         weeklyInventory: visible.length,
         monthlyInventory: visible.length * 10,
@@ -212,6 +217,33 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  /* ================= TOGGLE ARCHIVE ================= */
+  const handleToggleArchive = async (id: string) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/inventory/archive/${id}`, {
+        method: 'PUT',
+      });
+
+      if (response.ok) {
+        const apiData = await response.json();
+        
+        setProducts(prev => 
+          prev.map(p => 
+            p.id === id ? { ...p, is_archived: apiData.is_archived } : p
+          )
+        );
+
+        const actionMsg = apiData.is_archived ? "Moved to Archive" : "Restored from Archive";
+        handleExportSuccess(actionMsg, 'success');
+        setActiveMenuId(null);
+      } else {
+        handleExportSuccess("Failed to update archive status.", "error");
+      }
+    } catch (error) {
+      handleExportSuccess("Network error. Is Flask running?", "error");
+    }
+  };
+
   /* ================= HANDLERS CONTINUED ================= */
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -236,41 +268,41 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   };
 
   const handleEditClick = async (product: Product) => {
-  try {
-    const res = await fetch(`http://127.0.0.1:5000/api/inventory/${product.id}`);
-    if (res.ok) {
-      const fullData = await res.json();
-      setSelectedProduct(fullData); 
-      setShowEditModal(true);
-      setActiveMenuId(null);
-    } else {
-      alert("Failed to load item details.");
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/api/inventory/${product.id}`);
+      if (res.ok) {
+        const fullData = await res.json();
+        setSelectedProduct(fullData); 
+        setShowEditModal(true);
+        setActiveMenuId(null);
+      } else {
+        alert("Failed to load item details.");
+      }
+    } catch (err) {
+      console.error("Error fetching item details:", err);
     }
-  } catch (err) {
-    console.error("Error fetching item details:", err);
-  }
-};
+  };
 
   const handleUpdate = async (updatedItem: any) => {
-  try {
-    const res = await fetch(`http://127.0.0.1:5000/api/inventory/update/${updatedItem.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedItem),
-    });
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/api/inventory/update/${updatedItem.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedItem),
+      });
 
-    if (res.ok) {
-      setShowEditModal(false);
-      handleExportSuccess("Item updated successfully!");
-      fetchInventory(); 
-    } else {
-      const err = await res.json();
-      handleExportSuccess(`Error updating: ${err.error}`, 'error');
+      if (res.ok) {
+        setShowEditModal(false);
+        handleExportSuccess("Item updated successfully!");
+        fetchInventory(); 
+      } else {
+        const err = await res.json();
+        handleExportSuccess(`Error updating: ${err.error}`, 'error');
+      }
+    } catch (err) {
+      console.error("Update error:", err);
     }
-  } catch (err) {
-    console.error("Update error:", err);
-  }
-};
+  };
 
   const handleSave = async (items: any[]) => {
     try {
@@ -311,11 +343,12 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
 
   /* ================= DATA PROCESSING ================= */
 
-  const filteredProducts = products.filter(p =>
-    p.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.id.toString().includes(searchTerm)
-  );
+  const filteredProducts = products.filter(p => {
+    if (p.is_archived) return false; // Filter out archived items
+    return p.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           p.id.toString().includes(searchTerm);
+  });
 
   const sortedProducts = useMemo(() => {
     const arr = [...filteredProducts];
@@ -397,7 +430,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
 
         <div className={s.topGrid}>
           <section className={s.statCard}>
-            <p className={s.cardTitle}>Total Products</p>
+            <p className={s.cardTitle}>Total Active Products</p>
             <h2 className={s.bigNumber}>{data.totalProducts}</h2>
           </section>
 
@@ -413,122 +446,138 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
           <section className={s.statCard}>
             <p className={s.cardTitle}>Out of Stock</p>
             <div className={s.outOfStockList}>
-              {products.filter(p => p.qty === 0).length > 0 ? (
-                products.filter(p => p.qty === 0).map(p => <div key={p.id} 
+              {products.filter(p => !p.is_archived && p.qty === 0).length > 0 ? (
+                products.filter(p => !p.is_archived && p.qty === 0).map(p => <div key={p.id} 
                   className={s.outOfStockBadge}>{p.item_name}</div>)
-              ) : ( <p className={s.subText}>All items in stock</p> )}
+              ) : ( <p className={s.subText}>All active items in stock</p> )}
             </div>
           </section>
         </div>
 
-        <div className={s.tableContainer}>
-          <div className={s.header}>
-            <h1 className={s.title}>Product List</h1>
-            <div className={s.controls}>
-              <LuArchive size={20} />
-              <div className={s.searchWrapper}>
-                <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                <LuSearch size={18} />
-              </div>
-              <button className={s.addButton} onClick={() => setShowModal(true)}>ADD</button>
-            </div>
-          </div>
-
-          <table className={s.table}>
-            <thead>
-              <tr>
-                {[
-                  { label: 'ID', key: 'id' },
-                  { label: 'ITEM', key: 'item_name' },
-                  { label: 'DESCRIPTION', key: 'item_description' },
-                  { label: 'SKU', key: 'sku' },
-                  { label: 'BRAND', key: 'brand' },
-                  { label: 'QTY', key: 'qty' },
-                  { label: 'UOM', key: 'uom' },
-                  { label: 'UNIT PRICE', key: 'unitPrice' },
-                  { label: 'PRICE', key: 'price' },
-                  { label: 'STATUS', key: 'status' },
-                ].map(col => (
-                  <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
-                    <div className={s.sortableHeader}>
-                      <span>{col.label}</span>
-                      <div className={s.sortIconsStack}>
-                        <LuChevronUp
-                          className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
-                        />
-                        <LuChevronDown
-                          className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
-                        />
-                      </div>
-                    </div>
-                  </th>
-                ))}
-                <th className={s.actionHeader}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedProducts.map(p => (
-                <tr key={p.id}>
-                  <td>{p.id}</td>
-                  <td>{p.item_name}</td>
-                  <td>{p.item_description}</td>
-                  <td>{p.sku}</td>
-                  <td>{p.brand}</td>
-                  <td>{p.qty}</td>
-                  <td>{p.uom || '—'}</td>
-                  <td>₱ {p.unitPrice?.toLocaleString()}</td>
-                  <td>₱ {p.price?.toLocaleString()}</td>
-                  <td>
-                    <span
-                      className={
-                        p.status.includes("Available")
-                          ? s.pillGreen
-                          : p.status.includes("Low Stock")
-                          ? s.pillYellow
-                          : p.status.includes("Out of Stock")
-                          ? s.pillRed
-                          : ""
-                      }
-                    >
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className={s.actionCell}>
-                    <LuEllipsisVertical
-                      className={s.moreIcon}
-                      onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
-                    />
-
-                    {activeMenuId === p.id && (
-                      <div className={s.popoverMenu} ref={menuRef}>
-                        <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
-                        <button className={s.popEditBtn} onClick={() => handleEditClick(p)}><LuPencil size={12}/> Edit</button>
-                        <button className={s.popArchiveBtn}><LuArchive size={12}/> Archive</button>
-                        </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className={s.footer}>
-            <div className={s.footerLeft}>
-              Showing <span className={s.countBadge}>{paginatedProducts.length}</span> of {sortedProducts.length}
-            </div>
-            {totalPages > 1 && (
-              <div className={s.footerRight}>
-                <div className={s.pagination}>
-                  <button className={s.nextBtn} onClick={() => changePage(currentPage - 1)} disabled={currentPage === 1}><LuChevronLeft /></button>
-                  {renderPageNumbers()}
-                  <button className={s.nextBtn} onClick={() => changePage(currentPage + 1)} disabled={currentPage === totalPages}><LuChevronRight /></button>
+        {/* ================= CONDITIONAL RENDERING ================= */}
+        {isArchiveView ? (
+           <ArchiveTable 
+             products={products} 
+             onRestore={handleToggleArchive} 
+             onBack={() => setIsArchiveView(false)} 
+           />
+        ) : (
+          <div className={s.tableContainer}>
+            <div className={s.header}>
+              <h1 className={s.title}>Product List</h1>
+              <div className={s.controls}>
+                {/* ARCHIVE BUTTON */}
+                <button 
+                  className={s.archiveIconBtn} 
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }} 
+                  onClick={() => setIsArchiveView(true)} 
+                  title="View Archives"
+                >
+                  <LuArchive size={20} />
+                </button>
+                <div className={s.searchWrapper}>
+                  <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                  <LuSearch size={18} />
                 </div>
+                <button className={s.addButton} onClick={() => setShowModal(true)}>ADD</button>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>
 
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  {[
+                    { label: 'ID', key: 'id' },
+                    { label: 'ITEM', key: 'item_name' },
+                    { label: 'DESCRIPTION', key: 'item_description' },
+                    { label: 'SKU', key: 'sku' },
+                    { label: 'BRAND', key: 'brand' },
+                    { label: 'QTY', key: 'qty' },
+                    { label: 'UOM', key: 'uom' },
+                    { label: 'UNIT PRICE', key: 'unitPrice' },
+                    { label: 'PRICE', key: 'price' },
+                    { label: 'STATUS', key: 'status' },
+                  ].map(col => (
+                    <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
+                      <div className={s.sortableHeader}>
+                        <span>{col.label}</span>
+                        <div className={s.sortIconsStack}>
+                          <LuChevronUp
+                            className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
+                          />
+                          <LuChevronDown
+                            className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
+                          />
+                        </div>
+                      </div>
+                    </th>
+                  ))}
+                  <th className={s.actionHeader}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedProducts.map(p => (
+                  <tr key={p.id}>
+                    <td>{p.id}</td>
+                    <td>{p.item_name}</td>
+                    <td>{p.item_description}</td>
+                    <td>{p.sku}</td>
+                    <td>{p.brand}</td>
+                    <td>{p.qty}</td>
+                    <td>{p.uom || '—'}</td>
+                    <td>₱ {p.unitPrice?.toLocaleString()}</td>
+                    <td>₱ {p.price?.toLocaleString()}</td>
+                    <td>
+                      <span
+                        className={
+                          p.status.includes("Available")
+                            ? s.pillGreen
+                            : p.status.includes("Low Stock")
+                            ? s.pillYellow
+                            : p.status.includes("Out of Stock")
+                            ? s.pillRed
+                            : ""
+                        }
+                      >
+                        {p.status}
+                      </span>
+                    </td>
+                    <td className={s.actionCell}>
+                      <LuEllipsisVertical
+                        className={s.moreIcon}
+                        onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
+                      />
+
+                      {activeMenuId === p.id && (
+                        <div className={s.popoverMenu} ref={menuRef}>
+                          <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
+                          <button className={s.popEditBtn} onClick={() => handleEditClick(p)}><LuPencil size={12}/> Edit</button>
+                          <button className={s.popArchiveBtn} onClick={() => handleToggleArchive(p.id)}><LuArchive size={12}/> Archive</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className={s.footer}>
+              <div className={s.footerLeft}>
+                Showing <span className={s.countBadge}>{paginatedProducts.length}</span> of {sortedProducts.length}
+              </div>
+              {totalPages > 1 && (
+                <div className={s.footerRight}>
+                  <div className={s.pagination}>
+                    <button className={s.nextBtn} onClick={() => changePage(currentPage - 1)} disabled={currentPage === 1}><LuChevronLeft /></button>
+                    {renderPageNumbers()}
+                    <button className={s.nextBtn} onClick={() => changePage(currentPage + 1)} disabled={currentPage === totalPages}><LuChevronRight /></button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* --- Export Modal with onSuccess logic --- */}
       <ExportModal 
@@ -537,7 +586,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         onSuccess={handleExportSuccess}
       />
 
-      
       <AddInventoryModal 
         isOpen={showModal}
         onClose={() => setShowModal(false)}

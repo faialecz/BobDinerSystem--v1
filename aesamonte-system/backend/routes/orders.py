@@ -20,7 +20,7 @@ def orders_summary():
             FROM order_transaction ot
             JOIN static_status sl ON ot.order_status_id = sl.status_id
             WHERE sl.status_scope = 'ORDER_STATUS'
-              AND sl.status_code = %s
+              AND sl.status_code ILIKE %s
         """
         params = [status_code]
         if for_date:
@@ -64,6 +64,7 @@ def orders_list():
     cur = conn.cursor()
     
     try:
+        # THE FIX: Removed the hardcoded 'Cash' and joined the static_status table for Payment Methods
         cur.execute("""
             SELECT
                 ot.order_id,
@@ -72,7 +73,7 @@ def orders_list():
                 c.customer_contact, 
                 ot.order_date,
                 sl.status_code AS order_status,
-                'Cash' AS payment_method_name, 
+                COALESCE(pm.status_name, 'Cash') AS payment_method_name, 
                 COALESCE(SUM(od.order_quantity), 0) as total_qty,
                 COALESCE(SUM(od.order_total), 0) as total_amount,
                 COALESCE(json_agg(
@@ -88,6 +89,7 @@ def orders_list():
             FROM order_transaction ot
             JOIN customer c ON ot.customer_id = c.customer_id
             JOIN static_status sl ON ot.order_status_id = sl.status_id
+            LEFT JOIN static_status pm ON ot.payment_method_id = pm.status_id
             LEFT JOIN order_details od ON od.order_id = ot.order_id
             LEFT JOIN inventory i ON i.inventory_id = od.inventory_id
             WHERE sl.status_scope = 'ORDER_STATUS'
@@ -97,7 +99,8 @@ def orders_list():
                 c.customer_address, 
                 c.customer_contact, 
                 ot.order_date, 
-                sl.status_code
+                sl.status_code,
+                pm.status_name
             ORDER BY ot.order_id DESC
         """)
 
@@ -186,11 +189,17 @@ def update_order(order_id):
     cur = conn.cursor()
     
     try:
-        # 1. Find the new Status ID the user selected
+        # 1. Find the new Status & Payment IDs
         status_name = data.get('status', '').strip()
         cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'ORDER_STATUS' AND status_name ILIKE %s", (status_name,))
         status_row = cur.fetchone()
         new_status_id = status_row[0] if status_row else None
+
+        # THE FIX: Find the correct ID for the selected Payment Method
+        pm_name = data.get('paymentMethod', '').strip()
+        cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'PAYMENT_METHOD' AND status_name ILIKE %s", (pm_name,))
+        pm_row = cur.fetchone()
+        new_pm_id = pm_row[0] if pm_row else None
 
         # 2. Update Customer Details
         cur.execute("SELECT customer_id FROM order_transaction WHERE order_id = %s", (order_id,))
@@ -203,7 +212,7 @@ def update_order(order_id):
                 WHERE customer_id = %s
             """, (data.get('customerName'), data.get('contact'), data.get('address'), customer_id))
 
-        # 3. Check the CURRENT status of the order in the database BEFORE doing anything
+        # 3. Check the CURRENT status 
         cur.execute("""
             SELECT sl.status_name 
             FROM order_transaction ot
@@ -213,8 +222,7 @@ def update_order(order_id):
         current_status_row = cur.fetchone()
         current_status = current_status_row[0].upper() if current_status_row else 'PREPARING'
 
-        # 4. THE FIX: ONLY edit items if the order is still "Preparing"
-        # If it is already shipped, we completely skip this so the database trigger doesn't get mad!
+        # 4. ONLY edit items if the order is still "Preparing"
         if current_status == 'PREPARING':
             cur.execute("DELETE FROM order_details WHERE order_id = %s", (order_id,))
             
@@ -237,12 +245,12 @@ def update_order(order_id):
                         VALUES (%s, %s, %s, %s, %s)
                     """, (order_id, inv_id, qty, unit_price, amount))
 
-        # 5. THE FIX: Update the Order Status LAST!
+        # 5. Update Status AND Payment Method
         if new_status_id:
             cur.execute("UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s", (new_status_id, order_id))
-
-        # (Note: Payment Method is currently passed from the frontend as data.get('paymentMethod'), 
-        # but if it's not saving, you will need to add an UPDATE query here for your specific payment_method column!)
+            
+        if new_pm_id:
+            cur.execute("UPDATE order_transaction SET payment_method_id = %s WHERE order_id = %s", (new_pm_id, order_id))
 
         conn.commit()
         return jsonify({"message": "Order updated successfully"}), 200
@@ -270,12 +278,11 @@ def add_order():
         contact_number = data.get('contactNumber', '').strip()
         delivery_address = data.get('deliveryAddress', '').strip()
 
-        # 1. SMART CUSTOMER HANDLING (Find or Create)
+        # 1. SMART CUSTOMER HANDLING 
         cur.execute("SELECT customer_id FROM customer WHERE customer_name = %s", (customer_name,))
         existing_cust = cur.fetchone()
 
         if existing_cust:
-            # Customer exists! Grab their ID and update their contact info just in case it changed
             customer_id = existing_cust[0]
             cur.execute("""
                 UPDATE customer 
@@ -283,27 +290,30 @@ def add_order():
                 WHERE customer_id = %s
             """, (contact_number, delivery_address, customer_id))
         else:
-            # New customer! Insert them securely.
             cur.execute("""
                 INSERT INTO customer (customer_name, customer_contact, customer_address, customer_email)
                 VALUES (%s, %s, %s, %s) RETURNING customer_id
             """, (customer_name, contact_number, delivery_address, 'no-email@placeholder.com'))
             customer_id = cur.fetchone()[0]
 
-        # 2. Get the Status ID
+        # 2. Get the Status & Payment IDs
         items = data.get('items', [])
         first_item_status = items[0].get('orderStatus', 'Preparing').strip() if items else 'Preparing'
-        
         cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'ORDER_STATUS' AND status_name ILIKE %s", (first_item_status,))
         status_row = cur.fetchone()
         status_id = status_row[0] if status_row else None
 
-        # 3. Create the Order Transaction
+        first_item_pm = items[0].get('paymentMethod', 'Cash').strip() if items else 'Cash'
+        cur.execute("SELECT status_id FROM static_status WHERE status_scope = 'PAYMENT_METHOD' AND status_name ILIKE %s", (first_item_pm,))
+        pm_row = cur.fetchone()
+        pm_id = pm_row[0] if pm_row else None
+
+        # 3. Create the Order Transaction (Now saves payment_method_id too!)
         today = date.today()
         cur.execute("""
-            INSERT INTO order_transaction (customer_id, order_date, order_status_id)
-            VALUES (%s, %s, %s) RETURNING order_id
-        """, (customer_id, today, status_id))
+            INSERT INTO order_transaction (customer_id, order_date, order_status_id, payment_method_id)
+            VALUES (%s, %s, %s, %s) RETURNING order_id
+        """, (customer_id, today, status_id, pm_id))
         order_id = cur.fetchone()[0]
 
         # 4. Insert the Order Items
@@ -311,7 +321,6 @@ def add_order():
             inv_id = item.get('inventory_id')
             if inv_id and str(inv_id).strip() != "":
                 
-                # Math Safety Net
                 try:
                     qty = float(item.get('quantity', 1)) or 1
                 except (ValueError, TypeError):
