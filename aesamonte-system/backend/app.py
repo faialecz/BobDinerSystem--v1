@@ -6,6 +6,7 @@ from routes.orders import orders_bp
 from routes.sales import sales_bp
 from routes.supplier import supplier_bp
 from routes.audit_log import audit_log_bp
+from routes.users import users_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -16,6 +17,7 @@ app.register_blueprint(orders_bp)
 app.register_blueprint(sales_bp)
 app.register_blueprint(supplier_bp)
 app.register_blueprint(audit_log_bp)
+app.register_blueprint(users_bp, url_prefix="/api")
 
 
 if __name__ == "__main__":
