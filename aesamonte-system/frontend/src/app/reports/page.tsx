@@ -11,25 +11,44 @@ interface SalesReportData {
   yearly: number;
 }
 
+interface InventoryReportData {
+  weekly: number;
+  monthly: number;
+  yearly: number;
+}
+
 export default function ReportsPage({ role = "Admin", onLogout }: { role?: string, onLogout: () => void }) {
   const [salesData, setSalesData] = useState<SalesReportData | null>(null);
+  const [inventoryData, setInventoryData] = useState<InventoryReportData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchSales = async () => {
+    const fetchReports = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:5000/api/reports/sales", { cache: 'no-store' });
-        if (res.ok) {
-          setSalesData(await res.json());
+        // Fetch Sales
+        const salesRes = await fetch("http://127.0.0.1:5000/api/reports/sales", { cache: 'no-store' });
+        if (salesRes.ok) {
+          setSalesData(await salesRes.json());
         } else {
-          const err = await res.json();
-          setErrorMsg(err.error || "Failed to load report data.");
+          const err = await salesRes.json();
+          setErrorMsg(err.error || "Failed to load sales report.");
         }
+
+        // Fetch Inventory
+        const invRes = await fetch("http://127.0.0.1:5000/api/inventory/summary", { cache: 'no-store' });
+        if (invRes.ok) {
+          setInventoryData(await invRes.json());
+        } else {
+          const err = await invRes.json();
+          setErrorMsg(err.error || "Failed to load inventory report.");
+        }
+
       } catch (e) {
         setErrorMsg("Network error. Is Flask running?");
       }
     };
-    fetchSales();
+
+    fetchReports();
   }, []);
 
   return (
@@ -45,7 +64,7 @@ export default function ReportsPage({ role = "Admin", onLogout }: { role?: strin
           <div style={{ color: '#ef4444', padding: '20px', backgroundColor: '#fee2e2', borderRadius: '8px', border: '1px solid #fca5a5' }}>
             <strong>Database Error:</strong> {errorMsg}
           </div>
-        ) : !salesData ? (
+        ) : !salesData || !inventoryData ? (
           <div style={{ color: '#64748b' }}>Loading Sales Data...</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
@@ -69,6 +88,38 @@ export default function ReportsPage({ role = "Admin", onLogout }: { role?: strin
                   <span style={{ color: '#475569', fontSize: '0.95rem' }}>Yearly Sales</span> 
                   <span style={{ color: '#f59e0b', fontWeight: 600 }}>{salesData.yearly.toLocaleString()}</span>
                 </div>
+              </div>
+            </section>
+
+            {/* INVENTORY REPORT CARD (MATCHED TO INVENTORY PAGE STYLE) */}
+            <section style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', height: 'fit-content' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '1.5rem', fontWeight: 400, color: '#1e3a5f' }}>
+                Inventory Report
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 10px', backgroundColor: '#f1f5f9', borderRadius: '6px' }}>
+                  <span style={{ color: '#475569', fontSize: '0.95rem' }}>Weekly</span>
+                  <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                    {inventoryData.weekly.toLocaleString()}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 10px' }}>
+                  <span style={{ color: '#475569', fontSize: '0.95rem' }}>Monthly</span>
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                    {inventoryData.monthly.toLocaleString()}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 10px', backgroundColor: '#f1f5f9', borderRadius: '6px' }}>
+                  <span style={{ color: '#475569', fontSize: '0.95rem' }}>Yearly</span>
+                  <span style={{ color: '#3b82f6', fontWeight: 600 }}>
+                    {inventoryData.yearly.toLocaleString()}
+                  </span>
+                </div>
+
               </div>
             </section>
 
