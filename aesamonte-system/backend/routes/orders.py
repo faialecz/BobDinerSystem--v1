@@ -111,6 +111,7 @@ def orders_list():
             order_id, customer_name, customer_address, customer_contact, order_date, order_status, payment_method, total_qty, total_amount, items_json = row
             
             order_status_upper = (order_status or "").upper()
+            is_archived = order_status_upper == 'INACTIVE'  
 
             if isinstance(items_json, str):
                 try:
@@ -132,19 +133,20 @@ def orders_list():
             availability_status = "Out of Stock" if problematic_items else None
 
             orders.append({
-                "id": order_id,
-                "customer": customer_name,
-                "address": customer_address,     
-                "contact": customer_contact,     
-                "date": order_date.strftime("%m/%d/%y") if order_date else None,
-                "status": order_status_upper.replace("_", " ").title(),
-                "paymentMethod": payment_method, 
-                "totalQty": total_qty,           
-                "totalAmount": total_amount,     
-                "availabilityStatus": availability_status,
-                "problematicItems": problematic_items,
-                "items": items_list 
-            })
+            "id": order_id,
+            "customer": customer_name,
+            "address": customer_address,     
+            "contact": customer_contact,     
+            "date": order_date.strftime("%m/%d/%y") if order_date else None,
+            "status": order_status_upper.replace("_", " ").title(),
+            "paymentMethod": payment_method, 
+            "totalQty": total_qty,           
+            "totalAmount": total_amount,     
+            "availabilityStatus": availability_status,
+            "problematicItems": problematic_items,
+            "items": items_list,
+            "is_archived": is_archived,   # <-- ADD THIS
+        })
 
         return jsonify(orders)
     except Exception as e:
@@ -154,6 +156,72 @@ def orders_list():
         cur.close()
         conn.close()
 
+     # ===================== TOGGLE ARCHIVE =====================
+@orders_bp.route("/archive/<string:order_id>", methods=["PUT", "OPTIONS"])
+def toggle_order_archive(order_id):
+    if request.method == "OPTIONS":
+        return jsonify({"message": "CORS OK"}), 200
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        # Get current order status
+        cur.execute("""
+            SELECT ss.status_code
+            FROM order_transaction ot
+            JOIN static_status ss ON ot.order_status_id = ss.status_id
+            WHERE ot.order_id = %s
+        """, (order_id,))
+
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "Order not found."}), 404
+
+        current_status = row[0]
+
+        if current_status == 'INACTIVE':
+            # RESTORING — set back to PREPARING
+            cur.execute("""
+                SELECT status_id, status_name FROM static_status 
+                WHERE status_scope = 'ORDER_STATUS' AND status_code = 'PREPARING'
+            """)
+            res = cur.fetchone()
+            is_archived = False
+            action_msg = "Order restored from Archive"
+        else:
+            # ARCHIVING — set to INACTIVE
+            cur.execute("""
+                SELECT status_id, status_name FROM static_status 
+                WHERE status_scope = 'ORDER_STATUS' AND status_code = 'INACTIVE'
+            """)
+            res = cur.fetchone()
+            is_archived = True
+            action_msg = "Order moved to Archive"
+
+        if not res:
+            return jsonify({"error": "Target status not found in static_status."}), 404
+
+        new_status_id = res[0]
+
+        cur.execute("""
+            UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
+        """, (new_status_id, order_id))
+
+        conn.commit()
+
+        return jsonify({
+            "message": action_msg,
+            "is_archived": is_archived
+        }), 200
+
+    except Exception as e:
+        conn.rollback()
+        print("Error toggling order archive:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 # ================= GET STATUSES =================
 @orders_bp.route("/status", methods=["GET"])
 def get_order_statuses():
@@ -308,7 +376,7 @@ def add_order():
         pm_row = cur.fetchone()
         pm_id = pm_row[0] if pm_row else None
 
-        # 3. Create the Order Transaction (Now saves payment_method_id too!)
+        # 3. Create the Order Transaction 
         today = date.today()
         cur.execute("""
             INSERT INTO order_transaction (customer_id, order_date, order_status_id, payment_method_id)

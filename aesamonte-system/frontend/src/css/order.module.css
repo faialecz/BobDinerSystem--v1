@@ -54,6 +54,13 @@
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
+.table th {
+  text-align: left;
+  padding: 15px;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #f1f3f4;
+  vertical-align: middle;   /* ADD THIS */
+}
 
 /* ===== TABLE HEADER ===== */
 .header {
@@ -142,17 +149,18 @@
   width: 15%; 
 }
 
-/* SORTING */
 .sortableHeader {
   cursor: pointer;
   user-select: none;
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
 }
 
 .sortHeaderInner {
-  display: inline-flex;         
+  display: inline-flex;        
   align-items: center;
-  gap: 6px;       
-  padding-left: 4px;             
+  gap: 6px;                  
 }
 
 .sortIconsStack {
@@ -175,7 +183,6 @@
 .activeSort {
   color: #1a4263 !important;
 }
-
 /* ===== ACTIONS ===== */
 th.actionHeader {
   text-align: center;
@@ -586,8 +593,7 @@ th.actionHeader .sortHeaderInner {
 .removeItemBtn:hover {
   text-decoration: underline;
 }
-
-/* === CENTERED ALERT SYSTEM === */
+/* ===== ALERT / TOAST ===== */
 .toastOverlay {
   position: fixed;
   inset: 0;
@@ -600,7 +606,98 @@ th.actionHeader .sortHeaderInner {
   pointer-events: auto;
 }
 
+/* === ARCHIVE ALERT (green band style) === */
 .alertBox {
+  background: white;
+  width: 350px;
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  animation: toastPop 0.3s ease-out;
+}
+
+.alertHeader {
+  background-color: #488c61;
+  height: 60px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.alertHeaderError {
+  background-color: #8e2a2a !important;
+}
+
+.checkCircle {
+  position: absolute;
+  top: 20px;
+  background: #488c61;
+  color: white;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 35px;
+  border: 5px solid white;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.checkCircleError {
+  background-color: #8e2a2a !important;
+  font-size: 45px !important;
+  font-weight: bold;
+}
+
+.alertBody {
+  padding: 0 24px 24px 24px;
+}
+
+.alertTitle {
+  color: #2d3748;
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.alertMessage {
+  color: #4a5568;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 24px;
+  line-height: 1.4;
+}
+
+.okButton {
+  background-color: #488c61;
+  color: white;
+  border: none;
+  padding: 12px 60px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.okButton:hover {
+  background-color: #3bc76f !important;
+  transform: scale(1.02);
+}
+
+.okButtonError {
+  background-color: #b73737 !important;
+}
+
+.okButtonError:hover {
+  background-color: #dc2626 !important;
+}
+
+/* === ADD ALERT (white, no band, dark blue full-width button) === */
+.alertBoxAdd {
   background: white;
   width: 420px;
   border-radius: 24px;
@@ -610,7 +707,7 @@ th.actionHeader .sortHeaderInner {
   animation: toastPop 0.3s ease-out;
 }
 
-.alertHeader {
+.alertHeaderAdd {
   background-color: white;
   height: 75px;
   position: relative;
@@ -619,11 +716,7 @@ th.actionHeader .sortHeaderInner {
   margin-bottom: 50px;
 }
 
-.alertHeaderError {
-  background-color: white !important;
-}
-
-.checkCircle {
+.checkCircleAdd {
   position: absolute;
   top: 30px;
   background: #488c61;
@@ -639,22 +732,18 @@ th.actionHeader .sortHeaderInner {
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-.checkCircleError {
-  background: #dc2626 !important;
-}
-
-.alertBody {
+.alertBodyAdd {
   padding: 0 35px 35px 35px;
 }
 
-.alertTitle {
+.alertTitleAdd {
   color: #1a1a1a;
   font-size: 26px;
   font-weight: 800;
   margin-bottom: 10px;
 }
 
-.alertMessage {
+.alertMessageAdd {
   color: #64748b;
   font-size: 16px;
   font-weight: 500;
@@ -662,7 +751,6 @@ th.actionHeader .sortHeaderInner {
   line-height: 1.5;
 }
 
-/* DATA TABLE INSIDE ALERT BOX */
 .alertDataTable {
   background-color: #f1f5f9;
   border-radius: 12px;
@@ -690,7 +778,7 @@ th.actionHeader .sortHeaderInner {
   font-weight: 600;
 }
 
-.okButton {
+.okButtonAdd {
   background-color: #1a4263;
   color: white;
   border: none;
@@ -703,16 +791,39 @@ th.actionHeader .sortHeaderInner {
   transition: transform 0.1s, opacity 0.2s;
 }
 
-.okButton:hover {
+.okButtonAdd:hover {
   opacity: 0.9;
   transform: scale(0.98);
-}
-
-.okButtonError {
-  background-color: #ef4444 !important;
 }
 
 @keyframes toastPop {
   0% { transform: scale(0.9); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/*restore btn*/
+
+.archiveBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background-color: #ecfdf5;
+  color: #10b981;
+}
+
+.archiveBtn:hover {
+  background-color: #d1fae5;
+}
+
+.actionWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
