@@ -19,7 +19,7 @@ const ROWS_PER_PAGE = 10;
 
 type OrderItemBackend = {
   inventory_id: number; order_quantity: number; available_quantity: number;
-  item_status_id: number; item_status?: string; item_name?: string;
+  item_status_id: number; item_status?: string; item_name?: string; amount?: number; uom?: string;
 };
 
 export type Order = {
@@ -526,18 +526,17 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                 <tbody>
                   {selectedOrderForView.items && selectedOrderForView.items.length > 0 ? (
                     selectedOrderForView.items.map((item, idx) => {
-                      const totalQty = selectedOrderForView.items?.reduce((acc, i) => acc + i.order_quantity, 0) || 1;
-                      const unitCost = selectedOrderForView.totalAmount / totalQty;
-                      const amount = unitCost * item.order_quantity;
+                      const itemAmount = item.amount ?? 0;
+                      const unitCost = item.order_quantity > 0 ? itemAmount / item.order_quantity : 0;
                       return (
                         <tr key={idx}>
                           <td>
                             <p className={s.viewItemName}>{item.item_name || `Item #${item.inventory_id}`}</p>
-                            <p className={s.viewItemStatus}>{item.item_status}</p>
+                            {item.uom && <p className={s.viewItemStatus}>{item.uom}</p>}
                           </td>
                           <td>{item.order_quantity}</td>
                           <td>₱ {unitCost.toFixed(2)}</td>
-                          <td>₱ {amount.toFixed(2)}</td>
+                          <td>₱ {itemAmount.toFixed(2)}</td>
                         </tr>
                       );
                     })

@@ -241,7 +241,10 @@ export default function Suppliers({
   const handlePrint = () => {
     if (!selectedSupplierForView) return;
     const pw = window.open('', '_blank');
-    if (!pw) return;
+    if (!pw) {
+      alert('Pop-up blocked. Please allow pop-ups for this site in your browser settings, then try again.');
+      return;
+    }
 
     pw.document.write(`<!DOCTYPE html>
 <html>
@@ -345,7 +348,6 @@ export default function Suppliers({
     pw.document.close();
     pw.focus();
     pw.print();
-    pw.close();
   };
   // ===== END HANDLE PRINT =====
 

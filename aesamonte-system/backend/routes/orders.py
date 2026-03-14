@@ -82,7 +82,8 @@ def orders_list():
                         'available_quantity', i.item_quantity,
                         'item_name', i.item_name,
                         'description', i.item_description,
-                        'amount', od.order_total
+                        'amount', od.order_total,
+                        'uom', u.uom_code
                     )
                 ) FILTER (WHERE od.order_id IS NOT NULL), '[]') AS items_json
             FROM order_transaction ot
@@ -91,6 +92,7 @@ def orders_list():
             LEFT JOIN static_status pm ON ot.payment_method_id = pm.status_id
             LEFT JOIN order_details od ON od.order_id = ot.order_id
             LEFT JOIN inventory i ON i.inventory_id = od.inventory_id
+            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
             WHERE sl.status_scope = 'ORDER_STATUS'
             GROUP BY 
                 ot.order_id, 
