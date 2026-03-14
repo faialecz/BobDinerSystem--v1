@@ -4,7 +4,8 @@
 import React, { useState, useEffect } from 'react'
 import styles from '@/css/sales.module.css'
 import TopHeader from '@/components/layout/TopHeader'
-import ExportModal from './exportModal' 
+import ExportModal from './exportModal'
+import ExportRequestModal from '@/components/features/ExportRequestModal'
 import ArchiveTable from './archiveSalesModal'
 import {
   LuSearch,
@@ -42,11 +43,21 @@ interface Transaction {
 
 interface SalesProps {
   role?: string
+  department?: string | null
+  employeeId?: number
   onLogout: () => void
 }
 
-export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
+export default function SalesPage({ role = 'Admin', department, employeeId = 0, onLogout }: SalesProps) {
   const s = styles as Record<string, string>
+
+  // --- RBAC permission flags ---
+  const isSalesHead     = role === 'Head' && department === 'Sales'
+  const isInventoryHead = role === 'Head' && department === 'Inventory'
+  const canExport       = ['Admin', 'Manager'].includes(role) || isSalesHead
+  const mustRequestExport = isInventoryHead
+
+  const [showExportRequestModal, setShowExportRequestModal] = useState(false)
 
   const [summary, setSummary] = useState<SalesSummary | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -205,16 +216,30 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
       <main className={s.mainContent}>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '20px' }}>
-          <button 
-            onClick={() => setShowExportModal(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#1e3a8a', 
-              color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none', 
-              cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            <LuDownload size={18} /> Export
-          </button>
+          {canExport && (
+            <button
+              onClick={() => setShowExportModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#1e3a8a',
+                color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none',
+                cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+            >
+              <LuDownload size={18} /> Export
+            </button>
+          )}
+          {mustRequestExport && (
+            <button
+              onClick={() => setShowExportRequestModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#475569',
+                color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none',
+                cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}
+            >
+              <LuDownload size={18} /> Request Export
+            </button>
+          )}
         </div>
 
         {/* SUMMARY CARDS */}
@@ -351,10 +376,18 @@ export default function SalesPage({ role = 'Admin', onLogout }: SalesProps) {
         )}
       </main>
 
-      <ExportModal 
-        isOpen={showExportModal} 
-        onClose={() => setShowExportModal(false)} 
-        onSuccess={handleExportSuccess} 
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onSuccess={handleExportSuccess}
+      />
+
+      <ExportRequestModal
+        isOpen={showExportRequestModal}
+        onClose={() => setShowExportRequestModal(false)}
+        targetModule="Sales"
+        requesterId={employeeId}
+        onSuccess={(msg) => handleExportSuccess(msg, 'success')}
       />
     </div>
   )

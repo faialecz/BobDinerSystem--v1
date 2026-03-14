@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import TopHeader from "@/components/layout/TopHeader";
-import SettingsHeader from "@/components/layout/BackSettingsHeader";
-import UserManagement from "./user-management"; // Create this file next
+import UserManagement from "./user-management";
 import styles from "@/css/settings.module.css";
 import { AiOutlineUser } from "react-icons/ai";
 import { LuShieldCheck, LuLayoutTemplate, LuDatabaseBackup } from "react-icons/lu";
 import { LuClipboardList } from "react-icons/lu";
-import AccessControl from "./access-control"
+import AccessControl from "./access-control";
 import AppPreferences from "./app-preferences";
 import BackupRestore from "./backup-restore";
 import AuditLog from "./audit-log";
@@ -19,70 +18,88 @@ interface SettingsPageProps {
 }
 
 export default function SettingsPage({ role = "Admin", onLogout }: SettingsPageProps) {
-  const [activeView, setActiveView] = useState<"main" | "users"| "access"| "appPreferences" | "backupRestore"| "auditlog" >("main");
+  const [activeView, setActiveView] = useState<"main" | "users" | "access" | "appPreferences" | "backupRestore" | "auditlog">("main");
 
-  const configItems = [
-    { 
-      title: "User Management", 
-      icon: <AiOutlineUser />, 
+  const isAdmin = role === "Admin";
+  const isManagerOrHead = role === "Manager" || role === "Head";
+
+  const allConfigItems = [
+    {
+      title: "User Management",
+      icon: <AiOutlineUser />,
       action: () => setActiveView("users"),
+      show: isAdmin,
     },
-    { title: "Access Control", icon: <LuShieldCheck />, 
+    {
+      title: "Access Control",
+      icon: <LuShieldCheck />,
       action: () => setActiveView("access"),
+      show: isAdmin,
     },
-    { title: "App Preferences", icon: <LuLayoutTemplate />, 
+    {
+      title: "App Preferences",
+      icon: <LuLayoutTemplate />,
       action: () => setActiveView("appPreferences"),
+      show: true,  // all roles with settings access can see this
     },
-    { title: "Back Up and Restore Data", icon: <LuDatabaseBackup />, 
+    {
+      title: "Back Up and Restore Data",
+      icon: <LuDatabaseBackup />,
       action: () => setActiveView("backupRestore"),
+      show: isAdmin || isManagerOrHead,
     },
-    { title: "Audit Log", icon : <LuClipboardList />, 
+    {
+      title: "Audit Log",
+      icon: <LuClipboardList />,
       action: () => setActiveView("auditlog"),
+      show: isAdmin,
     },
   ];
+
+  const configItems = allConfigItems.filter(item => item.show);
 
   return (
     <div className={styles.container}>
       <TopHeader role={role} onLogout={onLogout} />
       <main className={styles.mainContent}>
-  {activeView === "main" && (
-    <div className={styles.settingsCard}>
-      <h3 className={styles.pageTitle}>Controls & Configurations</h3>
-      <div className={styles.configList}>
-        {configItems.map((item) => (
-          <button
-            key={item.title}
-            className={styles.configItem}
-            onClick={item.action}
-          >
-            <div className={styles.iconBox}>{item.icon}</div>
-            <span className={styles.itemTitle}>{item.title}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  )}
+        {activeView === "main" && (
+          <div className={styles.settingsCard}>
+            <h3 className={styles.pageTitle}>Controls & Configurations</h3>
+            <div className={styles.configList}>
+              {configItems.map((item) => (
+                <button
+                  key={item.title}
+                  className={styles.configItem}
+                  onClick={item.action}
+                >
+                  <div className={styles.iconBox}>{item.icon}</div>
+                  <span className={styles.itemTitle}>{item.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-  {activeView === "users" && (
-    <UserManagement onBack={() => setActiveView("main")} />
-  )}
+        {activeView === "users" && (
+          <UserManagement onBack={() => setActiveView("main")} />
+        )}
 
-  {activeView === "access" && (
-    <AccessControl onBack={() => setActiveView("main")} />
-  )}
+        {activeView === "access" && (
+          <AccessControl onBack={() => setActiveView("main")} />
+        )}
 
-  {activeView === "appPreferences" && (
-    <AppPreferences onBack={() => setActiveView("main")} />
-  )}
+        {activeView === "appPreferences" && (
+          <AppPreferences onBack={() => setActiveView("main")} />
+        )}
 
-  {activeView === "backupRestore" && (
-    <BackupRestore onBack={() => setActiveView("main")} />
-  )}
+        {activeView === "backupRestore" && (
+          <BackupRestore onBack={() => setActiveView("main")} />
+        )}
 
-  {activeView === "auditlog" && (
-    <AuditLog onBack={() => setActiveView("main")} onLogout={onLogout} />
-  )}
-</main>
+        {activeView === "auditlog" && (
+          <AuditLog onBack={() => setActiveView("main")} onLogout={onLogout} />
+        )}
+      </main>
     </div>
   );
 }

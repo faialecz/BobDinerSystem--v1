@@ -9,8 +9,10 @@ import { AiFillEye, AiFillEyeInvisible } from "react-icons/ai";
 import { FaMobileAlt, FaEnvelope, FaArrowLeft } from "react-icons/fa"; 
 import styles from "@/css/auth.module.css";
 
+import type { UserInfo } from "@/types/user";
+
 interface LoginProps {
-  onLogin: (role: string) => void;
+  onLogin: (user: UserInfo) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
@@ -40,14 +42,19 @@ export default function Login({ onLogin }: LoginProps) {
       const data = await response.json();
 
       if (response.ok) {
-        // 1. Store token in localStorage
         if (rememberMe) {
           localStorage.setItem("rememberedEmployeeId", employeeId);
         } else {
           localStorage.removeItem("rememberedEmployeeId");
         }
-        // 3. Use the role from your database to grant access
-        onLogin(data.role); 
+        localStorage.setItem("token", data.token);
+        onLogin({
+          employeeId:  data.employee_id,
+          roleName:    data.role,
+          department:  data.department ?? null,
+          permissions: data.permissions,
+          token:       data.token,
+        });
       } else {
         alert(data.message || "Invalid credentials");
       }

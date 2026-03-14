@@ -8,73 +8,74 @@ import Reports from "@/app/reports/page";
 import Settings from "@/app/settings/settings";
 import Help from "@/app/help/page";
 import Inventory from "@/app/inventory/page";
-import Sales from "@/app/sales/page"; 
+import Sales from "@/app/sales/page";
 import Orders from "@/app/order/page";
 import Suppliers from "@/app/suppliers/suppliers";
+import type { UserInfo } from "@/types/user";
 
 export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userInfo, setUserInfo] = useState<string>("");
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState("Dashboard");
 
-  // Simplified: directly set logged in to true
-  const handleLogin = (data: string) => {
-    setUserInfo(data);     
-    setIsLoggedIn(true);   // This switches the view to the Dashboard
+  const handleLogin = (data: UserInfo) => {
+    setUserInfo(data);
+    setIsLoggedIn(true);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem("token");
     setIsLoggedIn(false);
-    setUserInfo("");
+    setUserInfo(null);
     setActiveTab("Dashboard");
   };
 
  return (
     <main className="min-h-screen bg-linear-to-b from-[#0A2A43] to-[#1a5887]">
-      {!isLoggedIn ? (
+      {!isLoggedIn || !userInfo ? (
         /* Show Login Screen */
         <div className="flex justify-center items-center h-screen">
           <Login onLogin={handleLogin} />
         </div>
       ) : (
         <div className="flex h-screen overflow-hidden bg-[#fefcf6]">
-          <Sidebar 
-            roleOrName={userInfo} 
-            onLogout={handleLogout} 
-            collapsed={isCollapsed} 
+          <Sidebar
+            userInfo={userInfo}
+            onLogout={handleLogout}
+            collapsed={isCollapsed}
             setCollapsed={setIsCollapsed}
             activeTab={activeTab}
-            onTabChange={setActiveTab} 
+            onTabChange={setActiveTab}
           />
-          
-          <div 
-            className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#F8F3D9] p-0 
-              ${isCollapsed ? "ml-*" : "ml-*"}`} 
+
+          <div
+            className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#F8F3D9] p-0
+              ${isCollapsed ? "ml-*" : "ml-*"}`}
           >
             {activeTab === "Dashboard" ? (
-              <Dashboard role={userInfo} onLogout={handleLogout} />
+              <Dashboard role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Inventory" ? (
-              <Inventory role={userInfo} onLogout={handleLogout} />
+              <Inventory role={userInfo.roleName} department={userInfo.department} employeeId={userInfo.employeeId} onLogout={handleLogout} />
             ) : activeTab === "Sales" ? (
-              <Sales role={userInfo} onLogout={handleLogout} />
-            ) : activeTab === "Orders" ? ( 
-              <Orders role={userInfo} onLogout={handleLogout} />
+              <Sales role={userInfo.roleName} department={userInfo.department} employeeId={userInfo.employeeId} onLogout={handleLogout} />
+            ) : activeTab === "Orders" ? (
+              <Orders role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Reports" ? (
-              <Reports role={userInfo} onLogout={handleLogout} />
+              <Reports role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Settings" ? (
-              <Settings role={userInfo} onLogout={handleLogout} />
+              <Settings role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (
-              <Help role={userInfo} onLogout={handleLogout} />
+              <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (
-              <Suppliers role={userInfo} onLogout={handleLogout} />
+              <Suppliers role={userInfo.roleName} onLogout={handleLogout} />
             ) : null
-            
+
             }
-            
+
           </div>
         </div>
-      )} 
+      )}
     </main>
   );
 }

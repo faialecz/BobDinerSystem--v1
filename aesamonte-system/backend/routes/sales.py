@@ -111,7 +111,7 @@ def sales_transactions():
         LEFT JOIN static_status pm ON st.payment_method_id = pm.status_id
         JOIN order_transaction ot ON st.order_id = ot.order_id
         JOIN customer c ON ot.customer_id = c.customer_id
-        JOIN order_details od ON ot.order_id = od.order_id
+        LEFT JOIN order_details od ON ot.order_id = od.order_id
         GROUP BY st.sales_id, c.customer_name, c.customer_address, st.sales_date, ss.status_code, pm.status_name, ot.total_amount
         ORDER BY st.sales_date DESC
     """

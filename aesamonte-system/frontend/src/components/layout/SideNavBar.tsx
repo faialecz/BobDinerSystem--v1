@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react"; // Added useState
+import React, { useState } from "react";
 import {
   AiOutlineUser,
   AiOutlineSetting,
@@ -15,11 +15,12 @@ import { BsPeople } from "react-icons/bs";
 import { RiBarChart2Line, RiLogoutBoxRLine } from "react-icons/ri";
 import { IoArrowUndoCircleOutline } from "react-icons/io5";
 import styles from "@/css/sidenavbar.module.css";
+import type { UserInfo } from "@/types/user";
 
 import LogoutModal from "@/components/logout/logout";
 
 interface SidebarProps {
-  roleOrName: string;
+  userInfo: UserInfo;
   onLogout: () => void;
   collapsed: boolean;
   setCollapsed: (val: boolean) => void;
@@ -27,26 +28,30 @@ interface SidebarProps {
   onTabChange: (tab: string) => void;
 }
 
-export default function Sidebar({ 
-  roleOrName, 
-  onLogout, 
-  collapsed, 
-  setCollapsed, 
-  activeTab, 
-  onTabChange 
+export default function Sidebar({
+  userInfo,
+  onLogout,
+  collapsed,
+  setCollapsed,
+  activeTab,
+  onTabChange
 }: SidebarProps) {
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const menuItems = [
-    { name: "Dashboard", icon: <GoHome /> },
-    { name: "Sales", icon: <GrLineChart /> },
-    { name: "Inventory", icon: <MdOutlineInventory2 /> },
-    { name: "Orders", icon: <PiShoppingBag /> },
-    { name: "Suppliers", icon: <BsPeople /> },
-    { name: "Reports", icon: <RiBarChart2Line /> },
-    { name: "Settings", icon: <AiOutlineSetting /> },
+  const { permissions } = userInfo;
+
+  const allMenuItems = [
+    { name: "Dashboard",  icon: <GoHome />,             show: true },
+    { name: "Sales",      icon: <GrLineChart />,         show: permissions.sales },
+    { name: "Inventory",  icon: <MdOutlineInventory2 />, show: permissions.inventory },
+    { name: "Orders",     icon: <PiShoppingBag />,       show: permissions.orders },
+    { name: "Suppliers",  icon: <BsPeople />,            show: permissions.suppliers },
+    { name: "Reports",    icon: <RiBarChart2Line />,     show: permissions.reports },
+    { name: "Settings",   icon: <AiOutlineSetting />,    show: permissions.settings },
   ];
+
+  const menuItems = allMenuItems.filter(item => item.show);
 
   return (
     <div className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}>
@@ -69,7 +74,7 @@ export default function Sidebar({
         {!collapsed && (
           <div className={styles.userInfo}>
             <div className={styles.avatar}><AiOutlineUser size={24} /></div>
-            <span className={styles.roleName}>{roleOrName}</span>
+            <span className={styles.roleName}>{userInfo.roleName}</span>
           </div>
         )}
 
@@ -96,8 +101,7 @@ export default function Sidebar({
             <span className={styles.navIcon}><AiOutlineQuestionCircle size={20} /></span>
             {!collapsed && <span className={styles.navText}>Help</span>}
           </button>
-          
-          {/* Changed onClick to open the modal instead of logging out immediately */}
+
           <button className={styles.bottomButton} onClick={() => setIsModalOpen(true)}>
             <span className={styles.navIcon}><RiLogoutBoxRLine size={20} /></span>
             {!collapsed && <span className={styles.navText}>Logout</span>}
@@ -105,10 +109,10 @@ export default function Sidebar({
         </div>
       </div>
 
-      <LogoutModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onConfirm={onLogout} 
+      <LogoutModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={onLogout}
       />
     </div>
   );

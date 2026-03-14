@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import styles from "@/css/inventory.module.css";
 import TopHeader from '@/components/layout/TopHeader';
 import ExportButton from '@/components/features/ExportButton';
+import ExportRequestModal from '@/components/features/ExportRequestModal';
 import AddInventoryModal from './addInventoryModal';
 import EditInventoryModal from './editInventoryModal'; 
 import ExportModal from './exportModal'; 
@@ -24,6 +25,8 @@ import {
 
 interface InventoryProps {
   role: string;
+  department?: string | null;
+  employeeId?: number;
   onLogout: () => void;
 }
 interface Supplier {
@@ -65,8 +68,18 @@ interface InventorySummary {
 
 const ROWS_PER_PAGE = 10;
 
-const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
+const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0, onLogout }) => {
   const s = styles as Record<string, string>;
+
+  // --- RBAC permission flags ---
+  const isInventoryHead = role === 'Head' && department === 'Inventory';
+  const isSalesHead     = role === 'Head' && department === 'Sales';
+  // Can add/edit/archive inventory items
+  const canModify       = ['Admin', 'Manager', 'Staff'].includes(role) || isInventoryHead;
+  // Can export directly
+  const canExport       = ['Admin', 'Manager'].includes(role) || isInventoryHead;
+  // Must request export from the Inventory Head
+  const mustRequestExport = isSalesHead;
 
   /* ================= STATE ================= */
   const [products, setProducts] = useState<Product[]>([]);
@@ -102,6 +115,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
   const [showEditModal, setShowEditModal] = useState(false); 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null); 
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showExportRequestModal, setShowExportRequestModal] = useState(false);
 
   // States for Alert Modal
   const [showToast, setShowToast] = useState(false);
@@ -470,10 +484,26 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
       )}
 
       <div className={s.mainContent}>
-        <div className={s.headerActions} 
-          onClick={() => setShowExportModal(true)}>
-          <ExportButton />
-      </div>
+        <div className={s.headerActions}>
+          {canExport && (
+            <div onClick={() => setShowExportModal(true)}>
+              <ExportButton />
+            </div>
+          )}
+          {mustRequestExport && (
+            <button
+              onClick={() => setShowExportRequestModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                backgroundColor: '#475569', color: 'white', padding: '8px 18px',
+                borderRadius: '6px', border: 'none', cursor: 'pointer',
+                fontWeight: 500, fontSize: '0.9rem',
+              }}
+            >
+              Request Export
+            </button>
+          )}
+        </div>
 
         <div className={s.topGrid}>
 
@@ -568,7 +598,9 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
                   <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   <LuSearch size={18} />
                 </div>
-                <button className={s.addButton} onClick={() => setShowModal(true)}>ADD</button>
+                {canModify && (
+                  <button className={s.addButton} onClick={() => setShowModal(true)}>ADD</button>
+                )}
               </div>
             </div>
 
@@ -639,9 +671,17 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
 
                       {activeMenuId === p.id && (
                         <div className={s.popoverMenu} ref={menuRef}>
-                          <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
-                          <button className={s.popEditBtn} onClick={() => handleEditClick(p)}><LuPencil size={12}/> Edit</button>
-                          <button className={s.popArchiveBtn} onClick={() => handleToggleArchive(p.id)}><LuArchive size={12}/> Archive</button>
+                          {canModify ? (
+                            <>
+                              <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
+                              <button className={s.popEditBtn} onClick={() => handleEditClick(p)}><LuPencil size={12}/> Edit</button>
+                              <button className={s.popArchiveBtn} onClick={() => handleToggleArchive(p.id)}><LuArchive size={12}/> Archive</button>
+                            </>
+                          ) : (
+                            <span style={{ padding: '8px 12px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                              View only
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -668,11 +708,20 @@ const Inventory: React.FC<InventoryProps> = ({ role, onLogout }) => {
         )}
       </div>
 
-      {/* --- Export Modal with onSuccess logic --- */}
-      <ExportModal 
+      {/* --- Export Modal (direct export) --- */}
+      <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         onSuccess={handleExportSuccess}
+      />
+
+      {/* --- Export Request Modal (for cross-dept Heads) --- */}
+      <ExportRequestModal
+        isOpen={showExportRequestModal}
+        onClose={() => setShowExportRequestModal(false)}
+        targetModule="Inventory"
+        requesterId={employeeId}
+        onSuccess={(msg) => handleExportSuccess(msg, 'success')}
       />
 
       <AddInventoryModal 
