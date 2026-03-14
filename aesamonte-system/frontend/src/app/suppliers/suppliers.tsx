@@ -717,7 +717,7 @@ export default function Suppliers({
             {/* Modal Header */}
             <div className={s.viewModalHeader}>
               <div>
-                <h2 className={s.viewCompanyName}>AE Samonte Trading</h2>
+                <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
                 <p className={s.viewOrderNumber}>S-{String(selectedSupplierForView.id).padStart(4, '0')}</p>
               </div>
               <div className={s.viewHeaderRight}>

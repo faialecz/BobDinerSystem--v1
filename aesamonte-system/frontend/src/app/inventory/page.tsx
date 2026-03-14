@@ -295,12 +295,12 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         itemDescription: item.itemDescription,
         qty: Number(item.qty),
         uom: item.uom,
-        unitPrice: Number(item.unitPrice), 
+        unitPrice: Number(item.unitPrice),
         sellingPrice: Number(item.sellingPrice),
-        detailSupplierName: item.detailSupplierName, 
         reorderPoint: Number(item.reorderPoint) || 0,
-        detailLeadTime: Number(item.detailLeadTime) || 0,
-        detailMinOrder: Number(item.detailMinOrder) || 0
+        supplierName: item.supplierName || '',
+        leadTime: Number(item.leadTime) || 0,
+        minOrder: Number(item.minOrder) || 0,
       }));
       const res = await fetch("http://127.0.0.1:5000/api/inventory/add", {
         method: "POST",

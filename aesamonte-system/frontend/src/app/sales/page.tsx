@@ -421,7 +421,7 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
             {/* ── HEADER ── */}
             <div className={s.viewModalHeader}>
               <div className={s.viewModalHeaderLeft}>
-                <h2 className={s.viewCompanyName}>AE Samonte Trading</h2>
+                <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
                 <p className={s.viewOrderNumber}>No. {selectedTx.no}</p>
               </div>
               <div className={s.viewModalHeaderRight}>

@@ -374,7 +374,10 @@ export interface PrintTransaction {
 /* ── Print Sales Invoice ── */
 export function printSalesInvoice(tx: PrintTransaction): void {
   const pw = window.open('', '_blank')
-  if (!pw) return
+  if (!pw) {
+    alert('Pop-up blocked. Please allow pop-ups for this site in your browser settings, then try again.')
+    return
+  }
 
   const vatRate    = 0.12
   const totalSales = tx.amount
@@ -565,13 +568,15 @@ export function printSalesInvoice(tx: PrintTransaction): void {
   pw.document.close()
   pw.focus()
   pw.print()
-  pw.close()
 }
 
 /* ── Print Delivery Receipt ── */
 export function printDeliveryReceipt(tx: PrintTransaction): void {
   const pw = window.open('', '_blank')
-  if (!pw) return
+  if (!pw) {
+    alert('Pop-up blocked. Please allow pop-ups for this site in your browser settings, then try again.')
+    return
+  }
 
   const items     = tx.items || []
   const totalRows = Math.max(25, items.length)
@@ -664,5 +669,4 @@ export function printDeliveryReceipt(tx: PrintTransaction): void {
   pw.document.close()
   pw.focus()
   pw.print()
-  pw.close()
 }

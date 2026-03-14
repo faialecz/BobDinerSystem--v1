@@ -487,7 +487,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
 
             <div className={s.viewModalHeader}>
               <div>
-                <h2 className={s.viewCompanyName}>AE Samonte Trading</h2>
+                <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
                 <p className={s.viewOrderNumber}>No. {selectedOrderForView.id}</p>
               </div>
               <div className={s.viewHeaderRight}>
