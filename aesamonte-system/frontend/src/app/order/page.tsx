@@ -241,7 +241,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
     <div class="receipt-block">
       <div class="receipt-title">DELIVERY RECEIPT</div>
       <div class="receipt-no"><span>N<sup>o</sup></span> ${String(selectedOrderForView.id).padStart(4, '0')}</div>
-      <div class="meta-row"><span class="meta-label">Date:</span><span class="meta-value">${selectedOrderForView.date}</span><span>, 20</span></div>
+      <div class="meta-row"><span class="meta-label">Date:</span><span class="meta-value">${selectedOrderForView.date}</span></div>
       <div class="meta-row"><span class="meta-label">P.O. No.:</span><span class="meta-value">&nbsp;</span></div>
       <div class="meta-row"><span class="meta-label">RFQ No.:</span><span class="meta-value">&nbsp;</span></div>
       <div class="meta-row"><span class="meta-label">TIN No.:</span><span class="meta-value">&nbsp;</span></div>

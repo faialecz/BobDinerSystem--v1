@@ -13,8 +13,11 @@ import {
   LuChevronDown,
   LuChevronRight,
   LuArchive,
-  LuDownload
+  LuDownload,
+  LuX,
+  LuPrinter
 } from 'react-icons/lu'
+import { printSalesInvoice, printDeliveryReceipt } from './salesPrint'
 
 /* ================= TYPES ================= */
 
@@ -30,15 +33,29 @@ interface SalesSummary {
 }
 
 interface Transaction {
-  no: string 
+  no: string
   name: string
   address: string
   date: string
   qty: number
   amount: number
   status: 'PAID' | 'PENDING' | 'INACTIVE'
-  paymentMethod: string 
+  paymentMethod: string
   is_archived?: boolean
+  tin?: string
+  contact?: string
+  poNo?: string
+  terms?: string
+  registeredName?: string
+  items?: TransactionItem[]
+}
+
+interface TransactionItem {
+  description: string
+  qty: number
+  unit: string
+  unitCost: number
+  amount: number
 }
 
 interface SalesProps {
@@ -51,32 +68,32 @@ interface SalesProps {
 export default function SalesPage({ role = 'Admin', department, employeeId = 0, onLogout }: SalesProps) {
   const s = styles as Record<string, string>
 
-  // --- RBAC permission flags ---
-  const isSalesHead     = role === 'Head' && department === 'Sales'
-  const isInventoryHead = role === 'Head' && department === 'Inventory'
-  const canExport       = ['Admin', 'Manager'].includes(role) || isSalesHead
+  const isSalesHead       = role === 'Head' && department === 'Sales'
+  const isInventoryHead   = role === 'Head' && department === 'Inventory'
+  const canExport         = ['Admin', 'Manager'].includes(role) || isSalesHead
   const mustRequestExport = isInventoryHead
 
   const [showExportRequestModal, setShowExportRequestModal] = useState(false)
-
-  const [summary, setSummary] = useState<SalesSummary | null>(null)
+  const [summary, setSummary]           = useState<SalesSummary | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [isLoading, setIsLoading]       = useState(true)
+  const [searchTerm, setSearchTerm]     = useState('')
   const [showExportModal, setShowExportModal] = useState(false)
-  const [isArchiveView, setIsArchiveView] = useState(false)
-  
-  const [currentPage, setCurrentPage] = useState(1)
+  const [isArchiveView, setIsArchiveView]     = useState(false)
+  const [currentPage, setCurrentPage]         = useState(1)
   const itemsPerPage = 10
-
-  const [showToast, setShowToast] = useState(false)
+  const [showToast, setShowToast]       = useState(false)
   const [toastMessage, setToastMessage] = useState('')
-  const [isError, setIsError] = useState(false)
+  const [isError, setIsError]           = useState(false)
 
   const [sortConfig, setSortConfig] = useState<{
     key: keyof Transaction | ''
     direction: 'asc' | 'desc' | null
   }>({ key: '', direction: null })
+
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [selectedTx, setSelectedTx]       = useState<Transaction | null>(null)
+  const [activeTab, setActiveTab]         = useState<'invoice' | 'delivery'>('invoice')
 
   /* ================= HANDLERS ================= */
 
@@ -86,18 +103,14 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
     setShowToast(true)
   }
 
-  // THE FIX: Added 'isBackground' to prevent screen flashes, and a cache-busting timestamp!
   const fetchSalesData = async (isBackground = false) => {
     try {
       if (!isBackground) setIsLoading(true)
-      
-      const t = new Date().getTime(); // Forces browser to pull fresh DB data
-      
+      const t = new Date().getTime()
       const [summaryRes, transRes] = await Promise.all([
         fetch(`http://127.0.0.1:5000/api/sales/summary?t=${t}`, { cache: 'no-store' }),
         fetch(`http://127.0.0.1:5000/api/sales/transactions?t=${t}`, { cache: 'no-store' })
       ])
-      
       if (summaryRes.ok && transRes.ok) {
         setSummary(await summaryRes.json())
         setTransactions(await transRes.json())
@@ -109,88 +122,128 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
     }
   }
 
-  useEffect(() => {
-    fetchSalesData()
-  }, [])
+  useEffect(() => { fetchSalesData() }, [])
 
   const handleTogglePaymentStatus = async (tx: Transaction) => {
-    if (!tx.paymentMethod?.toLowerCase().includes('bank')) return;
-    if (tx.status === 'INACTIVE' || tx.is_archived) return;
-
+    if (!tx.paymentMethod?.toLowerCase().includes('bank')) return
+    if (tx.status === 'INACTIVE' || tx.is_archived) return
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/sales/toggle-status/${tx.no}`, {
-        method: 'PUT',
-      });
-
+      const response = await fetch(`http://127.0.0.1:5000/api/sales/toggle-status/${tx.no}`, { method: 'PUT' })
       if (response.ok) {
-        const data = await response.json();
-        handleExportSuccess(data.message, 'success');
-        
-        // THE FIX: Refresh in background! (True = no loading screen flash)
-        await fetchSalesData(true);
+        const data = await response.json()
+        handleExportSuccess(data.message, 'success')
+        await fetchSalesData(true)
       } else {
-        const errorData = await response.json();
-        handleExportSuccess(errorData.error || "Failed to update status.", "error");
+        const errorData = await response.json()
+        handleExportSuccess(errorData.error || 'Failed to update status.', 'error')
       }
-    } catch (error) {
-      handleExportSuccess("Network error. Is Flask running?", "error");
+    } catch {
+      handleExportSuccess('Network error. Is Flask running?', 'error')
     }
-  };
+  }
 
   const handleToggleArchive = async (txNo: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/sales/archive/${txNo}`, {
-        method: 'PUT',
-      });
-
+      const response = await fetch(`http://127.0.0.1:5000/api/sales/archive/${txNo}`, { method: 'PUT' })
       if (response.ok) {
-        const data = await response.json();
-        setTransactions(prev => 
-          prev.map(tx => 
-            tx.no === txNo ? { ...tx, is_archived: data.is_archived, status: data.new_status } : tx
-          )
-        );
-        const actionMsg = data.is_archived ? "Moved to Archive" : "Restored from Archive";
-        handleExportSuccess(actionMsg, 'success');
-        
-        // THE FIX: Refresh cards in background!
-        await fetchSalesData(true); 
+        const data = await response.json()
+        setTransactions(prev =>
+          prev.map(tx => tx.no === txNo ? { ...tx, is_archived: data.is_archived, status: data.new_status } : tx)
+        )
+        handleExportSuccess(data.is_archived ? 'Moved to Archive' : 'Restored from Archive', 'success')
+        await fetchSalesData(true)
       } else {
-        handleExportSuccess("Failed to update archive status.", "error");
+        handleExportSuccess('Failed to update archive status.', 'error')
       }
-    } catch (error) {
-      handleExportSuccess("Network error. Is Flask running?", "error");
+    } catch {
+      handleExportSuccess('Network error. Is Flask running?', 'error')
     }
-  };
+  }
+
+  const handleOpenView = async (tx: Transaction) => {
+    setSelectedTx(tx)
+    setActiveTab('invoice')
+    setShowViewModal(true)
+
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/api/orders/list`)
+      if (!res.ok) return
+      const orders = await res.json()
+
+      const matched =
+        orders.find((o: any) =>
+          o.customer?.toLowerCase() === tx.name?.toLowerCase() && o.date === tx.date
+        ) ||
+        orders.find((o: any) =>
+          o.customer?.toLowerCase() === tx.name?.toLowerCase()
+        )
+
+      if (!matched || !matched.items?.length) return
+
+      const totalQty = matched.items.reduce((sum: number, i: any) => sum + i.order_quantity, 0) || 1
+      const unitCost = tx.amount / totalQty
+
+      setSelectedTx(prev =>
+        prev ? {
+          ...prev,
+          registeredName: prev.registeredName || matched.customer,
+          address:        prev.address        || matched.address,
+          contact:        prev.contact        || matched.contact || '—',
+          items: matched.items.map((i: any) => ({
+            description: i.item_name || `Item #${i.inventory_id}`,
+            qty:         i.order_quantity,
+            unit:        i.uom || i.item_status || 'PCS',
+            unitCost:    parseFloat(unitCost.toFixed(2)),
+            amount:      parseFloat((unitCost * i.order_quantity).toFixed(2)),
+          })),
+        } : null
+      )
+    } catch (e) {
+      console.error('Could not fetch item details from orders:', e)
+    }
+  }
+
+  const closeViewModal = () => {
+    setShowViewModal(false)
+    setSelectedTx(null)
+  }
 
   /* ================= FILTER + SORT + PAGINATION ================= */
 
   const filteredTx = transactions.filter(tx => {
-    const matchesArchiveView = isArchiveView ? tx.is_archived === true : !tx.is_archived;
-    const searchStr = `${tx.no} ${tx.name} ${tx.address} ${tx.paymentMethod || ''}`.toLowerCase();
-    return matchesArchiveView && searchStr.includes(searchTerm.toLowerCase());
-  });
+    const matchesArchiveView = isArchiveView ? tx.is_archived === true : !tx.is_archived
+    const searchStr = `${tx.no} ${tx.name} ${tx.address} ${tx.paymentMethod || ''}`.toLowerCase()
+    return matchesArchiveView && searchStr.includes(searchTerm.toLowerCase())
+  })
 
   const sortedTx = [...filteredTx].sort((a, b) => {
-    if (!sortConfig.key || !sortConfig.direction) return 0;
-    const aVal = a[sortConfig.key] ?? '';
-    const bVal = b[sortConfig.key] ?? '';
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
+    if (!sortConfig.key || !sortConfig.direction) return 0
+    const aVal = a[sortConfig.key] ?? ''
+    const bVal = b[sortConfig.key] ?? ''
+    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
+    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
+    return 0
+  })
 
-  const totalPages = Math.ceil(sortedTx.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
+  const totalPages  = Math.ceil(sortedTx.length / itemsPerPage)
+  const startIndex  = (currentPage - 1) * itemsPerPage
   const paginatedTx = sortedTx.slice(startIndex, startIndex + itemsPerPage)
 
   const requestSort = (key: keyof Transaction, direction: 'asc' | 'desc') => {
-    setSortConfig({ key, direction });
-  };
+    setSortConfig({ key, direction })
+  }
 
   if (isLoading) return <div className={s.loadingContainer}>Connecting to database...</div>
 
-  const safeSummary = summary || { totalSales: 0, totalSalesChange: 0, weeklySales: 0, monthlySales: 0, yearlySales: 0, topClientName: 'None', topClientSales: 0, topClientChange: 0 }
+  const safeSummary = summary || {
+    totalSales: 0, totalSalesChange: 0, weeklySales: 0, monthlySales: 0,
+    yearlySales: 0, topClientName: 'None', topClientSales: 0, topClientChange: 0
+  }
+
+  const vatRate  = 0.12
+  const totalAmt = selectedTx?.amount ?? 0
+  const lessVat  = totalAmt - totalAmt / (1 + vatRate)
+  const netOfVat = totalAmt / (1 + vatRate)
 
   return (
     <div className={s.container}>
@@ -214,16 +267,12 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
       )}
 
       <main className={s.mainContent}>
-        
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginBottom: '20px' }}>
           {canExport && (
             <button
               onClick={() => setShowExportModal(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#1e3a8a',
-                color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none',
-                cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#1e3a8a', color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
             >
               <LuDownload size={18} /> Export
             </button>
@@ -231,11 +280,7 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
           {mustRequestExport && (
             <button
               onClick={() => setShowExportRequestModal(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#475569',
-                color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none',
-                cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#475569', color: 'white', padding: '10px 20px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
             >
               <LuDownload size={18} /> Request Export
             </button>
@@ -263,7 +308,10 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
           <section className={s.statCard}>
             <p className={s.cardTitle}>Top Client</p>
             <h2 className={s.bigNumber}>₱ {safeSummary.topClientSales.toLocaleString()}</h2>
-            <div className={s.cardFooter}><span className={s.subText}>{safeSummary.topClientName}</span><span className={s.pill}>↗ {safeSummary.topClientChange}%</span></div>
+            <div className={s.cardFooter}>
+              <span className={s.subText}>{safeSummary.topClientName}</span>
+              <span className={s.pill}>↗ {safeSummary.topClientChange}%</span>
+            </div>
           </section>
         </div>
 
@@ -276,7 +324,7 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
               <div className={s.controls}>
                 <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives"><LuArchive size={20} /></button>
                 <div className={s.searchWrapper}>
-                  <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => {setSearchTerm(e.target.value); setCurrentPage(1);}} />
+                  <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1) }} />
                   <LuSearch size={18} />
                 </div>
               </div>
@@ -286,14 +334,14 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
               <thead>
                 <tr>
                   {[
-                    { label: 'No.', key: 'no' },
-                    { label: 'NAME', key: 'name' },
+                    { label: 'No.',     key: 'no' },
+                    { label: 'NAME',    key: 'name' },
                     { label: 'ADDRESS', key: 'address' },
-                    { label: 'DATE', key: 'date' },
-                    { label: 'QTY', key: 'qty' },
-                    { label: 'AMOUNT', key: 'amount' },
+                    { label: 'DATE',    key: 'date' },
+                    { label: 'QTY',     key: 'qty' },
+                    { label: 'AMOUNT',  key: 'amount' },
                     { label: 'PAYMENT', key: 'paymentMethod' },
-                    { label: 'STATUS', key: 'status' }
+                    { label: 'STATUS',  key: 'status' }
                   ].map((col) => (
                     <th key={col.key}>
                       <div className={s.sortableHeader}>
@@ -310,10 +358,9 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
               </thead>
               <tbody>
                 {paginatedTx.map((tx, i) => {
-                  const isBank = tx.paymentMethod?.toLowerCase().includes('bank');
-                  
+                  const isBank = tx.paymentMethod?.toLowerCase().includes('bank')
                   return (
-                    <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''}>
+                    <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''} onClick={() => handleOpenView(tx)} style={{ cursor: 'pointer' }}>
                       <td>{tx.no}</td>
                       <td style={{ fontWeight: 600 }}>{tx.name}</td>
                       <td>{tx.address}</td>
@@ -322,24 +369,19 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
                       <td>₱ {tx.amount.toLocaleString()}</td>
                       <td style={{ color: '#64748b' }}>{tx.paymentMethod}</td>
                       <td>
-                        <span 
+                        <span
                           className={tx.status === 'PAID' ? s.statusPaid : s.statusPending}
-                          style={{
-                            cursor: isBank ? 'pointer' : 'default',
-                            textDecoration: isBank && tx.status === 'PENDING' ? 'underline' : 'none',
-                            transition: 'all 0.2s'
-                          }}
-                          onClick={() => handleTogglePaymentStatus(tx)}
-                          title={isBank ? "Click to toggle payment status" : "Non-bank payments process automatically"}
+                          style={{ cursor: isBank ? 'pointer' : 'default', textDecoration: isBank && tx.status === 'PENDING' ? 'underline' : 'none', transition: 'all 0.2s' }}
+                          onClick={e => { e.stopPropagation(); handleTogglePaymentStatus(tx) }}
+                          title={isBank ? 'Click to toggle payment status' : 'Non-bank payments process automatically'}
                         >
                           {tx.status}
                         </span>
                       </td>
-                      <td className={s.actionCell}>
+                      <td className={s.actionCell} onClick={e => e.stopPropagation()}>
                         <div className={s.actionWrapper}>
                           <button className={s.archiveBtn} onClick={() => handleToggleArchive(tx.no)}>
-                            <LuArchive size={16} />
-                            <span>Archive</span>
+                            <LuArchive size={16} /><span>Archive</span>
                           </button>
                         </div>
                       </td>
@@ -348,26 +390,18 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
                 })}
               </tbody>
             </table>
-            
+
             <div className={s.footer}>
               <div className={s.showDataText}>
                 Showing <span className={s.countBadge}>{paginatedTx.length}</span> of {filteredTx.length}
               </div>
               <div className={s.pagination}>
                 {Array.from({ length: totalPages }, (_, i) => (
-                  <button 
-                    key={i + 1} 
-                    className={currentPage === i + 1 ? s.pageCircleActive : s.pageCircle}
-                    onClick={() => setCurrentPage(i + 1)}
-                  >
+                  <button key={i + 1} className={currentPage === i + 1 ? s.pageCircleActive : s.pageCircle} onClick={() => setCurrentPage(i + 1)}>
                     {i + 1}
                   </button>
                 ))}
-                <button 
-                  className={s.nextBtn} 
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(prev => prev + 1)}
-                >
+                <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
                   <LuChevronRight />
                 </button>
               </div>
@@ -376,19 +410,193 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
         )}
       </main>
 
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        onSuccess={handleExportSuccess}
-      />
+      <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} onSuccess={handleExportSuccess} />
+      <ExportRequestModal isOpen={showExportRequestModal} onClose={() => setShowExportRequestModal(false)} targetModule="Sales" requesterId={employeeId} onSuccess={(msg) => handleExportSuccess(msg, 'success')} />
 
-      <ExportRequestModal
-        isOpen={showExportRequestModal}
-        onClose={() => setShowExportRequestModal(false)}
-        targetModule="Sales"
-        requesterId={employeeId}
-        onSuccess={(msg) => handleExportSuccess(msg, 'success')}
-      />
+      {/* ===== VIEW MODAL ===== */}
+      {showViewModal && selectedTx && (
+        <div className={s.viewBackdrop} onClick={closeViewModal}>
+          <div className={s.viewModal} onClick={e => e.stopPropagation()}>
+
+            {/* ── HEADER ── */}
+            <div className={s.viewModalHeader}>
+              <div className={s.viewModalHeaderLeft}>
+                <h2 className={s.viewCompanyName}>AE Samonte Trading</h2>
+                <p className={s.viewOrderNumber}>No. {selectedTx.no}</p>
+              </div>
+              <div className={s.viewModalHeaderRight}>
+                <span className={selectedTx.status === 'PAID' ? s.viewStatusPaid : s.viewStatusPending}>
+                  {selectedTx.status}
+                </span>
+                <button className={s.viewCloseBtn} onClick={closeViewModal}>
+                  <LuX size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* ── DATE ROW ── */}
+            <div className={s.viewDateRow}>DATE: {selectedTx.date}</div>
+
+            {/* ── TABS ── */}
+            <div className={s.viewTabs}>
+              <button
+                className={`${s.viewTab} ${activeTab === 'invoice' ? s.viewTabActive : ''}`}
+                onClick={() => setActiveTab('invoice')}
+              >
+                Sales Invoice
+              </button>
+              <button
+                className={`${s.viewTab} ${activeTab === 'delivery' ? s.viewTabActive : ''}`}
+                onClick={() => setActiveTab('delivery')}
+              >
+                Delivery Receipt
+              </button>
+            </div>
+
+            {/* ── SCROLLABLE BODY ── */}
+            <div className={s.viewPrintBody}>
+
+              {/* SALES INVOICE TAB */}
+              {activeTab === 'invoice' && (
+                <>
+                  {/* Customer Details */}
+                  <div className={s.viewCustomerSection}>
+                    <p className={s.viewSectionTitle}>CUSTOMER DETAILS</p>
+                    <div className={s.viewCustomerGrid}>
+                      <div>
+                        <p className={s.viewInfoLabel}>Contact Number</p>
+                        <p className={s.viewInfoValue}>{selectedTx.contact || '—'}</p>
+                      </div>
+                      <div>
+                        <p className={s.viewInfoLabel}>Address</p>
+                        <p className={s.viewInfoValue}>{selectedTx.address}</p>
+                      </div>
+                      <div>
+                        <p className={s.viewInfoLabel}>Payment Method</p>
+                        <p className={s.viewInfoValue}>{selectedTx.paymentMethod}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Items Table */}
+                  <table className={s.viewItemsTable}>
+                    <thead>
+                      <tr>
+                        <th>ITEM DESCRIPTION</th>
+                        <th>QTY</th>
+                        <th>UNIT COST</th>
+                        <th>AMOUNT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTx.items && selectedTx.items.length > 0 ? (
+                        selectedTx.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td>
+                              <p className={s.viewItemName}>{item.description}</p>
+                              {item.unit && <p className={s.viewItemUnit}>{item.unit}</p>}
+                            </td>
+                            <td>{item.qty}</td>
+                            <td>₱ {item.unitCost.toFixed(2)}</td>
+                            <td>₱ {item.amount.toFixed(2)}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className={s.viewEmptyRow}>
+                          <td colSpan={4}>No item details available</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {/* Totals */}
+                  <div className={s.viewTotalsWrapper}>
+                    <div className={s.viewTotalsBox}>
+                      <div className={s.viewTotalLine}>
+                        <span>VATable Sales</span>
+                        <span>₱ {netOfVat.toFixed(2)}</span>
+                      </div>
+                      <div className={s.viewTotalLine}>
+                        <span>VAT Amount (12%)</span>
+                        <span>₱ {lessVat.toFixed(2)}</span>
+                      </div>
+                      <div className={s.viewTotalFinal}>
+                        <span>Total</span>
+                        <span>₱ {totalAmt.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* DELIVERY RECEIPT TAB */}
+              {activeTab === 'delivery' && (
+                <>
+                  <div className={s.viewCustomerSection}>
+                    <p className={s.viewSectionTitle}>DELIVERY DETAILS</p>
+                    <div className={s.viewCustomerGrid}>
+                      <div>
+                        <p className={s.viewInfoLabel}>Delivered To</p>
+                        <p className={s.viewInfoValue}>{selectedTx.registeredName || selectedTx.name}</p>
+                      </div>
+                      <div>
+                        <p className={s.viewInfoLabel}>Address</p>
+                        <p className={s.viewInfoValue}>{selectedTx.address}</p>
+                      </div>
+                      <div>
+                        <p className={s.viewInfoLabel}>P.O. No.</p>
+                        <p className={s.viewInfoValue}>{selectedTx.poNo || '—'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <table className={s.viewItemsTable}>
+                    <thead>
+                      <tr>
+                        <th>ITEM</th>
+                        <th>QTY</th>
+                        <th>UNIT</th>
+                        <th>ARTICLES / PARTICULARS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTx.items && selectedTx.items.length > 0 ? (
+                        selectedTx.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td>{idx + 1}</td>
+                            <td>{item.qty}</td>
+                            <td>{item.unit || 'PCS'}</td>
+                            <td style={{ textAlign: 'left' }}>
+                              <p className={s.viewItemName}>{item.description}</p>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr className={s.viewEmptyRow}>
+                          <td colSpan={4}>No item details available</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+
+            {/* ── FOOTER ── */}
+            <div className={s.viewModalFooter}>
+              <button
+                className={s.viewBtnPrint}
+                onClick={() => activeTab === 'invoice' ? printSalesInvoice(selectedTx) : printDeliveryReceipt(selectedTx)}
+              >
+                <LuPrinter size={15} />
+                Print {activeTab === 'invoice' ? 'Invoice' : 'Receipt'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
