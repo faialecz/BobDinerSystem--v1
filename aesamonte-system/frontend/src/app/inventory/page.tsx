@@ -19,7 +19,8 @@ import {
   LuArchive, 
   LuChevronLeft, 
   LuChevronRight, 
-  LuPencil
+  LuPencil,
+  LuX,
 } from "react-icons/lu";
 
 /* ================= TYPES ================= */
@@ -54,7 +55,7 @@ export interface Product {
   unitPrice: number;
   price: number;
   status: string;
-  is_archived?: boolean; // <--- ADDED FLAG
+  is_archived?: boolean;
 }
 
 interface InventorySummary {
@@ -75,11 +76,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
   // --- RBAC permission flags ---
   const isInventoryHead = role === 'Head' && department === 'Inventory';
   const isSalesHead     = role === 'Head' && department === 'Sales';
-  // Can add/edit/archive inventory items
   const canModify       = ['Admin', 'Manager', 'Staff'].includes(role) || isInventoryHead;
-  // Can export directly
   const canExport       = ['Admin', 'Manager'].includes(role) || isInventoryHead;
-  // Must request export from the Inventory Head
   const mustRequestExport = isSalesHead;
 
   /* ================= STATE ================= */
@@ -102,7 +100,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
 
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
-  const [isArchiveView, setIsArchiveView] = useState(false); // <--- ADDED STATE
+  const [isArchiveView, setIsArchiveView] = useState(false);
 
   // Supplier States
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -118,6 +116,10 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
   const [showExportModal, setShowExportModal] = useState(false);
   const [showExportRequestModal, setShowExportRequestModal] = useState(false);
 
+  // View Modal States
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewProduct, setViewProduct] = useState<Product | null>(null);
+
   // States for Alert Modal
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -126,25 +128,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
   // Action Menu State
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-
-  const [formData, setFormData] = useState({
-    itemName: '',
-    itemDescription: '',
-    brand: '',
-    internalSku: '',
-    qty: '',
-    uom: 'Select',
-    reorderPoint: '',
-    unitPrice: '',
-    sellingPrice: '',
-    detailSupplierName: 'Select',
-    detailContactPerson: '',
-    detailContactNumber: '', 
-    detailCostPrice: '',
-    detailLeadTime: '',
-    detailMinOrder: ''
-  });
-
 
   /* ================= HANDLERS ================= */
 
@@ -157,24 +140,16 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
   const fetchInventory = async () => {
     setIsLoading(true);
     try {
-      // The "?t=" timestamp forces the browser to bypass the cache
       const res = await fetch(`http://127.0.0.1:5000/api/inventory?t=${new Date().getTime()}`, {
         method: "GET",
-        headers: {
-          "Cache-Control": "no-cache",
-          "Pragma": "no-cache"
-        },
+        headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
         cache: "no-store" 
       });
-      
       if (!res.ok) throw new Error("Failed to fetch");
       const productData: Product[] = await res.json();
       setProducts(productData);
-
-      // ONLY count active items!
       const activeProducts = productData.filter(p => !p.is_archived);
       const outOfStock = activeProducts.filter(p => p.qty === 0);
-
       setData(prev => ({
         ...prev,
         totalProducts: activeProducts.length,
@@ -182,7 +157,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         outOfStockCount: outOfStock.length,
         outOfStockItems: outOfStock,
       }));
-
     } catch (err) {
       console.error("Failed to fetch Inventory", err);
     } finally {
@@ -192,21 +166,15 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
 
   const fetchInventorySummary = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/inventory/summary", {
-        cache: "no-store"
-      });
-
+      const res = await fetch("http://127.0.0.1:5000/api/inventory/summary", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch summary");
-
       const summary = await res.json();
-
       setData(prev => ({
         ...prev,
         weeklyInventory: summary.weekly,
         monthlyInventory: summary.monthly,
         yearlyInventory: summary.yearly,
       }));
-
     } catch (err) {
       console.error("Failed to fetch summary", err);
     }
@@ -221,13 +189,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     const fetchSuppliers = async () => {
       try {
         const res = await fetch("http://127.0.0.1:5000/api/suppliers");
-        if (res.ok) {
-          const data = await res.json();
-          setSuppliers(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch suppliers", err);
-      }
+        if (res.ok) { const data = await res.json(); setSuppliers(data); }
+      } catch (err) { console.error("Failed to fetch suppliers", err); }
     };
     fetchSuppliers();
   }, []);
@@ -236,13 +199,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     const fetchUOMs = async () => {
       try {
         const res = await fetch("http://127.0.0.1:5000/api/uom");
-        if (res.ok) {
-          const data = await res.json();
-          setUoms(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch UOMs", err);
-      }
+        if (res.ok) { const data = await res.json(); setUoms(data); }
+      } catch (err) { console.error("Failed to fetch UOMs", err); }
     };
     fetchUOMs();
   }, []);
@@ -260,30 +218,14 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
   /* ================= TOGGLE ARCHIVE ================= */
   const handleToggleArchive = async (id: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/inventory/archive/${id}`, {
-        method: 'PUT',
-      });
-
+      const response = await fetch(`http://127.0.0.1:5000/api/inventory/archive/${id}`, { method: 'PUT' });
       if (response.ok) {
         const apiData = await response.json();
-        
-        setProducts(prev => 
-          prev.map(p => 
-            p.id === id ? { 
-              ...p, 
-              is_archived: apiData.is_archived,
-              status: apiData.new_status
-            } : p
-          )
-        );
-
+        setProducts(prev => prev.map(p => p.id === id ? { ...p, is_archived: apiData.is_archived, status: apiData.new_status } : p));
         fetchInventorySummary();
-
-        // The correct toast message pulled directly from the successful backend flip!
         const actionMsg = apiData.is_archived ? "Moved to Archive" : "Restored from Archive";
         handleExportSuccess(actionMsg, 'success');
         setActiveMenuId(null);
-        
       } else {
         const errorData = await response.json();
         handleExportSuccess(`Failed: ${errorData.error}`, "error");
@@ -295,15 +237,16 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
 
   /* ================= HANDLERS CONTINUED ================= */
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-
   const requestSort = (key: keyof Product) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
     setSortConfig({ key, direction });
+  };
+
+  const handleViewClick = (product: Product) => {
+    setViewProduct(product);
+    setShowViewModal(true);
+    setActiveMenuId(null);
   };
 
   const handleEditClick = async (product: Product) => {
@@ -329,7 +272,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedItem),
       });
-
       if (res.ok) {
         setShowEditModal(false);
         handleExportSuccess("Item updated successfully!");
@@ -360,13 +302,11 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         detailLeadTime: Number(item.detailLeadTime) || 0,
         detailMinOrder: Number(item.detailMinOrder) || 0
       }));
-
       const res = await fetch("http://127.0.0.1:5000/api/inventory/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formattedItems), 
       });
-
       if (res.ok) {
         const result = await res.json();
         handleExportSuccess(result.message); 
@@ -385,10 +325,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
   /* ================= DATA PROCESSING ================= */
 
   const filteredProducts = products.filter(p => {
-    // OLD: const matchesArchiveView = isArchiveView ? p.is_archived === true : !p.is_archived;
-    // NEW: Use Boolean() to safely evaluate truthy/falsy values
     const matchesArchiveView = isArchiveView ? Boolean(p.is_archived) : !p.is_archived;
-    
     const searchStr = `${p.id} ${p.item_name} ${p.brand}`.toLowerCase();
     const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
     return matchesArchiveView && matchesSearch;
@@ -436,6 +373,13 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
       </div>
     ));
 
+  /* ── Status badge class helper ── */
+  const getStatusClass = (status: string) => {
+    if (status?.includes('Available')) return s.viewStatusAvailable;
+    if (status?.includes('Low Stock')) return s.viewStatusLowStock;
+    return s.viewStatusOutOfStock;
+  };
+
   if (isLoading) return <div className={s.loadingContainer}>Loading Inventory...</div>; 
 
   return (
@@ -451,14 +395,10 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                 {isError ? '!' : '✓'}
               </div>
             </div>
-            
             <div className={s.alertBody}>
               <h2 className={s.alertTitle}>{isError ? 'Oops!' : 'Success!'}</h2>
               <p className={s.alertMessage}>{toastMessage}</p>
-              <button 
-                className={`${s.okButton} ${isError ? s.okButtonError : ''}`} 
-                onClick={() => setShowToast(false)}
-              >
+              <button className={`${s.okButton} ${isError ? s.okButtonError : ''}`} onClick={() => setShowToast(false)}>
                 OK
               </button>
             </div>
@@ -489,86 +429,51 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         </div>
 
         <div className={s.topGrid}>
-
-          {/* TOTAL PRODUCTS CARD */}
           <section className={s.statCard}>
             <p className={s.cardTitle}>Total Products</p>
-
-            <h2 className={s.bigNumber}>
-              {data.totalProducts.toLocaleString()}
-            </h2>
-
+            <h2 className={s.bigNumber}>{data.totalProducts.toLocaleString()}</h2>
             <div className={s.cardFooter}>
-              <span className={s.subText}>
-                vs last month
-              </span>
-
-              <span className={s.pill}>
-                +{data.totalProductsChange}%
-              </span>
+              <span className={s.subText}>vs last month</span>
+              <span className={s.pill}>+{data.totalProductsChange}%</span>
             </div>
           </section>
 
-
-          {/* INVENTORY REPORT CARD */}
           <section className={s.statCard}>
             <p className={s.cardTitle}>Inventory Report</p>
-
             <div className={s.list}>
               <div className={`${s.listRow} ${s.altRow}`}>
-                <span>Weekly</span>
-                <span className={s.green}>
-                  {data.weeklyInventory.toLocaleString()}
-                </span>
+                <span>Weekly</span><span className={s.green}>{data.weeklyInventory.toLocaleString()}</span>
               </div>
-
               <div className={s.listRow}>
-                <span>Monthly</span>
-                <span className={s.red}>
-                  {data.monthlyInventory.toLocaleString()}
-                </span>
+                <span>Monthly</span><span className={s.red}>{data.monthlyInventory.toLocaleString()}</span>
               </div>
-
               <div className={`${s.listRow} ${s.altRow}`}>
-                <span>Yearly</span>
-                <span className={s.blue}>
-                  {data.yearlyInventory.toLocaleString()}
-                </span>
+                <span>Yearly</span><span className={s.blue}>{data.yearlyInventory.toLocaleString()}</span>
               </div>
             </div>
           </section>
 
-
-          {/* OUT OF STOCK CARD */}
           <section className={s.statCard}>
             <p className={s.cardTitle}>Out of Stock</p>
-
-            <h2 className={s.bigNumber}>
-              {data.outOfStockCount}
-            </h2>
-
+            <h2 className={s.bigNumber}>{data.outOfStockCount}</h2>
             <div className={s.cardFooter}>
-              <span className={s.subText}>
-                Products currently unavailable
-              </span>
+              <span className={s.subText}>Products currently unavailable</span>
             </div>
           </section>
-
         </div>
 
         {/* ================= CONDITIONAL RENDERING ================= */}
         {isArchiveView ? (
-           <ArchiveTable 
-             products={products} 
-             onRestore={handleToggleArchive} 
-             onBack={() => setIsArchiveView(false)} 
-           />
+          <ArchiveTable 
+            products={products} 
+            onRestore={handleToggleArchive} 
+            onBack={() => setIsArchiveView(false)} 
+          />
         ) : (
           <div className={s.tableContainer}>
             <div className={s.header}>
               <h1 className={s.title}>Product List</h1>
               <div className={s.controls}>
-                {/* ARCHIVE BUTTON */}
                 <button 
                   className={s.archiveIconBtn} 
                   style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }} 
@@ -606,12 +511,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                       <div className={s.sortableHeader}>
                         <span>{col.label}</span>
                         <div className={s.sortIconsStack}>
-                          <LuChevronUp
-                            className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
-                          />
-                          <LuChevronDown
-                            className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
-                          />
+                          <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                          <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
                         </div>
                       </div>
                     </th>
@@ -621,7 +522,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
               </thead>
               <tbody>
                 {paginatedProducts.map(p => (
-                  <tr key={p.id}>
+                  <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer' }}>
                     <td>{p.id}</td>
                     <td>{p.item_name}</td>
                     <td>{p.item_description}</td>
@@ -632,26 +533,20 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                     <td>₱ {p.unitPrice?.toLocaleString()}</td>
                     <td>₱ {p.price?.toLocaleString()}</td>
                     <td>
-                      <span
-                        className={
-                          p.status.includes("Available")
-                            ? s.pillGreen
-                            : p.status.includes("Low Stock")
-                            ? s.pillYellow
-                            : p.status.includes("Out of Stock")
-                            ? s.pillRed
-                            : ""
-                        }
-                      >
+                      <span className={
+                        p.status.includes("Available") ? s.pillGreen
+                        : p.status.includes("Low Stock") ? s.pillYellow
+                        : p.status.includes("Out of Stock") ? s.pillRed
+                        : ""
+                      }>
                         {p.status}
                       </span>
                     </td>
-                    <td className={s.actionCell}>
+                    <td className={s.actionCell} onClick={e => e.stopPropagation()}>
                       <LuEllipsisVertical
                         className={s.moreIcon}
                         onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
                       />
-
                       {activeMenuId === p.id && (
                         <div className={s.popoverMenu} ref={menuRef}>
                           {canModify ? (
@@ -691,14 +586,10 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         )}
       </div>
 
-      {/* --- Export Modal (direct export) --- */}
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        onSuccess={handleExportSuccess}
-      />
+      {/* --- Export Modal --- */}
+      <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} onSuccess={handleExportSuccess} />
 
-      {/* --- Export Request Modal (for cross-dept Heads) --- */}
+      {/* --- Export Request Modal --- */}
       <ExportRequestModal
         isOpen={showExportRequestModal}
         onClose={() => setShowExportRequestModal(false)}
@@ -735,6 +626,86 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
           setShowSupplierModal(false);
         }}
       />
+
+      {/* ===== INVENTORY VIEW MODAL ===== */}
+      {showViewModal && viewProduct && (
+        <div className={s.viewBackdrop} onClick={() => setShowViewModal(false)}>
+          <div className={s.viewModal} onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className={s.viewModalHeader}>
+              <div className={s.viewModalHeaderLeft}>
+                <h2 className={s.viewItemName}>{viewProduct.item_name}</h2>
+                <p className={s.viewItemSubtitle}>
+                  {viewProduct.id}&nbsp;•&nbsp;SKU: {viewProduct.sku || '—'}
+                </p>
+              </div>
+              <div className={s.viewModalHeaderRight}>
+                <span className={getStatusClass(viewProduct.status)}>
+                  {viewProduct.status}
+                </span>
+                <button className={s.viewCloseBtn} onClick={() => setShowViewModal(false)}>
+                  <LuX size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className={s.viewBody}>
+
+              {/* Product Details */}
+              <div className={s.viewSection}>
+                <p className={s.viewSectionTitle}>PRODUCT DETAILS</p>
+                <div className={s.viewSectionGrid}>
+                  <div>
+                    <p className={s.viewFieldLabel}>Brand</p>
+                    <p className={s.viewFieldValue}>{viewProduct.brand || '—'}</p>
+                  </div>
+                  <div>
+                    <p className={s.viewFieldLabel}>SKU</p>
+                    <p className={s.viewFieldValueMono}>{viewProduct.sku || '—'}</p>
+                  </div>
+                  <div>
+                    <p className={s.viewFieldLabel}>Unit (UOM)</p>
+                    <p className={s.viewFieldValue}>{viewProduct.uom || '—'}</p>
+                  </div>
+                </div>
+                {viewProduct.item_description && (
+                  <div className={s.viewDescriptionRow}>
+                    <p className={s.viewFieldLabel}>Description</p>
+                    <p className={s.viewFieldValue}>{viewProduct.item_description}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Stock & Pricing table */}
+              <table className={s.viewItemsTable}>
+                <thead>
+                  <tr>
+                    <th>ITEM</th>
+                    <th>QTY</th>
+                    <th>UNIT COST</th>
+                    <th>SELLING PRICE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <p className={s.viewItemRowName}>{viewProduct.item_name}</p>
+                      {viewProduct.uom && <p className={s.viewItemRowUnit}>{viewProduct.uom}</p>}
+                    </td>
+                    <td>{viewProduct.qty}</td>
+                    <td>₱ {viewProduct.unitPrice?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
+                    <td>₱ {viewProduct.price?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

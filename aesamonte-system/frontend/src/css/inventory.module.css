@@ -830,3 +830,248 @@
   justify-content: center;
   align-items: center;
 }
+
+/* ============= For View Item ============== */
+
+/* ── Backdrop ── */
+.viewBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+/* ── Modal container ── */
+.viewModal {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 700px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.viewModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 24px 28px 0 28px;
+  gap: 12px;
+}
+
+.viewModalHeaderLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viewItemName {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.viewItemSubtitle {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.viewModalHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Status badges ── */
+.viewStatusAvailable {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1.5px solid #22c55e;
+  color: #16a34a;
+}
+
+.viewStatusLowStock {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1.5px solid #fde047;
+  color: #ca8a04;
+}
+
+.viewStatusOutOfStock {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1.5px solid #fca5a5;
+  color: #dc2626;
+}
+
+/* ── Close button ── */
+.viewCloseBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.viewCloseBtn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+/* ── Scrollable body ── */
+.viewBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Product details section ── */
+.viewSection {
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+.viewSectionTitle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #1e3a8a;
+  text-transform: uppercase;
+  margin: 0 0 14px 0;
+}
+
+.viewSectionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.viewFieldLabel {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0 0 4px 0;
+}
+
+.viewFieldValue {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.viewFieldValueMono {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+  font-family: monospace;
+}
+
+.viewDescriptionRow {
+  margin-top: 12px;
+}
+
+/* ── Items table ── */
+.viewItemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.viewItemsTable thead tr {
+  border-bottom: 1.5px solid #e2e8f0;
+}
+
+.viewItemsTable th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.viewItemsTable th:not(:first-child) {
+  text-align: center;
+}
+
+.viewItemsTable th:last-child {
+  text-align: right;
+}
+
+.viewItemsTable tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.viewItemsTable td {
+  padding: 12px 10px;
+  color: #334155;
+  text-align: center;
+  vertical-align: top;
+}
+
+.viewItemsTable td:first-child {
+  text-align: left;
+}
+
+.viewItemsTable td:last-child {
+  text-align: right;
+}
+
+.viewItemRowName {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #0f172a;
+  margin: 0;
+}
+
+.viewItemRowUnit {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 2px 0 0 0;
+}
