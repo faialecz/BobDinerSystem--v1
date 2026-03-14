@@ -7,9 +7,10 @@ import TopHeader from '@/components/layout/TopHeader';
 import ExportButton from '@/components/features/ExportButton';
 import ExportRequestModal from '@/components/features/ExportRequestModal';
 import AddInventoryModal from './addInventoryModal';
-import EditInventoryModal from './editInventoryModal'; 
-import ExportModal from './exportModal'; 
+import EditInventoryModal from './editInventoryModal';
+import ExportModal from './exportModal';
 import ArchiveTable from './archiveInvModal';
+import AddSupplierModal from '@/app/suppliers/addSupplierModal';
 import {
   LuSearch, 
   LuEllipsisVertical, 
@@ -144,14 +145,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     detailMinOrder: ''
   });
 
-  const [supplierFormData, setSupplierFormData] = useState({
-    supplierName: '',
-    address: '',
-    contactPerson: '',
-    contact: '', 
-    email: '',
-    paymentTerms: 'Cash on Delivery'
-  });
 
   /* ================= HANDLERS ================= */
 
@@ -306,16 +299,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleNumericInputChange = (e: React.ChangeEvent<HTMLInputElement>, isSupplierReg = false) => {
-    const { name, value } = e.target;
-    const cleanValue = value.replace(/[^\d]/g, '');
-    
-    if (isSupplierReg) {
-      setSupplierFormData({ ...supplierFormData, [name]: cleanValue });
-    } else {
-      setFormData({ ...formData, [name]: cleanValue });
-    }
-  };
 
   const requestSort = (key: keyof Product) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -742,58 +725,16 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         uoms={uoms}      
       />
 
-      {showSupplierModal && (
-        <div className={s.modalOverlaySupplier}>
-          <div className={s.modalContentSupplier}>
-            <div className={s.modalHeader}>
-              <div className={s.modalTitleGroup}>
-                <h2 className={s.title}>Register New Supplier</h2>
-                <p className={s.subText}>Create a profile for a new supplier.</p>
-              </div>
-             </div>
-            <div className={`${s.modalForm} ${s.mt_20}`}>
-              <h4 className={s.sectionTitle}>Company Information</h4>
-              <div className={s.formRow}>
-                <div className={s.formGroup}>
-                  <label>Supplier Name</label>
-                  <input name="supplierName" value={supplierFormData.supplierName} onChange={(e) => setSupplierFormData({...supplierFormData, supplierName: e.target.value})} />
-                </div>
-              </div>
-              <div className={s.formGroupFull}>
-                <label>Address</label>
-                <input name="address" value={supplierFormData.address} onChange={(e) => setSupplierFormData({...supplierFormData, address: e.target.value})} />
-              </div>
-              <h4 className={s.sectionTitle}>Primary Contact</h4>
-              <div className={s.formRow}>
-                <div className={s.formGroup}>
-                  <label>Contact Person</label>
-                  <input name="contactPerson" value={supplierFormData.contactPerson} onChange={(e) => setSupplierFormData({...supplierFormData, contactPerson: e.target.value})} />
-                </div>
-                <div className={s.formGroup}>
-                  <label>Contact No.</label>
-                  <input name="contact" value={supplierFormData.contact} onChange={(e) => handleNumericInputChange(e, true)} />
-                </div>
-              </div>
-              <div className={s.formGroupFull}>
-                <label>Email Address</label>
-                <input name="email" value={supplierFormData.email} onChange={(e) => setSupplierFormData({...supplierFormData, email: e.target.value})} />
-              </div>
-              <h4 className={s.sectionTitle}>Terms & Notes</h4>
-              <div className={s.formGroup}>
-                <label>Payment Terms</label>
-                <select name="paymentTerms" value={supplierFormData.paymentTerms} onChange={(e) => setSupplierFormData({...supplierFormData, paymentTerms: e.target.value})}>
-                  <option>Cash on Delivery</option>
-                  <option>Card</option>
-                </select>
-              </div>
-              <div className={s.modalFooter}>
-                <button type="button" onClick={() => setShowSupplierModal(false)} className={s.cancelBtn}>Cancel</button>
-                <button type="button" onClick={() => setShowSupplierModal(false)} className={s.createBtn}>Create Supplier</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddSupplierModal
+        isOpen={showSupplierModal}
+        onClose={() => setShowSupplierModal(false)}
+        onSuccess={(msg) => {
+          setToastMessage(msg);
+          setIsError(false);
+          setShowToast(true);
+          setShowSupplierModal(false);
+        }}
+      />
     </div>
   );
 };
