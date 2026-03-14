@@ -393,21 +393,19 @@ def get_inventory_summary():
     try:
         cur.execute("""
             SELECT
-                COUNT(*) FILTER (
-                    WHERE created_at >= NOW() - INTERVAL '7 days'
-                    AND item_status_id != 4
-                ) AS weekly_count,
+                COALESCE(SUM(od.order_quantity) FILTER (
+                    WHERE ot.order_date >= NOW() - INTERVAL '7 days'
+                ), 0) AS weekly_count,
 
-                COUNT(*) FILTER (
-                    WHERE created_at >= NOW() - INTERVAL '30 days'
-                    AND item_status_id != 4
-                ) AS monthly_count,
+                COALESCE(SUM(od.order_quantity) FILTER (
+                    WHERE ot.order_date >= NOW() - INTERVAL '30 days'
+                ), 0) AS monthly_count,
 
-                COUNT(*) FILTER (
-                    WHERE created_at >= NOW() - INTERVAL '1 year'
-                    AND item_status_id != 4
-                ) AS yearly_count
-            FROM inventory
+                COALESCE(SUM(od.order_quantity) FILTER (
+                    WHERE ot.order_date >= NOW() - INTERVAL '1 year'
+                ), 0) AS yearly_count
+            FROM order_details od
+            JOIN order_transaction ot ON od.order_id = ot.order_id
         """)
 
         row = cur.fetchone()
@@ -417,6 +415,10 @@ def get_inventory_summary():
             "monthly": row[1],
             "yearly": row[2]
         })
+
+    except Exception as e:
+        print("Error fetching inventory summary:", e)
+        return jsonify({"weekly": 0, "monthly": 0, "yearly": 0}), 200
 
     finally:
         cur.close()
