@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
 import styles from "@/css/inventory.module.css";
@@ -15,10 +16,12 @@ interface EditInventoryModalProps {
 const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms }: EditInventoryModalProps) => {
   const s = styles as Record<string, string>;
   const [formData, setFormData] = useState<any>(null);
+  const [addQty, setAddQty] = useState<string>('');
 
   // Initialize form with data fetched from backend
   useEffect(() => {
     if (itemData) {
+      setAddQty('');
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFormData({
         id: itemData.id,
@@ -66,12 +69,14 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
   };
 
   const handleSubmit = () => {
-    onSave(formData);
+    const addition = parseInt(addQty) || 0;
+    const finalQty = (parseInt(formData.qty) || 0) + addition;
+    onSave({ ...formData, qty: finalQty });
   };
 
   return (
     <div className={s.modalOverlay} style={{ zIndex: 1100 }}> 
-      <div className={s.modalContent} style={{ width: '850px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0 }}>
+      <div className={s.modalContent} style={{ width: '850px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, borderRadius: '12px', overflow: 'hidden' }}>
         
         {/* --- HEADER --- */}
         <div className={s.modalHeader} style={{ padding: '20px 24px', borderBottom: '1px solid #eaeaea', backgroundColor: '#fff' }}>
@@ -85,7 +90,7 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px', backgroundColor: '#f9fafb' }}>
           
           {/* --- READ-ONLY IDENTITY SECTION --- */}
-          <div style={{ backgroundColor: '#eff6ff', padding: '20px', borderRadius: '8px', marginBottom: '24px', border: '1px solid #dbeafe' }}>
+          <div style={{ backgroundColor: '#eff6ff', padding: '20px', borderRadius: '12px', marginBottom: '24px', border: '1px solid #dbeafe' }}>
             <h4 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', textTransform: 'uppercase', color: '#1e40af', letterSpacing: '0.5px' }}>
               Product Identification
             </h4>
@@ -103,7 +108,7 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
           </div>
 
           {/* --- SUPPLIER DETAILS --- */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', marginBottom: '20px' }}>
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', marginBottom: '20px' }}>
             <h4 style={{ margin: '0 0 15px 0', fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>Supplier Details</h4>
             <div className={s.formRowThree} style={{ gap: '15px' }}>
               
@@ -147,57 +152,107 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
           </div>
 
           {/* --- ITEM DETAILS --- */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', marginBottom: '20px' }}>
-            <h4 style={{ margin: '0 0 15px 0', fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>Item Details</h4>
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', marginBottom: '20px' }}>
+            <h4 style={{ margin: '0 0 15px 0', fontSize: '0.95rem', fontWeight: 600, color: '#1e40af' }}>Item Details</h4>
             <div className={s.formRow} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '15px', marginBottom: '15px' }}>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Item Name</label>
-                <input 
-                  className={s.cleanInput}
-                  value={formData.itemName} 
+                <input
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.itemName}
                   onChange={(e) => setFormData({...formData, itemName: e.target.value})}
                 />
               </div>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Brand</label>
-                <input 
-                  className={s.cleanInput}
-                  value={formData.brand} 
+                <input
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.brand}
                   onChange={(e) => setFormData({...formData, brand: e.target.value})}
                 />
               </div>
             </div>
             <div className={s.formGroupFull}>
               <label className={s.miniLabel}>Description</label>
-              <input 
-                className={s.cleanInput}
-                value={formData.itemDescription} 
+              <input
+                style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                value={formData.itemDescription}
                 onChange={(e) => setFormData({...formData, itemDescription: e.target.value})}
               />
             </div>
           </div>
 
           {/* --- STOCK & PRICING --- */}
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-            <h5 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+            <h5 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#1e40af', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
               Stock
             </h5>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
               <div className={s.formGroup}>
-                <label className={s.miniLabel}>Quantity</label>
-                <input 
+                <label className={s.miniLabel}>Current Stock</label>
+                <div style={{
+                  padding: '8px 12px', height: '38px', backgroundColor: '#f3f4f6',
+                  borderRadius: '6px', border: '1px solid #e5e7eb',
+                  color: '#374151', fontSize: '0.95rem', fontWeight: 600,
+                  display: 'flex', alignItems: 'center'
+                }}>
+                  {formData.qty ?? 0}
+                </div>
+              </div>
+              <div className={s.formGroup}>
+                <label className={s.miniLabel}>Add Stock</label>
+                <input
                   type="number"
-                  className={s.cleanInput}
-                  value={formData.qty} 
-                  onChange={(e) => setFormData({...formData, qty: e.target.value})}
+                  style={{
+                    width: '100%', height: '38px',
+                    padding: '8px 12px',
+                    borderRadius: '6px', border: '1px solid #e5e7eb',
+                    backgroundColor: '#ffffff',
+                    color: '#374151', fontSize: '0.95rem', fontWeight: 600,
+                    outline: 'none'
+                  }}
+                  value={addQty}
+                  placeholder="0"
+                  onChange={(e) => setAddQty(e.target.value)}
                 />
               </div>
               <div className={s.formGroup}>
+                <label className={s.miniLabel}>New Total <span style={{ fontSize: '0.7rem', color: '#ffffff', fontWeight: 400 }}></span></label>
+                {(() => {
+                  const currentQty = parseInt(formData.qty) || 0;
+                  const newTotal = currentQty + (parseInt(addQty) || 0);
+                  const diff = parseInt(addQty) || 0;
+                  const isPos = diff > 0;
+                  const isNeg = diff < 0;
+                  return (
+                    <input
+                      type="number"
+                      style={{
+                        width: '100%', height: '38px',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${isPos ? '#86efac' : isNeg ? '#fdba74' : '#e5e7eb'}`,
+                        backgroundColor: isPos ? '#f0fdf4' : isNeg ? '#fff7ed' : '#ffffff',
+                        color: isPos ? '#15803d' : isNeg ? '#c2410c' : '#374151',
+                        fontSize: '0.95rem', fontWeight: 700,
+                        outline: 'none'
+                      }}
+                      value={newTotal}
+                      onChange={(e) => {
+                        const typed = parseInt(e.target.value);
+                        if (!isNaN(typed)) setAddQty(String(typed - currentQty));
+                        else setAddQty('');
+                      }}
+                    />
+                  );
+                })()}
+              </div>
+              <div className={s.formGroup}>
                 <label className={s.miniLabel}>Unit (UOM)</label>
-                <select 
-                  className={s.cleanInput}
-                  value={formData.uom} 
+                <select
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.uom}
                   onChange={(e) => setFormData({...formData, uom: e.target.value})}
                 >
                   <option value="Select">Select</option>
@@ -208,11 +263,10 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
               </div>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Reorder Point</label>
-                <input 
+                <input
                   type="number"
-                  className={s.cleanInput}
-                  style={{ borderColor: '#fcd34d' }}
-                  value={formData.reorderPoint} 
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #fcd34d', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.reorderPoint}
                   onChange={(e) => setFormData({...formData, reorderPoint: e.target.value})}
                 />
               </div>
@@ -220,44 +274,44 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
 
             <div style={{ borderTop: '1px dashed #e5e7eb', margin: '0 -20px 20px -20px' }}></div>
 
-            <h5 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <h5 style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#1e40af', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
               Stock & Pricing
             </h5>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Cost Price</label>
-                <input 
+                <input
                   type="number"
-                  className={s.cleanInput}
-                  value={formData.unitPrice} 
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.unitPrice}
                   onChange={(e) => setFormData({...formData, unitPrice: e.target.value})}
                 />
               </div>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Selling Price</label>
-                <input 
+                <input
                   type="number"
-                  className={s.cleanInput}
-                  value={formData.sellingPrice} 
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.sellingPrice}
                   onChange={(e) => setFormData({...formData, sellingPrice: e.target.value})}
                 />
               </div>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Lead Time</label>
-                <input 
+                <input
                   type="number"
-                  className={s.cleanInput}
-                  value={formData.leadTime} 
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.leadTime}
                   onChange={(e) => setFormData({...formData, leadTime: e.target.value})}
                 />
               </div>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Min Order (MOQ)</label>
-                <input 
+                <input
                   type="number"
-                  className={s.cleanInput}
-                  value={formData.minOrder} 
+                  style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                  value={formData.minOrder}
                   onChange={(e) => setFormData({...formData, minOrder: e.target.value})}
                 />
               </div>

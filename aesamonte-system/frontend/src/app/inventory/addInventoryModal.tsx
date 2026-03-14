@@ -174,10 +174,10 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
               <div className={s.formRowThree} style={{ gap: '15px' }}>
                 <div className={s.formGroup}>
                   <label style={{fontSize: '0.8rem', fontWeight: 500, color: '#555', marginBottom: '4px'}}>Supplier Name</label>
-                  <select 
-                    value={supplierData.detailSupplierName} 
+                  <select
+                    value={supplierData.detailSupplierName}
                     onChange={(e) => handleSupplierChange('detailSupplierName', e.target.value)}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.9rem', backgroundColor: '#fff' }}
+                    style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', fontSize: '0.95rem', backgroundColor: '#fff', color: '#374151', outline: 'none' }}
                   >
                     <option value="">Select Supplier</option>
                     {suppliers.map((sup, i) => (
@@ -187,18 +187,18 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 </div>
                 <div className={s.formGroup}>
                   <label style={{fontSize: '0.8rem', fontWeight: 500, color: '#555', marginBottom: '4px'}}>Contact Person</label>
-                  <input 
-                    value={supplierData.detailContactPerson} 
-                    onChange={(e) => handleSupplierChange('detailContactPerson', e.target.value)} 
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.9rem' }}
+                  <input
+                    value={supplierData.detailContactPerson}
+                    onChange={(e) => handleSupplierChange('detailContactPerson', e.target.value)}
+                    style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', fontSize: '0.95rem', backgroundColor: '#fff', color: '#374151', outline: 'none' }}
                   />
                 </div>
                 <div className={s.formGroup}>
                   <label style={{fontSize: '0.8rem', fontWeight: 500, color: '#555', marginBottom: '4px'}}>Contact Number</label>
-                  <input 
-                    value={supplierData.detailContactNumber} 
-                    onChange={(e) => handleSupplierChange('detailContactNumber', e.target.value.replace(/[^\d]/g, ''))} 
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.9rem' }}
+                  <input
+                    value={supplierData.detailContactNumber}
+                    onChange={(e) => handleSupplierChange('detailContactNumber', e.target.value.replace(/[^\d]/g, ''))}
+                    style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', fontSize: '0.95rem', backgroundColor: '#fff', color: '#374151', outline: 'none' }}
                   />
                 </div>
               </div>
@@ -238,26 +238,26 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px', marginBottom: '15px' }}>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Item Name</label>
-                    <input 
-                      className={s.cleanInput} 
-                      value={item.itemName} 
+                    <input
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                      value={item.itemName}
                       onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
                       placeholder="e.g. Red Cotton Shirt"
                     />
                   </div>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Brand</label>
-                    <input 
-                      className={s.cleanInput} 
-                      value={item.brand} 
-                      onChange={(e) => handleItemChange(index, 'brand', e.target.value)} 
+                    <input
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                      value={item.brand}
+                      onChange={(e) => handleItemChange(index, 'brand', e.target.value)}
                     />
                   </div>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>SKU (Auto)</label>
-                    <input 
-                      className={`${s.cleanInput} ${s.readOnlyInput}`} 
-                      value={item.internalSku} 
+                    <input
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', backgroundColor: '#f3f4f6', color: '#6b7280', fontSize: '0.95rem', outline: 'none' }}
+                      value={item.internalSku}
                       readOnly
                     />
                   </div>
@@ -268,7 +268,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                    <div className={s.formGroup}>
                     <label className={s.miniLabel}>Description</label>
                     <input
-                      className={s.cleanInput} 
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
                       value={item.itemDescription}
                       onChange={(e) => handleItemChange(index, 'itemDescription', e.target.value)}
                       placeholder="Brief details..."
@@ -280,36 +280,35 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginBottom: '15px' }}>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Quantity</label>
-                    <input 
-                      type="number" 
-                      className={s.cleanInput} 
-                      value={item.qty} 
-                      onChange={(e) => handleItemChange(index, 'qty', e.target.value)} 
+                    <input
+                      type="number"
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                      value={item.qty}
+                      onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
                     />
                   </div>
                   <div className={s.formGroup}>
-                      <label className={s.miniLabel}>Unit (UOM)</label>
-                      <select 
-                        className={s.cleanInput} 
-                        value={item.uom} 
-                        onChange={(e) => handleItemChange(index, 'uom', e.target.value)}
-                      >
-                        <option value="Select">Select</option>
-                        {uoms.map((u) => (
-                          <option key={u.id} value={u.code}>
-                            {u.name} ({u.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <label className={s.miniLabel}>Unit (UOM)</label>
+                    <select
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                      value={item.uom}
+                      onChange={(e) => handleItemChange(index, 'uom', e.target.value)}
+                    >
+                      <option value="Select">Select</option>
+                      {uoms.map((u) => (
+                        <option key={u.id} value={u.code}>
+                          {u.name} ({u.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Reorder Point</label>
-                    <input 
+                    <input
                       type="number"
-                      className={s.cleanInput} 
-                      style={{ borderColor: '#fcd34d' }}
-                      value={item.reorderPoint} 
-                      onChange={(e) => handleItemChange(index, 'reorderPoint', e.target.value)} 
+                      style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #fcd34d', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                      value={item.reorderPoint}
+                      onChange={(e) => handleItemChange(index, 'reorderPoint', e.target.value)}
                     />
                   </div>
                   <div className={s.formGroup}>
@@ -324,41 +323,41 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
                      <div className={s.formGroup}>
                       <label className={s.miniLabel}>Cost Price</label>
-                      <input 
+                      <input
                         type="number"
-                        className={s.cleanInput} 
-                        value={item.unitPrice} 
-                        onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)} 
+                        style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                        value={item.unitPrice}
+                        onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
                         placeholder="0.00"
                       />
                     </div>
                     <div className={s.formGroup}>
                       <label className={s.miniLabel}>Selling Price</label>
-                      <input 
+                      <input
                         type="number"
-                        className={s.cleanInput} 
-                        value={item.sellingPrice} 
-                        onChange={(e) => handleItemChange(index, 'sellingPrice', e.target.value)} 
+                        style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                        value={item.sellingPrice}
+                        onChange={(e) => handleItemChange(index, 'sellingPrice', e.target.value)}
                         placeholder="0.00"
                       />
                     </div>
-                    
+
                     {/* RESTORED FIELDS */}
                     <div className={s.formGroup}>
                       <label className={s.miniLabel}>Lead Time (Days)</label>
-                      <input 
-                        className={s.cleanInput} 
-                        value={item.detailLeadTime} 
-                        onChange={(e) => handleItemChange(index, 'detailLeadTime', e.target.value)} 
+                      <input
+                        style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                        value={item.detailLeadTime}
+                        onChange={(e) => handleItemChange(index, 'detailLeadTime', e.target.value)}
                         placeholder="e.g. 7"
                       />
                     </div>
                     <div className={s.formGroup}>
                       <label className={s.miniLabel}>Min Order (MOQ)</label>
-                      <input 
-                        className={s.cleanInput} 
-                        value={item.detailMinOrder} 
-                        onChange={(e) => handleItemChange(index, 'detailMinOrder', e.target.value)} 
+                      <input
+                        style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #9ca3af', backgroundColor: '#fff', color: '#374151', fontSize: '0.95rem', outline: 'none' }}
+                        value={item.detailMinOrder}
+                        onChange={(e) => handleItemChange(index, 'detailMinOrder', e.target.value)}
                         placeholder="e.g. 50"
                       />
                     </div>
