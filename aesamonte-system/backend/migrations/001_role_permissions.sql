@@ -12,12 +12,12 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     can_view   BOOLEAN DEFAULT FALSE,
     can_create BOOLEAN DEFAULT FALSE,
     can_edit   BOOLEAN DEFAULT FALSE,
-    can_delete BOOLEAN DEFAULT FALSE,
+    can_archive BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (role_id, module)
 );
 
 -- Seed default granular permissions from existing boolean columns
-INSERT INTO role_permissions (role_id, module, can_view, can_create, can_edit, can_delete)
+INSERT INTO role_permissions (role_id, module, can_view, can_create, can_edit, can_archive)
 SELECT r.role_id, m.module,
        CASE m.module
            WHEN 'sales'      THEN r.sales_permissions

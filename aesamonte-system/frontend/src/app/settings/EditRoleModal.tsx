@@ -8,7 +8,7 @@ interface GranularPerm {
   can_view: boolean;
   can_create: boolean;
   can_edit: boolean;
-  can_delete: boolean;
+  can_archive: boolean;
 }
 
 interface AssignedUser {
@@ -43,13 +43,13 @@ const MODULES = [
 ];
 
 const ACTIONS: { key: keyof GranularPerm; label: string }[] = [
-  { key: 'can_view',   label: 'View' },
-  { key: 'can_create', label: 'Create' },
-  { key: 'can_edit',   label: 'Edit' },
-  { key: 'can_delete', label: 'Delete' },
+  { key: 'can_view',    label: 'View' },
+  { key: 'can_create',  label: 'Create' },
+  { key: 'can_edit',    label: 'Edit' },
+  { key: 'can_archive', label: 'Archive' },
 ];
 
-const DEFAULT_PERM: GranularPerm = { can_view: false, can_create: false, can_edit: false, can_delete: false };
+const DEFAULT_PERM: GranularPerm = { can_view: false, can_create: false, can_edit: false, can_archive: false };
 
 export default function EditRoleModal({
   roleId,
@@ -107,7 +107,7 @@ export default function EditRoleModal({
 
   const toggleRow = (module: string) => {
     const allOn = ACTIONS.every(a => perms[module]?.[a.key]);
-    const next: GranularPerm = { can_view: !allOn, can_create: !allOn, can_edit: !allOn, can_delete: !allOn };
+    const next: GranularPerm = { can_view: !allOn, can_create: !allOn, can_edit: !allOn, can_archive: !allOn };
     setPerms(prev => ({ ...prev, [module]: next }));
   };
 
@@ -216,7 +216,7 @@ export default function EditRoleModal({
               {/* 2. Permission Matrix */}
               <section className={styles.section}>
                 <h3 className={styles.sectionTitle}>
-                  <span className={styles.sectionNum}>2</span> Granular Permission Matrix
+                  <span className={styles.sectionNum}>2</span> Module Permissions
                 </h3>
                 <div className={styles.permMatrix}>
                   <div className={styles.matrixHeader}>

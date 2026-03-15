@@ -215,12 +215,18 @@
 .saveBtn {
   background-color: #1a4263;
   color: white;
-  padding: 10px 40px;
-  border-radius: 6px;
-  font-weight: 700;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-weight: 600;
   border: none;
   cursor: pointer;
+  font-size: 0.9rem;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.saveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Navigation Spacing */
@@ -505,12 +511,96 @@
   cursor: pointer;
 }
 
+.ampmSelect {
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.daySelect {
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  min-width: 110px;
+}
+
+.backupOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.backupActions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.backupBtnRow {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.downloadBtn {
+  background: #1a4263;
+  color: white;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.downloadBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.backupMsg {
+  font-size: 0.85rem;
+  color: #28a745;
+  font-weight: 600;
+}
+
+.restoreHint {
+  font-size: 0.85rem;
+  color: #666;
+  margin: 0.5rem 0 1rem;
+}
+
+.restoreSuccess {
+  font-size: 0.85rem;
+  color: #28a745;
+  font-weight: 600;
+  text-align: center;
+}
+
+.restoreError {
+  font-size: 0.85rem;
+  color: #dc3545;
+  font-weight: 600;
+  text-align: center;
+}
+
 .mainRestoreBtn {
   padding: 10px 45px;
   border-radius: 8px;
   font-weight: 700;
   border: none;
   cursor: pointer;
+  background: #1a4263;
+  color: white;
+}
+
+.mainRestoreBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Access Control: Roles Table ── */

@@ -1,0 +1,59 @@
+inventory_id,item_name,item_description,item_sku,brand,item_quantity,uom,status,item_unit_price,item_selling_price
+INV-0000001,Sticky Notes 75x75mm,"Yellow sticky notes, 75x75mm size",SN7-LEZ,Post-it,4741,PCS,Available,25.00,35.00
+INV-0000002,Binder 2-inch D-Ring,2-inch D-Ring binder for documents,B2D-KKW,Kokuyo,4509,REAMS,Available,150.00,200.00
+INV-0000003,Graph Paper Pad A4 50 sheets,"A4 graph paper pad, 50 sheets",GPP-JM6,Canson,4732,PAD,Available,100.00,120.00
+INV-0000004,Whiteboard Sheet Roll,Large whiteboard sheet roll,WSR-GNX,Olympia,4650,ROLL,Available,500.00,600.00
+INV-0000005,Paper Clip Box 500pcs,Box of 500 paper clips,PCB-IBD,Deli,4331,BOX,Available,30.00,50.00
+INV-0000006,Laser Toner Cartridge 85A,HP 85A Black toner cartridge,LTC-022,HP,4818,PCS,Available,950.00,1200.00
+INV-0000007,Desk Organizer Tray,Plastic desk organizer tray,DOT-5JF,Pilot,4237,PCS,Available,120.00,180.00
+INV-0000008,Eraser Large,Large size eraser for pencils,ELX-25M,Faber-Castell,4337,PCS,Available,10.00,20.00
+INV-0000009,Glue Stick 20g,20g glue stick for paper crafts,GS2-NHW,Pritt,4849,PCS,Available,20.00,30.00
+INV-0000010,File Pocket PVC A4,A4 PVC file pockets,FPP-V49,Esselte,4402,PCS,Available,15.00,25.00
+INV-0000011,Highlighter Assorted Colors 12pcs,Pack of 12 assorted highlighters,HAC-YBZ,Miyagi,4644,PACKS,Available,80.00,120.00
+INV-0000012,Index Divider Tabs 5pcs,Set of 5 index divider tabs,IDT-051,Deli,4748,PACKS,Available,20.00,35.00
+INV-0000013,HP 680 Black Ink Cartridge,HP 680 black ink cartridge,H6B-JJ6,HP,4905,PCS,Available,120.00,180.00
+INV-0000014,Sticky Flags 25mm,25mm sticky flags for marking,SF2-W2W,3M,4498,PCS,Available,8.00,15.00
+INV-0000015,Stapler Standard,Standard office stapler,SSX-5TE,Joy,4980,PCS,Available,100.00,150.00
+INV-0000016,Printer Paper A3 500 sheets,500 sheets A3 printer paper,PPA-SR9,Double A,4625,REAMS,Available,450.00,550.00
+INV-0000017,Binder Clips 24pcs,Pack of 24 binder clips,BC2-HB1,Joy,4185,PACKS,Available,12.00,20.00
+INV-0000018,Ballpoint Pen Blue 10pcs,Set of 10 blue ballpoint pens,BPB-BMT,Pilot,4625,PACKS,Available,100.00,150.00
+INV-0000019,Chart Paper Roll 50m,50m roll of chart paper,CPR-AQ2,Olympia,4398,ROLL,Available,350.00,500.00
+INV-0000020,File Folder A4 50pcs,Pack of 50 A4 file folders,FFA-62M,Esselte,4559,PACKS,Available,18.00,30.00
+INV-0000021,Sticky Notes 50x50mm,"Yellow sticky notes, 50x50mm",SN5-ZNP,Post-it,4707,PCS,Available,15.00,25.00
+INV-0000022,HP 684 Tri-Color Ink,HP 684 tri-color ink cartridge,H6T-BZR,HP,4610,PCS,Available,120.00,180.00
+INV-0000023,Desk Pen Holder,Plastic desk pen holder,DPH-EIH,Kokuyo,4655,PCS,Available,90.00,120.00
+INV-0000024,Glue Stick Large 40g,Large 40g glue stick,GSL-FEA,Pritt,4399,PCS,Available,25.00,40.00
+INV-0000025,Paper Clips 50pcs,50 pieces of paper clips,PC5-OJ8,Deli,4403,PACKS,Available,10.00,15.00
+INV-0000026,Whiteboard Eraser,Eraser for whiteboards,WEX-HYA,Olympia,4639,PCS,Available,50.00,75.00
+INV-0000027,Sticky Flags 75mm,75mm sticky flags,SF7-MR8,3M,4821,PCS,Available,10.00,18.00
+INV-0000028,Staples 1000pcs,Pack of 1000 staples,S1X-B5Z,Joy,4755,PACKS,Available,15.00,25.00
+INV-0000029,Power Bank 10000mAh,Portable charger with LED display,PB1-2T1,Bavin,4660,PCS,Available,450.00,680.00
+INV-0000030,Webcam 1080p,Full HD webcam with built-in mic,W1X-SWM,A4Tech,4728,PCS,Available,850.00,1200.00
+INV-0000031,Laptop Stand Aluminum,Ergonomic foldable laptop riser,LSA-EJE,Generic,4548,PCS,Available,350.00,500.00
+INV-0000032,VGA to HDMI Adapter,Active converter with audio support,VTH-IYJ,Ugreen,4413,PCS,Available,250.00,400.00
+INV-0000033,Mousepad Extended,Large anti-slip rubber base mousepad,MEX-B2H,SteelSeries,4505,PCS,Available,200.00,350.00
+INV-0000034,Office Chair Mid-Back,Ergonomic mesh chair with armrests,OCM-QG5,ErgoHome,4410,PCS,Available,2500.00,3800.00
+INV-0000035,Desktop Organizer Wood,3-tier wooden desk shelf,DOW-AXL,Muji-style,4702,PCS,Available,450.00,750.00
+INV-0000036,Waste Basket Mesh,Black metal mesh trash bin,WBM-PZD,Joy,4692,PCS,Available,120.00,190.00
+INV-0000037,Cork Board 2x3ft,Aluminum frame cork notice board,CB2-L67,Deli,4467,PCS,Available,550.00,850.00
+INV-0000038,Floor Lamp LED,Modern adjustable office floor lamp,FLL-Z7Z,Philips,4194,PCS,Available,1200.00,1800.00
+INV-0000039,Watercolor Set 24pcs,Artist grade watercolor cakes,WS2-HJ3,Prang,4465,PACKS,Available,380.00,550.00
+INV-0000040,Oil Pastels 36pcs,Smooth blending oil pastels,OP3-K3E,Pentel,4894,PACKS,Available,220.00,350.00
+INV-0000041,Construction Paper Assorted,"Pack of 50 sheets, 10 colors",CPA-GAE,Crayola,4495,PACKS,Available,45.00,75.00
+INV-0000042,Compass and Protractor Set,Mathematical geometry set,CAP-3MB,Maped,4709,PACKS,Available,150.00,220.00
+INV-0000043,Glue Gun Small,Hot melt glue gun for crafts,GGS-K6I,Generic,4517,PCS,Available,120.00,180.00
+INV-0000044,First Aid Kit Box,Complete emergency medical box,FAK-L3X,Generic,4224,PCS,Available,850.00,1200.00
+INV-0000045,Face Mask 50pcs,3-ply surgical earloop masks,FM5-09D,Indoplas,4674,BOX,Available,50.00,95.00
+INV-0000046,Cotton Balls 100pcs,Soft absorbent sterile cotton,CB1-JV7,Cleene,4748,BOX,Available,25.00,45.00
+INV-0000047,Alcohol 70% 1 Liter,Ethyl alcohol with moisturizer,A71-TVC,Green Cross,4908,PCS,Available,140.00,190.00
+INV-0000048,Adhesive Bandages 100pcs,Assorted sizes fabric bandages,AB1-KQ0,Band-Aid,4124,BOX,Available,180.00,260.00
+INV-0000049,Mop Bucket with Wringer,Heavy duty plastic mop squeezer,MBW-PBV,Joy,3976,PCS,Available,1500.00,2200.00
+INV-0000050,Soft Broom (Tambo),High-quality native walis tambo,SB(-DJX,Baguio Made,4574,PCS,Available,150.00,250.00
+INV-0000051,Glass Cleaner Spray,Anti-streak glass surface cleaner,GCS-T7M,Mr. Muscle,4436,PCS,Available,110.00,160.00
+INV-0000052,Trash Bag Black Large,Pack of 10 roll-on trash bags,TBB-LQH,Generic,4888,PACKS,Available,65.00,100.00
+INV-0000053,Floor Wax Red,Traditional shine floor polish,FWR-WSK,Starwax,4584,PCS,Available,95.00,140.00
+INV-0000054,Spiral Coil Bind 10mm,Box of 100 plastic binding coils,SCB-L9U,Deli,4505,BOX,Available,350.00,500.00
+INV-0000055,Laminating Film A4,Pack of 100 125mic films,LFA-DPW,Quaff,4394,PACKS,Available,450.00,650.00
+INV-0000056,PVC Binding Cover A4,Transparent plastic front covers,PBC-0EV,Deli,4578,PACKS,Available,250.00,400.00
+INV-0000057,Rubber Bands 500g,Multi-purpose elastic bands,RB5-PF4,Generic,4548,BOX,Available,120.00,180.00
+INV-0000058,Thumb Tacks 100pcs,Steel push pins for boards,TT1-9PC,Joy,4714,PACKS,Available,15.00,25.00

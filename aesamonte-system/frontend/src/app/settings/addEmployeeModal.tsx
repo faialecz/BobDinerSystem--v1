@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 import React, { useState, useEffect } from "react";
 import styles from "@/css/addEmployeeModal.module.css";

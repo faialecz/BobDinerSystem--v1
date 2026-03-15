@@ -232,27 +232,71 @@
 .backupActions {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
   margin-top: 1.25rem;
   margin-bottom: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .saveBackupBtn {
   background-color: #1a4263;
-  color: white;
-  padding: 10px 36px;
+  color: #fff;
+  padding: 10px 32px;
   border-radius: 8px;
   font-weight: 700;
-  border: none;
+  font-size: 0.9rem;
+  border: 2px solid #1a4263;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  transition: background-color 0.18s, box-shadow 0.18s;
+  box-shadow: 0 2px 8px rgba(26, 66, 99, 0.18);
 }
 
-.saveBackupBtn:hover {
+.saveBackupBtn:hover:not(:disabled) {
   background-color: #15344f;
+  border-color: #15344f;
+  box-shadow: 0 4px 14px rgba(26, 66, 99, 0.28);
+}
+
+.saveBackupBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.downloadBtn {
+  background-color: #fff;
+  color: #1a4263;
+  padding: 10px 32px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border: 2px solid #1a4263;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background-color 0.18s, color 0.18s, box-shadow 0.18s;
+  box-shadow: 0 2px 8px rgba(26, 66, 99, 0.08);
+}
+
+.downloadBtn:hover:not(:disabled) {
+  background-color: #1a4263;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(26, 66, 99, 0.22);
+}
+
+.downloadBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── RESTORE CARD ── */
+
+.restoreHint {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0.25rem 0 1rem;
+  max-width: 680px;
+}
 
 .restoreCard {
   max-width: 680px;
@@ -301,12 +345,12 @@
 .clearFileBtn {
   background: none;
   border: none;
-  color: #e79a99;
+  color: #e05555;
   font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0;
+  padding: 2px 0;
   align-self: flex-end;
-  margin-top: -2px;
 }
 
 .clearFileBtn:hover {
