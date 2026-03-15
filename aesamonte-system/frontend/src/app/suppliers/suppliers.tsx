@@ -44,6 +44,9 @@ const getViewStatusClass = (isArchived: boolean | undefined, s: Record<string, s
   return isArchived ? s.viewStatusArchived : s.viewStatusActive;
 };
 
+// ── ADDED: normalize helper for duplicate checks ──
+const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
+
 /* ================= COMPONENT ================= */
 
 export default function Suppliers({
@@ -81,10 +84,12 @@ export default function Suppliers({
     email: '',
     paymentTerms: 'Cash on Delivery'
   });
+  const [createDupError, setCreateDupError] = useState(''); // ── ADDED ──
 
   // --- EDIT MODAL STATE ---
   const [editModal, setEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Supplier | null>(null);
+  const [editDupError, setEditDupError] = useState(''); // ── ADDED ──
 
   const [sortConfig, setSortConfig] = useState<{
     key: SortKey;
@@ -113,6 +118,14 @@ export default function Suppliers({
   /* ================= HANDLERS ================= */
 
   const handleCreateSupplier = async () => {
+    // ── ADDED: duplicate name check before API call ──
+    const newName = normalize(supplierFormData.supplierName);
+    const isDuplicate = suppliers.some(sup => normalize(sup.supplierName) === newName);
+    if (isDuplicate) {
+      setCreateDupError(`"${supplierFormData.supplierName.trim()}" already exists. Please use a different supplier name.`);
+      return;
+    }
+
     try {
       const response = await fetch('/api/suppliers', {
         method: 'POST',
@@ -130,6 +143,7 @@ export default function Suppliers({
       if (response.ok) {
         await fetchSuppliers();
         setShowModal(false);
+        setCreateDupError(''); // ── ADDED ──
         setSupplierFormData({
           supplierName: '', address: '', contactPerson: '',
           contact: '', email: '', paymentTerms: 'Cash on Delivery'
@@ -151,6 +165,17 @@ export default function Suppliers({
 
   const handleEditSupplier = async () => {
     if (!editFormData) return;
+
+    // ── ADDED: duplicate name check before API call (exclude self) ──
+    const newName = normalize(editFormData.supplierName);
+    const conflict = suppliers.find(
+      sup => normalize(sup.supplierName) === newName && sup.id !== editFormData.id
+    );
+    if (conflict) {
+      setEditDupError(`"${editFormData.supplierName.trim()}" already exists. Please use a different supplier name.`);
+      return;
+    }
+
     try {
       const response = await fetch(`/api/suppliers/${editFormData.id}`, {
         method: 'PUT',
@@ -168,6 +193,7 @@ export default function Suppliers({
         await fetchSuppliers();
         setEditModal(false);
         setEditFormData(null);
+        setEditDupError(''); // ── ADDED ──
         setToastMessage(data.message || 'Supplier updated successfully!');
         setIsError(false);
         setShowToast(true);
@@ -562,7 +588,7 @@ export default function Suppliers({
                 <h2 className={s.title}>Register New Supplier</h2>
                 <p className={s.subText}>Create a profile for a new supplier.</p>
               </div>
-              <LuX onClick={() => setShowModal(false)} className={s.closeIcon} />
+              <LuX onClick={() => { setShowModal(false); setCreateDupError(''); }} className={s.closeIcon} />
             </div>
 
             <div className={`${s.modalForm} ${s.mt_20}`}>
@@ -573,10 +599,18 @@ export default function Suppliers({
                   <input
                     name="supplierName"
                     value={supplierFormData.supplierName}
-                    onChange={(e) => setSupplierFormData({ ...supplierFormData, supplierName: e.target.value })}
+                    onChange={(e) => { setCreateDupError(''); setSupplierFormData({ ...supplierFormData, supplierName: e.target.value }); }}
+                    style={createDupError ? { borderColor: '#fca5a5' } : {}}
                   />
                 </div>
               </div>
+
+              {/* ── ADDED: duplicate error banner ── */}
+              {createDupError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
+                  <span>⚠</span> {createDupError}
+                </div>
+              )}
 
               <div className={s.formGroupFull}>
                 <label>Address</label>
@@ -630,7 +664,7 @@ export default function Suppliers({
               </div>
 
               <div className={s.modalFooter}>
-                <button type="button" onClick={() => setShowModal(false)} className={s.cancelBtn}>Cancel</button>
+                <button type="button" onClick={() => { setShowModal(false); setCreateDupError(''); }} className={s.cancelBtn}>Cancel</button>
                 <button type="button" onClick={handleCreateSupplier} className={s.saveBtn}>
                   Create Supplier
                 </button>
@@ -649,7 +683,7 @@ export default function Suppliers({
                 <h2 className={s.title}>Edit Supplier</h2>
                 <p className={s.subText}>Update supplier information.</p>
               </div>
-              <LuX onClick={() => { setEditModal(false); setEditFormData(null); }} className={s.closeIcon} />
+              <LuX onClick={() => { setEditModal(false); setEditFormData(null); setEditDupError(''); }} className={s.closeIcon} />
             </div>
 
             <div className={`${s.modalForm} ${s.mt_20}`}>
@@ -659,10 +693,18 @@ export default function Suppliers({
                   <label>Supplier Name</label>
                   <input
                     value={editFormData.supplierName}
-                    onChange={(e) => setEditFormData({ ...editFormData, supplierName: e.target.value })}
+                    onChange={(e) => { setEditDupError(''); setEditFormData({ ...editFormData, supplierName: e.target.value }); }}
+                    style={editDupError ? { borderColor: '#fca5a5' } : {}}
                   />
                 </div>
               </div>
+
+              {/* ── ADDED: duplicate error banner ── */}
+              {editDupError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
+                  <span>⚠</span> {editDupError}
+                </div>
+              )}
 
               <div className={s.formGroupFull}>
                 <label>Address</label>
@@ -699,7 +741,7 @@ export default function Suppliers({
               </div>
 
               <div className={s.modalFooter}>
-                <button type="button" onClick={() => { setEditModal(false); setEditFormData(null); }} className={s.cancelBtn}>Cancel</button>
+                <button type="button" onClick={() => { setEditModal(false); setEditFormData(null); setEditDupError(''); }} className={s.cancelBtn}>Cancel</button>
                 <button type="button" onClick={handleEditSupplier} className={s.saveBtn}>
                   Update Supplier
                 </button>

@@ -20,6 +20,7 @@ interface EditInventoryModalProps {
   onSave: (updatedItem: any) => void;
   suppliers: any[];
   uoms: any[];
+  existingProducts?: { id: string; item_name: string }[];
 }
 
 const FIELD_STYLE = {
@@ -38,36 +39,45 @@ const BLANK_SUPPLIER: SupplierEntry = {
   supplierName: '', contactPerson: '', contactNumber: '', leadTime: '', minOrder: '', isPrimary: false,
 };
 
-const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms }: EditInventoryModalProps) => {
+const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms, existingProducts = [] }: EditInventoryModalProps) => {
   const s = styles as Record<string, string>;
   const [formData, setFormData] = useState<any>(null);
+  const [originalData, setOriginalData] = useState<any>(null);
+  const [originalSuppliers, setOriginalSuppliers] = useState<SupplierEntry[]>([]);
   const [addQty, setAddQty] = useState<string>('');
   const [supplierEntries, setSupplierEntries] = useState<SupplierEntry[]>([]);
+  const [dupError, setDupError] = useState('');
+  const [supplierError, setSupplierError] = useState(''); // ── ADDED ──
 
   useEffect(() => {
     if (itemData) {
       setAddQty('');
-      // Load suppliers array if present, else fall back to single supplier fields
+      setDupError('');
+      setSupplierError(''); // ── ADDED ──
       if (itemData.suppliers && itemData.suppliers.length > 0) {
-        setSupplierEntries(itemData.suppliers.map((sup: any, i: number) => ({
+        const sups = itemData.suppliers.map((sup: any, i: number) => ({
           supplierName: sup.supplierName || '',
           contactPerson: sup.contactPerson || '',
           contactNumber: sup.contactNumber || '',
           leadTime: String(sup.leadTime ?? ''),
           minOrder: String(sup.minOrder ?? ''),
           isPrimary: i === 0,
-        })));
+        }));
+        setSupplierEntries(sups);
+        setOriginalSuppliers(sups);
       } else {
-        setSupplierEntries([{
+        const sups = [{
           supplierName: itemData.supplierName || '',
           contactPerson: itemData.contactPerson || '',
           contactNumber: itemData.contactNumber || '',
           leadTime: String(itemData.leadTime ?? ''),
           minOrder: String(itemData.minOrder ?? ''),
           isPrimary: true,
-        }]);
+        }];
+        setSupplierEntries(sups);
+        setOriginalSuppliers(sups);
       }
-      setFormData({
+      const fd = {
         id: itemData.id,
         sku: itemData.sku || '',
         itemName: itemData.itemName || '',
@@ -78,14 +88,25 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
         reorderPoint: itemData.reorderPoint ?? '',
         unitPrice: itemData.unitPrice ?? '',
         sellingPrice: itemData.sellingPrice ?? '',
-      });
+      };
+      setFormData(fd);
+      setOriginalData({ ...fd });
     }
   }, [itemData]);
 
   if (!isOpen || !formData) return null;
 
   const handleSupplierChange = (idx: number, field: keyof SupplierEntry, value: string) => {
+    setSupplierError(''); // ── ADDED ──
     setSupplierEntries(prev => {
+      // ── ADDED: duplicate supplier check ──
+      if (field === 'supplierName' && value) {
+        const alreadyUsed = prev.some((e, i) => i !== idx && e.supplierName === value);
+        if (alreadyUsed) {
+          setSupplierError(`"${value}" is already added. Please select a different supplier.`);
+          return prev; // reject the change
+        }
+      }
       const updated = [...prev];
       const entry = { ...updated[idx], [field]: value };
       if (field === 'supplierName') {
@@ -101,13 +122,48 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
   const handleAddSupplier = () => setSupplierEntries(prev => [...prev, { ...BLANK_SUPPLIER }]);
 
   const handleRemoveSupplier = (idx: number) => {
+    setSupplierError(''); // ── ADDED ──
     setSupplierEntries(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = () => {
+    setDupError('');
+
+    // ── NO CHANGES CHECK ──
+    const hasFormChanges = originalData && (
+      formData.itemName            !== originalData.itemName            ||
+      formData.brand               !== originalData.brand               ||
+      formData.itemDescription     !== originalData.itemDescription     ||
+      String(formData.uom)         !== String(originalData.uom)         ||
+      String(formData.reorderPoint) !== String(originalData.reorderPoint) ||
+      String(formData.unitPrice)   !== String(originalData.unitPrice)   ||
+      String(formData.sellingPrice) !== String(originalData.sellingPrice)
+    );
+    const hasQtyChange      = (parseInt(addQty) || 0) !== 0;
+    const hasSupplierChange = JSON.stringify(supplierEntries) !== JSON.stringify(originalSuppliers);
+
+    if (!hasFormChanges && !hasQtyChange && !hasSupplierChange) {
+      setDupError('No changes detected. Please modify at least one field before updating.');
+      return;
+    }
+
+    // ── DUPLICATE NAME CHECK (exclude self) ──
+    const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
+    const newName = normalize(formData.itemName || '');
+    const conflict = existingProducts.find(
+      (p: any) => normalize(p.item_name) === newName && String(p.id) !== String(formData.id)
+    );
+    if (conflict) {
+      setDupError(`"${formData.itemName}" already exists in inventory. Please use a different item name.`);
+      return;
+    }
+
+    // ── All clear — save ──
     const addition = parseInt(addQty) || 0;
     const finalQty = (parseInt(formData.qty) || 0) + addition;
-    const validSuppliers = supplierEntries.filter(e => e.supplierName).map((e, i) => ({ ...e, isPrimary: i === 0 }));
+    const validSuppliers = supplierEntries
+      .filter(e => e.supplierName)
+      .map((e, i) => ({ ...e, isPrimary: i === 0 }));
     onSave({
       ...formData,
       qty: finalQty,
@@ -163,6 +219,20 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
               </button>
             </div>
 
+            {/* ── ADDED: supplier duplicate error banner ── */}
+            {supplierError && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                background: '#fee2e2', border: '1px solid #fca5a5',
+                color: '#dc2626', borderRadius: '8px',
+                padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
+                marginBottom: '12px',
+              }}>
+                <span style={{ fontSize: '1rem' }}>⚠</span>
+                {supplierError}
+              </div>
+            )}
+
             {supplierEntries.map((entry, idx) => (
               <div key={idx} style={{ border: `1px solid ${idx === 0 ? '#bfdbfe' : '#e5e7eb'}`, borderRadius: '10px', padding: '14px', marginBottom: '12px', backgroundColor: idx === 0 ? '#f0f7ff' : '#fafafa' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -182,9 +252,20 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Supplier Name</label>
                     <select style={{ ...FIELD_STYLE }} value={entry.supplierName} onChange={(e) => handleSupplierChange(idx, 'supplierName', e.target.value)}>
                       <option value="">Select Supplier</option>
-                      {suppliers.map((sup: any) => (
-                        <option key={sup.id} value={sup.supplierName}>{sup.supplierName}</option>
-                      ))}
+                      {suppliers.map((sup: any) => {
+                        // ── ADDED: grey out already-selected suppliers ──
+                        const usedElsewhere = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
+                        return (
+                          <option
+                            key={sup.id}
+                            value={sup.supplierName}
+                            disabled={usedElsewhere}
+                            style={{ color: usedElsewhere ? '#9ca3af' : '#374151' }}
+                          >
+                            {sup.supplierName}{usedElsewhere ? ' (already added)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div>
@@ -217,7 +298,11 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '15px', marginBottom: '15px' }}>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Item Name</label>
-                <input style={{ ...FIELD_STYLE }} value={formData.itemName} onChange={(e) => setFormData({ ...formData, itemName: e.target.value })} />
+                <input
+                  style={{ ...FIELD_STYLE, borderColor: dupError && dupError.includes(formData.itemName) ? '#fca5a5' : '#9ca3af' }}
+                  value={formData.itemName}
+                  onChange={(e) => { setDupError(''); setFormData({ ...formData, itemName: e.target.value }); }}
+                />
               </div>
               <div className={s.formGroup}>
                 <label className={s.miniLabel}>Brand</label>
@@ -251,7 +336,7 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
                 />
               </div>
               <div className={s.formGroup}>
-                <label className={s.miniLabel}>New Total <span style={{ fontSize: '0.7rem', color: '#9ca3af', fontWeight: 400 }}></span></label>
+                <label className={s.miniLabel}>New Total</label>
                 {(() => {
                   const currentQty = parseInt(formData.qty) || 0;
                   const newTotal = currentQty + (parseInt(addQty) || 0);
@@ -310,9 +395,24 @@ const EditInventoryModal = ({ isOpen, onClose, itemData, onSave, suppliers, uoms
         </div>
 
         {/* --- FOOTER --- */}
-        <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', marginTop: 0 }}>
-          <button className={s.cancelBtn} onClick={onClose}>Cancel</button>
-          <button className={s.saveBtn} onClick={handleSubmit}>Update Item</button>
+        <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', marginTop: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+          {dupError && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: '#fee2e2', border: '1px solid #fca5a5',
+              color: '#dc2626', borderRadius: '8px',
+              padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
+            }}>
+              <span style={{ fontSize: '1rem' }}>⚠</span>
+              {dupError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+            <button className={s.cancelBtn} onClick={onClose}>Cancel</button>
+            <button className={s.saveBtn} onClick={handleSubmit}>Update Item</button>
+          </div>
         </div>
 
       </div>

@@ -27,6 +27,8 @@ interface AddInventoryModalProps {
   onOpenSupplierModal: () => void;
   suppliers: Supplier[];
   uoms: { id: number; code: string; name: string }[];
+  existingProducts?: { item_name: string }[];
+  defaultSupplierName?: string;
 }
 
 const INITIAL_ITEM = {
@@ -58,21 +60,46 @@ const READ_ONLY_STYLE: React.CSSProperties = {
 };
 
 const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
-  isOpen, onClose, onSave, onOpenSupplierModal, suppliers = [], uoms = []
+  isOpen, onClose, onSave, onOpenSupplierModal, suppliers = [], uoms = [],
+  existingProducts = [], defaultSupplierName = ''
 }) => {
   const s = styles as Record<string, string>;
   const [supplierEntries, setSupplierEntries] = useState<SupplierEntry[]>([{ ...INITIAL_SUPPLIER }]);
   const [items, setItems] = useState<any[]>([{ ...INITIAL_ITEM }]);
+  const [dupError, setDupError] = useState('');
+  const [supplierError, setSupplierError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      setSupplierEntries([{ ...INITIAL_SUPPLIER }]);
+      if (defaultSupplierName) {
+        const sup = suppliers.find(s => s.supplierName === defaultSupplierName);
+        setSupplierEntries([{
+          supplierName: defaultSupplierName,
+          contactPerson: sup?.contactPerson || '',
+          contactNumber: sup?.contactNumber || '',
+          leadTime: '',
+          minOrder: '',
+        }]);
+      } else {
+        setSupplierEntries([{ ...INITIAL_SUPPLIER }]);
+      }
       setItems([{ ...INITIAL_ITEM }]);
+      setDupError('');
+      setSupplierError('');
     }
-  }, [isOpen]);
+  }, [isOpen, defaultSupplierName]);
 
   const handleSupplierChange = (idx: number, field: keyof SupplierEntry, value: string) => {
+    setSupplierError('');
     setSupplierEntries(prev => {
+      // ── DUPLICATE SUPPLIER CHECK ──
+      if (field === 'supplierName' && value) {
+        const alreadyUsed = prev.some((e, i) => i !== idx && e.supplierName === value);
+        if (alreadyUsed) {
+          setSupplierError(`"${value}" is already added. Please select a different supplier.`);
+          return prev; // reject the change
+        }
+      }
       const updated = [...prev];
       const entry = { ...updated[idx], [field]: value };
       if (field === 'supplierName') {
@@ -86,12 +113,16 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
   };
 
   const handleAddSupplier = () => setSupplierEntries(prev => [...prev, { ...INITIAL_SUPPLIER }]);
-  const handleRemoveSupplier = (idx: number) => setSupplierEntries(prev => prev.filter((_, i) => i !== idx));
+  const handleRemoveSupplier = (idx: number) => {
+    setSupplierError('');
+    setSupplierEntries(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const handleAddItem = () => setItems([...items, { ...INITIAL_ITEM }]);
   const handleRemoveItem = (index: number) => setItems(items.filter((_, i) => i !== index));
 
   const handleItemChange = (index: number, field: string, value: string) => {
+    setDupError('');
     setItems(prevItems => {
       const newItems = [...prevItems];
       const item = { ...newItems[index], [field]: value };
@@ -121,6 +152,35 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setDupError('');
+    setSupplierError('');
+
+    const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
+    const newNames = items
+      .map((i: any) => normalize(i.itemName || ''))
+      .filter(Boolean);
+
+    // Check 1: duplicates within the form itself
+    if (newNames.length !== new Set(newNames).size) {
+      setDupError('You have duplicate item names in your list. Please make each item name unique.');
+      return;
+    }
+
+    // Check 2: conflicts with existing inventory
+    const existingNames = existingProducts.map((p: any) => normalize(p.item_name || ''));
+    const conflict = newNames.find((name: string) => existingNames.includes(name));
+    if (conflict) {
+      setDupError(`"${conflict}" already exists in inventory. Please use a different item name.`);
+      return;
+    }
+
+    // Check 3: at least one item must be filled
+    if (!items.some((i: any) => i.itemName?.trim())) {
+      setDupError('Please fill in at least one item name before saving.');
+      return;
+    }
+
+    // All clear — save
     const validSuppliers = supplierEntries.filter(e => e.supplierName);
     const mergedItems = items.map(item => ({
       ...item,
@@ -171,6 +231,20 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
               </div>
             </div>
 
+            {/* ── SUPPLIER DUPLICATE ERROR ── */}
+            {supplierError && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                background: '#fee2e2', border: '1px solid #fca5a5',
+                color: '#dc2626', borderRadius: '8px',
+                padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
+                marginBottom: '12px',
+              }}>
+                <span style={{ fontSize: '1rem' }}>⚠</span>
+                {supplierError}
+              </div>
+            )}
+
             {supplierEntries.map((entry, idx) => (
               <div key={idx} style={{ border: `1px solid ${idx === 0 ? '#bfdbfe' : '#e5e7eb'}`, borderRadius: '10px', padding: '14px', marginBottom: '10px', backgroundColor: idx === 0 ? '#f0f7ff' : '#fafafa' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -188,11 +262,29 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Supplier Name</label>
-                    <select style={{ ...FIELD_STYLE }} value={entry.supplierName} onChange={(e) => handleSupplierChange(idx, 'supplierName', e.target.value)}>
+                    <select
+                      style={{
+                        ...FIELD_STYLE,
+                        borderColor: supplierError && entry.supplierName === '' ? '#fca5a5' : '#9ca3af'
+                      }}
+                      value={entry.supplierName}
+                      onChange={(e) => handleSupplierChange(idx, 'supplierName', e.target.value)}
+                    >
                       <option value="">Select Supplier</option>
-                      {suppliers.map((sup, i) => (
-                        <option key={sup.id || i} value={sup.supplierName}>{sup.supplierName}</option>
-                      ))}
+                      {suppliers.map((sup, i) => {
+                        // ── grey out already-selected suppliers in other entries ──
+                        const usedElsewhere = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
+                        return (
+                          <option
+                            key={sup.id || i}
+                            value={sup.supplierName}
+                            disabled={usedElsewhere}
+                            style={{ color: usedElsewhere ? '#9ca3af' : '#374151' }}
+                          >
+                            {sup.supplierName}{usedElsewhere ? ' (already added)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div>
@@ -303,9 +395,24 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
           </div>
 
           {/* --- FOOTER --- */}
-          <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: 0 }}>
-            <button type="button" onClick={onClose} className={s.cancelBtn}>Cancel</button>
-            <button type="submit" className={s.saveBtn}>Save All Items</button>
+          <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 0 }}>
+
+            {dupError && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                background: '#fee2e2', border: '1px solid #fca5a5',
+                color: '#dc2626', borderRadius: '8px',
+                padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
+              }}>
+                <span style={{ fontSize: '1rem' }}>⚠</span>
+                {dupError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button type="button" onClick={onClose} className={s.cancelBtn}>Cancel</button>
+              <button type="submit" className={s.saveBtn}>Save All Items</button>
+            </div>
           </div>
         </form>
       </div>

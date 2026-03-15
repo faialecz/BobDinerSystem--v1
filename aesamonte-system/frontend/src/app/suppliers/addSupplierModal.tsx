@@ -8,6 +8,7 @@ interface AddSupplierModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
+  existingSuppliers?: { supplierName: string }[];
 }
 
 const EMPTY_FORM = {
@@ -19,20 +20,32 @@ const EMPTY_FORM = {
   paymentTerms: 'Cash on Delivery',
 };
 
-export default function AddSupplierModal({ isOpen, onClose, onSuccess }: AddSupplierModalProps) {
+export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingSuppliers = [] }: AddSupplierModalProps) {
   const s = styles as Record<string, string>;
   const [form, setForm] = useState(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dupError, setDupError] = useState('');
 
   if (!isOpen) return null;
 
   const handleClose = () => {
     setForm(EMPTY_FORM);
+    setDupError('');
     onClose();
   };
 
   const handleSubmit = async () => {
     if (!form.supplierName.trim()) return;
+
+    // ── DUPLICATE NAME CHECK ──
+    const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
+    const newName = normalize(form.supplierName);
+    const isDuplicate = existingSuppliers.some(s => normalize(s.supplierName) === newName);
+    if (isDuplicate) {
+      setDupError(`"${form.supplierName.trim()}" already exists. Please use a different supplier name.`);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/suppliers', {
@@ -52,10 +65,10 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess }: AddSupp
         onSuccess(data.message || 'Supplier created successfully!');
         handleClose();
       } else {
-        onSuccess(data.error || 'Failed to create supplier.');
+        setDupError(data.error || 'Failed to create supplier.');
       }
     } catch {
-      onSuccess('Network error. Please try again.');
+      setDupError('Network error. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -79,10 +92,25 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess }: AddSupp
               <label>Supplier Name</label>
               <input
                 value={form.supplierName}
-                onChange={e => setForm({ ...form, supplierName: e.target.value })}
+                onChange={e => { setDupError(''); setForm({ ...form, supplierName: e.target.value }); }}
+                style={dupError && dupError.includes(form.supplierName.trim()) ? { borderColor: '#fca5a5' } : {}}
               />
             </div>
           </div>
+
+          {/* ── DUPLICATE ERROR ── */}
+          {dupError && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: '#fee2e2', border: '1px solid #fca5a5',
+              color: '#dc2626', borderRadius: '8px',
+              padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
+              marginBottom: '12px',
+            }}>
+              <span>⚠</span> {dupError}
+            </div>
+          )}
+
           <div className={s.formGroupFull}>
             <label>Address</label>
             <input

@@ -110,6 +110,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
 
   // Modal States
   const [showModal, setShowModal] = useState(false);
+  const [defaultSupplierName, setDefaultSupplierName] = useState<string>('');
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false); 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null); 
@@ -249,19 +250,58 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     setActiveMenuId(null);
   };
 
+  // ── FIXED: fetch full item details (includes supplier data) with toast error fallback ──
   const handleEditClick = async (product: Product) => {
+    setActiveMenuId(null);
     try {
       const res = await fetch(`/api/inventory/${product.id}`);
       if (res.ok) {
         const fullData = await res.json();
-        setSelectedProduct(fullData); 
-        setShowEditModal(true);
-        setActiveMenuId(null);
+        setSelectedProduct(fullData);
       } else {
-        alert("Failed to load item details.");
+        // API route missing or errored — fall back to list data so modal still opens
+        setSelectedProduct({
+          id: product.id,
+          sku: product.sku || '',
+          itemName: product.item_name || '',
+          brand: product.brand || '',
+          itemDescription: product.item_description || '',
+          qty: product.qty ?? 0,
+          uom: product.uom || 'Select',
+          reorderPoint: (product as any).reorderPoint ?? '',
+          unitPrice: product.unitPrice ?? '',
+          sellingPrice: product.price ?? '',
+          suppliers: (product as any).suppliers || [],
+          supplierName: (product as any).supplierName || '',
+          contactPerson: (product as any).contactPerson || '',
+          contactNumber: (product as any).contactNumber || '',
+          leadTime: (product as any).leadTime ?? '',
+          minOrder: (product as any).minOrder ?? '',
+        } as any);
       }
+      setShowEditModal(true);
     } catch (err) {
       console.error("Error fetching item details:", err);
+      // Network error — still open modal with whatever data we have
+      setSelectedProduct({
+        id: product.id,
+        sku: product.sku || '',
+        itemName: product.item_name || '',
+        brand: product.brand || '',
+        itemDescription: product.item_description || '',
+        qty: product.qty ?? 0,
+        uom: product.uom || 'Select',
+        reorderPoint: (product as any).reorderPoint ?? '',
+        unitPrice: product.unitPrice ?? '',
+        sellingPrice: product.price ?? '',
+        suppliers: [],
+        supplierName: '',
+        contactPerson: '',
+        contactNumber: '',
+        leadTime: '',
+        minOrder: '',
+      } as any);
+      setShowEditModal(true);
     }
   };
 
@@ -487,7 +527,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                   <LuSearch size={18} />
                 </div>
                 {canModify && (
-                  <button className={s.addButton} onClick={() => setShowModal(true)}>ADD</button>
+                  <button className={s.addButton} onClick={() => { setDefaultSupplierName(''); setShowModal(true); }}>ADD</button>
                 )}
               </div>
             </div>
@@ -551,9 +591,9 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                         <div className={s.popoverMenu} ref={menuRef}>
                           {canModify ? (
                             <>
-                              <button className={s.popAddBtn} onClick={() => setShowModal(true)}>ADD</button>
-                              <button className={s.popEditBtn} onClick={() => handleEditClick(p)}><LuPencil size={12}/> Edit</button>
-                              <button className={s.popArchiveBtn} onClick={() => handleToggleArchive(p.id)}><LuArchive size={12}/> Archive</button>
+                              <button className={s.popAddBtn} onClick={(e) => { e.stopPropagation(); setDefaultSupplierName((p as any).supplierName || ''); setShowModal(true); }}> ADD</button>
+                              <button className={s.popEditBtn} onClick={(e) => { e.stopPropagation(); handleEditClick(p); }}><LuPencil size={12}/> Edit</button>
+                              <button className={s.popArchiveBtn} onClick={(e) => { e.stopPropagation(); handleToggleArchive(p.id); }}><LuArchive size={12}/> Archive</button>
                             </>
                           ) : (
                             <span style={{ padding: '8px 12px', color: '#94a3b8', fontSize: '0.85rem' }}>
@@ -598,22 +638,27 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         onSuccess={(msg) => handleExportSuccess(msg, 'success')}
       />
 
+      {/* can check for duplicates on add */}
       <AddInventoryModal 
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => { setShowModal(false); setDefaultSupplierName(''); }}
         onSave={handleSave}
         onOpenSupplierModal={() => setShowSupplierModal(true)}
         suppliers={suppliers}
-        uoms={uoms} 
+        uoms={uoms}
+        existingProducts={products}
+        defaultSupplierName={defaultSupplierName}
       />
 
+      {/* can check for duplicates on edit */}
       <EditInventoryModal 
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         itemData={selectedProduct}
         onSave={handleUpdate}
         suppliers={suppliers} 
-        uoms={uoms}      
+        uoms={uoms}
+        existingProducts={products}
       />
 
       <AddSupplierModal
@@ -625,6 +670,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
           setShowToast(true);
           setShowSupplierModal(false);
         }}
+        existingSuppliers={suppliers}
       />
 
       {/* ===== INVENTORY VIEW MODAL ===== */}
