@@ -10,152 +10,186 @@ interface HelpProps {
 }
 
 const Help: React.FC<HelpProps> = ({ role, onLogout }) => {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  // Changed to an array to allow multiple open sections
+  const [openIndices, setOpenIndices] = useState<number[]>([]);
   const s = styles as Record<string, string>;
 
+  const toggleAccordion = (index: number) => {
+    setOpenIndices(prev => 
+      prev.includes(index) 
+        ? prev.filter(i => i !== index) 
+        : [...prev, index]
+    );
+  };
+
   const guides = [
-    { 
-      title: "Getting Started", 
-      content: `Step 1: Launch the System
-Open the AE system in your desktop.
-You'll see the Start screen.
-Choose your role:
-   ◦ Admin: for full system access and management.
-   ◦ Staff: for limited access (inventory, sales, etc.).
-
-Step 2: Log In
-On the Log In screen, enter your Employee ID and Password.
-Click Login.
-If you don't have an account yet, click Register to create one.
-
-Step 3: Sign Up (New Users)
-Fill out the form:
-   ◦ Employee ID
-   ◦ Name
-   ◦ Password
-   ◦ Confirm Password
-Click Sign Up to create your account.
-Once approved, you'll return to the Login screen.` 
+    {
+      title: "Getting Started",
+      steps: [
+        {
+          label: "Step 1: Launch the System",
+          details: [
+            "Open the AE system in your desktop.",
+            "You'll see the Start screen.",
+            "Choose your role:",
+            "◦ Admin – for full system access and management.",
+            "◦ Staff – for limited access (inventory, sales, etc.)"
+          ]
+        },
+        {
+          label: "Step 2: Log In",
+          details: [
+            "On the Log In screen, enter your Employee ID and Password.",
+            "Click Login.",
+            "If you don't have an account yet, click Register to create one."
+          ]
+        },
+        {
+          label: "Step 3: Sign Up (New Users)",
+          details: [
+            "Fill out the form:",
+            "◦ Employee ID",
+            "◦ Name",
+            "◦ Password",
+            "◦ Confirm Password",
+            "Click Sign Up to create your account.",
+            "Once approved, you'll return to the Login screen."
+          ]
+        }
+      ]
     },
-    { 
-      title: "Managing Inventory", 
-      content: `Step 1: Open the Inventory Page
-From the left side menu, click Inventory.
-You’ll see your Products List, Inventory Report, and Out of Stock section.
-
-Step 2: View Product Details
-In the Products List, you can see all items in stock.
-Check each product's:
-      ◦ Item name
-      ◦ Company name
-      ◦ Category
-      ◦ Quantity
-      ◦ Location
-      ◦ Price or Amount
-
-Step 3: Edit a Product
-Find the item and click Edit.
-Update any details (like quantity or price).
-Click Save.` 
+    {
+      title: "Managing Inventory",
+      steps: [
+        {
+          label: "Step 1: Open the Inventory Page",
+          details: ["From the left side menu, click Inventory.", "You’ll see your Products List, Inventory Report, and Out of Stock section."]
+        },
+        {
+          label: "Step 2: View Product Details",
+          details: [
+            "In the Products List, you can see all items in stock.", 
+            "Check each product's:",
+            "◦ Item name", "◦ Company name", "◦ Category", "◦ Quantity", "◦ Location", "◦ Price or Amount"
+          ]
+        },
+        {
+          label: "Step 3: Edit a Product",
+          details: ["Find the item and click Edit.", "Update any details (like quantity or price) and click Save."]
+        }
+      ]
     },
-    { 
-      title: "Orders", 
-      content: `Step 1: Open the Orders Page
-Click Orders on the left side menu.
-You'll see all customer orders listed.
-At the top, you can view:
-Shipped Today
-Orders Cancelled
-Total Orders
-
-Step 2: View Order Details
-Each row shows:
-Customer address
-Contact info
-Item ordered
-Quantity
-Amount
-Payment method
-Date
-Status (To Ship, To Receive, Cancelled, etc.)
-
-Step 3: Update Order Status
-Click the order you want to update.
-Change the Status (e.g., To Ship → To Receive → Completed).
-Save the update.` 
+    {
+      title: "Orders",
+      steps: [
+        {
+          label: "Step 1: Open the Orders Page",
+          details: ["Click Orders on the left side menu.", "You'll see all customer orders listed."]
+        },
+        {
+          label: "Step 2: View Order Details",
+          details: [
+            "Each row shows:",
+            "◦ Customer address", "◦ Contact info", "◦ Item ordered", "◦ Quantity", "◦ Amount", "◦ Payment method", "◦ Date", "◦ Status"
+          ]
+        },
+        {
+          label: "Step 3: Update Order Status",
+          details: ["Click the order you want to update.", "Change the Status (e.g., To Ship → To Receive → Completed).", "Save the update."]
+        }
+      ]
     },
-    { 
-      title: "Payments and Sales", 
-      content: `Step 1: View Sales Overview
-At the top, you'll see:
-Total Sales - total amount sold.
-Sales Report - daily, weekly, and monthly summaries.
-Top Selling Item - the most popular product.
-
-Step 2: Automatic Updates
-When customers complete a payment through the Customer System, the transaction automatically appears here.
-The status (e.g., Paid, Pending) updates in real time.
-
-Step 3: Manual Edit or Update
-Click the “⋮” (three dots) beside a transaction to edit or update payment details.
-You can:
-Change the payment status (e.g., from Pending → Paid).
-Adjust the amount if there's a correction.
-Add notes or remarks.
-
-Step 4: Export Sales Data
-Click Export (top-right) to download sales reports.
-You can use this for accounting or performance tracking.` 
+    {
+      title: "Payments and Sales",
+      steps: [
+        {
+          label: "Step 1: View Sales Overview",
+          details: ["At the top, you'll see: Total Sales, Sales Report, and Top Selling Item."]
+        },
+        {
+          label: "Step 2: Automatic Updates",
+          details: ["When customers complete a payment through the Customer System, the transaction automatically appears here."]
+        },
+        {
+          label: "Step 3: Manual Edit or Update",
+          details: [
+            "Click the “⋮” (three dots) beside a transaction to edit details.",
+            "◦ Change the payment status (e.g., from Pending → Paid).",
+            "◦ Adjust the amount if there's a correction.",
+            "◦ Add notes or remarks."
+          ]
+        }
+      ]
     },
-    { 
-      title: "System Reports and Business Analytics", 
-      content: `Step 1: View Reports Summary
-At the top, you'll see your main reports:
-Sales Report - shows daily, weekly, monthly, and yearly totals.
-Inventory Report - tracks item quantities and stock levels.
-Total Sales & Orders - displays overall sales and number of orders.
-
-Step 2: Check Insights
-Top Clients Ordered - See which customers order the most.
-Top Selling Items - Identify your best-performing products.
-Most Stock Items - Find out which items have the highest remaining stock.
-
-Step 3: Export the Report
-Click the Export button (top-right corner).
-The report will be downloaded for record keeping, review, or business meetings.` 
+    {
+      title: "System Reports and Business Analytics",
+      steps: [
+        {
+          label: "Step 1: View Reports Summary",
+          details: ["◦ Sales Report, Inventory Report, and Total Sales & Orders."]
+        },
+        {
+          label: "Step 2: Check Insights",
+          details: ["◦ Top Clients Ordered, Top Selling Items, and Most Stock Items."]
+        },
+        {
+          label: "Step 3: Export the Report",
+          details: ["◦ Click the Export button (top-right corner) for record keeping."]
+        }
+      ]
     }
   ];
 
   return (
     <div className={s['help-container']}>
-      {/* HEADER PART ADDED HERE */}
       <TopHeader role={role} onLogout={onLogout} />
 
-      <div className={s['help-content-wrapper']}>
-        <h1 className={s['help-title']}>User Guide & System Help</h1>
-        
-        <div className={s['video-placeholder']}>
-          <div className={s['play-button']}>▶</div>
-        </div>
-
-        <div className={s['help-list']}>
-          {guides.map((guide, index) => (
-            <div key={index} className={s['help-item']}>
-              <div 
-                className={s['help-header']} 
-                onClick={() => setOpenIndex(openIndex === index ? null : index)}
-              >
-                <span>{guide.title}</span>
-                <span>{openIndex === index ? '▲' : '▼'}</span>
-              </div>
-              
-              {openIndex === index && (
-                <div className={s['help-content']} style={{ whiteSpace: 'pre-line' }}>
-                  {guide.content}
-                </div>
-              )}
+      <div className={s['help-main-layout']}>
+        <div className={s['help-card']}>
+          <h1 className={s['help-title']}>User Guide & System Help</h1>
+          
+          <div className={s['video-container']}>
+            <div className={s['video-placeholder']}>
+              <div className={s['play-button']}>▶</div>
             </div>
-          ))}
+          </div>
+
+          <div className={s['help-list']}>
+            {guides.map((guide, index) => {
+              const isOpen = openIndices.includes(index);
+              return (
+                <div key={index} className={`${s['help-item']} ${isOpen ? s['item-open'] : ''}`}>
+                  <div 
+                    className={`${s['help-header']} ${isOpen ? s['header-open'] : ''}`} 
+                    onClick={() => toggleAccordion(index)}
+                  >
+                    <span>{guide.title}</span>
+                    <span className={s['arrow']}>{isOpen ? '▲' : '▼'}</span>
+                  </div>
+                  
+                  {isOpen && (
+                    <div className={s['help-body']}>
+                      {guide.steps.map((step, sIdx) => (
+                        <div key={sIdx} className={s['help-step-section']}>
+                          <p className={s['step-label']}>{step.label}</p>
+                          <div className={s['step-details']}>
+                            {step.details.map((detail, dIdx) => (
+                              <p 
+                                key={dIdx} 
+                                className={`${s['detail-line']} ${detail.startsWith('◦') ? s['sub-bullet'] : ''}`}
+                              >
+                                {detail.startsWith('◦') ? '' : '• '} {detail}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
