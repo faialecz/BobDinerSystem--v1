@@ -68,6 +68,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  flex-wrap: wrap; 
+  gap: 1rem;
 }
 
 .title {
@@ -80,6 +82,9 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap; 
+  width: 100%; 
+  max-width: fit-content;
 }
 
 .searchWrapper {
@@ -88,8 +93,10 @@
   background: #f1f3f4;
   padding: 8px 15px;
   border-radius: 8px;
-  width: 250px;
+  width: 100%; 
+  max-width: 250px; 
   gap: 8px;
+  flex: 1;
 }
 
 .searchInput {
@@ -263,6 +270,8 @@ th.actionHeader .sortHeaderInner {
   justify-content: space-between;
   align-items: center;
   margin-top: 1.5rem;
+  flex-wrap: wrap; 
+  gap: 1rem;
 }
 
 .showDataText {
@@ -279,6 +288,8 @@ th.actionHeader .sortHeaderInner {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap; 
+  justify-content: center;
 }
 
 .pageCircle,
@@ -1120,4 +1131,53 @@ th.actionHeader .sortHeaderInner {
 .viewBtnPrint:hover {
   background: #164163;
   opacity: 0.9;
+}
+
+/* ===== TABLE CONTAINER ===== */
+.tableContainer {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  margin-bottom: 1.5rem;
+  max-width: 100%; /* ADD THIS: Prevents the container from breaking past its parent */
+  box-sizing: border-box; /* ADD THIS: Keeps padding inside the max-width */
+}
+
+/* ADD THIS NEW CLASS */
+.tableResponsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS devices */
+  margin-bottom: 1rem; /* Optional: Adds breathing room before the footer */
+}
+
+/* ===== TABLE BODY ===== */
+.table {
+  width: 100%;
+  min-width: 900px; /* ADD THIS: Forces the table to stay wide enough, triggering the scrollbar on smaller screens */
+  border-collapse: collapse;
+}
+
+@media (max-width: 600px) {
+   .footer {
+    justify-content: center;
+    text-align: center;
+  }
+  
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .controls {
+    max-width: 100%;
+    width: 100%;
+    justify-content: space-between; 
+  }
+  
+  .searchWrapper {
+    max-width: 100%; 
+    order: 3; 
+  }
 }

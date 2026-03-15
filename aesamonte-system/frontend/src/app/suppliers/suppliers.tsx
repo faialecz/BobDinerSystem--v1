@@ -420,14 +420,29 @@ export default function Suppliers({
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
-  const renderPageNumbers = () =>
-    Array.from({ length: totalPages }, (_, i) => (
-      <div
-        key={i + 1}
-        className={`${s.pageCircle} ${currentPage === i + 1 ? s.pageCircleActive : ''}`}
-        onClick={() => changePage(i + 1)}
-      >{i + 1}</div>
-    ));
+  const renderPageNumbers = () => {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    const pages = [];
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <button
+          key={i}
+          className={currentPage === i ? s.pageCircleActive : s.pageCircle}
+          onClick={() => setCurrentPage(i)}
+        >
+          {i}
+        </button>
+      );
+    }
+    return pages;
+  };
 
   if (isLoading) return <div className={s.loadingContainer}>Loading Suppliers...</div>;
 
@@ -499,69 +514,71 @@ export default function Suppliers({
               </div>
             </div>
 
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  {columns.map(col => (
-                    <th key={col.key!} onClick={() => handleSort(col.key)} className={s.sortableHeader}>
-                      <div className={s.sortHeaderInner}>
-                        <span>{col.label}</span>
-                        <div className={s.sortIconsStack}>
-                          <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
-                          <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
-                        </div>
-                      </div>
-                    </th>
-                  ))}
-                  <th className={s.actionHeader}>ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length ? (
-                  paginated.map((sup, i) => (
-                    <tr
-                      key={sup.id}
-                      className={i % 2 ? s.altRow : ''}
-                      onClick={() => handleOpenView(sup)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td>{sup.id}</td>
-                      <td><strong>{sup.supplierName}</strong></td>
-                      <td>{sup.contactPerson}</td>
-                      <td>{sup.contactNumber}</td>
-                      <td>{sup.email}</td>
-                      <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sup.address}</td>
-                      <td className={s.actionCell} onClick={e => e.stopPropagation()}>
-                        <LuEllipsisVertical
-                          className={s.moreIcon}
-                          onClick={() => setOpenMenuId(openMenuId === sup.id ? null : sup.id)}
-                        />
-                        {openMenuId === sup.id && (
-                          <div className={s.popupMenu}>
-                            <button
-                              className={s.popBtnEdit}
-                              onClick={() => {
-                                setEditFormData(sup);
-                                setEditModal(true);
-                                setOpenMenuId(null);
-                              }}
-                            >
-                              <LuPencil size={14} /> Edit
-                            </button>
-                            <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.id)}>
-                              <LuArchive size={14} /> Archive
-                            </button>
-                            <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
+            <div className={s.tableResponsive}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    {columns.map(col => (
+                      <th key={col.key!} onClick={() => handleSort(col.key)} className={s.sortableHeader}>
+                        <div className={s.sortHeaderInner}>
+                          <span>{col.label}</span>
+                          <div className={s.sortIconsStack}>
+                            <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                            <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>No suppliers found.</td></tr>
-                )}
-              </tbody>
-            </table>
+                        </div>
+                      </th>
+                    ))}
+                    <th className={s.actionHeader}>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.length ? (
+                    paginated.map((sup, i) => (
+                      <tr
+                        key={sup.id}
+                        className={i % 2 ? s.altRow : ''}
+                        onClick={() => handleOpenView(sup)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>{sup.id}</td>
+                        <td><strong>{sup.supplierName}</strong></td>
+                        <td>{sup.contactPerson}</td>
+                        <td>{sup.contactNumber}</td>
+                        <td>{sup.email}</td>
+                        <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sup.address}</td>
+                        <td className={s.actionCell} onClick={e => e.stopPropagation()}>
+                          <LuEllipsisVertical
+                            className={s.moreIcon}
+                            onClick={() => setOpenMenuId(openMenuId === sup.id ? null : sup.id)}
+                          />
+                          {openMenuId === sup.id && (
+                            <div className={s.popupMenu}>
+                              <button
+                                className={s.popBtnEdit}
+                                onClick={() => {
+                                  setEditFormData(sup);
+                                  setEditModal(true);
+                                  setOpenMenuId(null);
+                                }}
+                              >
+                                <LuPencil size={14} /> Edit
+                              </button>
+                              <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.id)}>
+                                <LuArchive size={14} /> Archive
+                              </button>
+                              <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>No suppliers found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
             <div className={s.footer}>
               <div className={s.showDataText}>
@@ -569,10 +586,16 @@ export default function Suppliers({
               </div>
               {totalPages > 1 && (
                 <div className={s.pagination}>
-                  <button className={s.nextBtn} onClick={() => changePage(currentPage - 1)} disabled={currentPage === 1}><LuChevronLeft /></button>
-                  {renderPageNumbers()}
-                  <button className={s.nextBtn} onClick={() => changePage(currentPage + 1)} disabled={currentPage === totalPages}><LuChevronRight /></button>
-                </div>
+                <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                  <LuChevronLeft />
+                </button>
+                
+                {renderPageNumbers()}
+                
+                <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
+                  <LuChevronRight />
+                </button>
+              </div>
               )}
             </div>
           </div>

@@ -11,6 +11,7 @@ import {
   LuSearch,
   LuChevronUp,
   LuChevronDown,
+  LuChevronLeft,
   LuChevronRight,
   LuArchive,
   LuDownload,
@@ -245,6 +246,30 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
   const lessVat  = totalAmt - totalAmt / (1 + vatRate)
   const netOfVat = totalAmt / (1 + vatRate)
 
+  const renderPageNumbers = () => {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    const pages = [];
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <button
+          key={i}
+          className={currentPage === i ? s.pageCircleActive : s.pageCircle}
+          onClick={() => setCurrentPage(i)}
+        >
+          {i}
+        </button>
+      );
+    }
+    return pages;
+  };
+
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
@@ -330,77 +355,80 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
               </div>
             </div>
 
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  {[
-                    { label: 'No.',     key: 'no' },
-                    { label: 'NAME',    key: 'name' },
-                    { label: 'ADDRESS', key: 'address' },
-                    { label: 'DATE',    key: 'date' },
-                    { label: 'QTY',     key: 'qty' },
-                    { label: 'AMOUNT',  key: 'amount' },
-                    { label: 'PAYMENT', key: 'paymentMethod' },
-                    { label: 'STATUS',  key: 'status' }
-                  ].map((col) => (
-                    <th key={col.key}>
-                      <div className={s.sortableHeader}>
-                        <span>{col.label}</span>
-                        <div className={s.sortIconsStack}>
-                          <LuChevronUp size={12} className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} onClick={() => requestSort(col.key as any, 'asc')} />
-                          <LuChevronDown size={12} className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} onClick={() => requestSort(col.key as any, 'desc')} />
+            <div className={s.tableResponsive}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    {[
+                      { label: 'No.',     key: 'no' },
+                      { label: 'NAME',    key: 'name' },
+                      { label: 'ADDRESS', key: 'address' },
+                      { label: 'DATE',    key: 'date' },
+                      { label: 'QTY',     key: 'qty' },
+                      { label: 'AMOUNT',  key: 'amount' },
+                      { label: 'PAYMENT', key: 'paymentMethod' },
+                      { label: 'STATUS',  key: 'status' }
+                    ].map((col) => (
+                      <th key={col.key}>
+                        <div className={s.sortableHeader}>
+                          <span>{col.label}</span>
+                          <div className={s.sortIconsStack}>
+                            <LuChevronUp size={12} className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} onClick={() => requestSort(col.key as any, 'asc')} />
+                            <LuChevronDown size={12} className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} onClick={() => requestSort(col.key as any, 'desc')} />
+                          </div>
                         </div>
-                      </div>
-                    </th>
-                  ))}
-                  <th className={s.actionHeader}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedTx.map((tx, i) => {
-                  const isBank = tx.paymentMethod?.toLowerCase().includes('bank')
-                  return (
-                    <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''} onClick={() => handleOpenView(tx)} style={{ cursor: 'pointer' }}>
-                      <td>{tx.no}</td>
-                      <td style={{ fontWeight: 600 }}>{tx.name}</td>
-                      <td>{tx.address}</td>
-                      <td>{tx.date}</td>
-                      <td>{tx.qty}</td>
-                      <td>₱ {tx.amount.toLocaleString()}</td>
-                      <td style={{ color: '#64748b' }}>{tx.paymentMethod}</td>
-                      <td>
-                        <span
-                          className={tx.status === 'PAID' ? s.statusPaid : s.statusPending}
-                          style={{ cursor: isBank ? 'pointer' : 'default', textDecoration: isBank && tx.status === 'PENDING' ? 'underline' : 'none', transition: 'all 0.2s' }}
-                          onClick={e => { e.stopPropagation(); handleTogglePaymentStatus(tx) }}
-                          title={isBank ? 'Click to toggle payment status' : 'Non-bank payments process automatically'}
-                        >
-                          {tx.status}
-                        </span>
-                      </td>
-                      <td className={s.actionCell} onClick={e => e.stopPropagation()}>
-                        <div className={s.actionWrapper}>
-                          <button className={s.archiveBtn} onClick={() => handleToggleArchive(tx.no)}>
-                            <LuArchive size={16} /><span>Archive</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                      </th>
+                    ))}
+                    <th className={s.actionHeader}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedTx.map((tx, i) => {
+                    const isBank = tx.paymentMethod?.toLowerCase().includes('bank')
+                    return (
+                      <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''} onClick={() => handleOpenView(tx)} style={{ cursor: 'pointer' }}>
+                        <td>{tx.no}</td>
+                        <td style={{ fontWeight: 600 }}>{tx.name}</td>
+                        <td>{tx.address}</td>
+                        <td>{tx.date}</td>
+                        <td>{tx.qty}</td>
+                        <td>₱ {tx.amount.toLocaleString()}</td>
+                        <td style={{ color: '#64748b' }}>{tx.paymentMethod}</td>
+                        <td>
+                          <span
+                            className={tx.status === 'PAID' ? s.statusPaid : s.statusPending}
+                            style={{ cursor: isBank ? 'pointer' : 'default', textDecoration: isBank && tx.status === 'PENDING' ? 'underline' : 'none', transition: 'all 0.2s' }}
+                            onClick={e => { e.stopPropagation(); handleTogglePaymentStatus(tx) }}
+                            title={isBank ? 'Click to toggle payment status' : 'Non-bank payments process automatically'}
+                          >
+                            {tx.status}
+                          </span>
+                        </td>
+                        <td className={s.actionCell} onClick={e => e.stopPropagation()}>
+                          <div className={s.actionWrapper}>
+                            <button className={s.archiveBtn} onClick={() => handleToggleArchive(tx.no)}>
+                              <LuArchive size={16} /><span>Archive</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             <div className={s.footer}>
               <div className={s.showDataText}>
                 Showing <span className={s.countBadge}>{paginatedTx.length}</span> of {filteredTx.length}
               </div>
               <div className={s.pagination}>
-                {Array.from({ length: totalPages }, (_, i) => (
-                  <button key={i + 1} className={currentPage === i + 1 ? s.pageCircleActive : s.pageCircle} onClick={() => setCurrentPage(i + 1)}>
-                    {i + 1}
-                  </button>
-                ))}
+                <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                  <LuChevronLeft />
+                </button>
+                
+                {renderPageNumbers()}
+                
                 <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
                   <LuChevronRight />
                 </button>

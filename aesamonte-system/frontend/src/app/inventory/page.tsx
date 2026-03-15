@@ -402,17 +402,30 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
-  const renderPageNumbers = () =>
-    Array.from({ length: totalPages }, (_, i) => (
-      <div
-        key={i + 1}
-        className={`${s.pageCircle} ${currentPage === i + 1 ? s.pageCircleActive : ''}`}
-        onClick={() => changePage(i + 1)}
-      >
-        {i + 1}
-      </div>
-    ));
+  const renderPageNumbers = () => {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
 
+    // Adjust the window if we're near the end to ensure we still show 5 pages
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    const pages = [];
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <div
+          key={i}
+          className={`${s.pageCircle} ${currentPage === i ? s.pageCircleActive : ''}`}
+          onClick={() => changePage(i)}
+        >
+          {i}
+        </div>
+      );
+    }
+    return pages;
+  };
   /* ── Status badge class helper ── */
   const getStatusClass = (status: string) => {
     if (status?.includes('Available')) return s.viewStatusAvailable;
@@ -532,81 +545,83 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
               </div>
             </div>
 
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  {[
-                    { label: 'ID', key: 'id' },
-                    { label: 'ITEM', key: 'item_name' },
-                    { label: 'DESCRIPTION', key: 'item_description' },
-                    { label: 'SKU', key: 'sku' },
-                    { label: 'BRAND', key: 'brand' },
-                    { label: 'QTY', key: 'qty' },
-                    { label: 'UOM', key: 'uom' },
-                    { label: 'UNIT PRICE', key: 'unitPrice' },
-                    { label: 'PRICE', key: 'price' },
-                    { label: 'STATUS', key: 'status' },
-                  ].map(col => (
-                    <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
-                      <div className={s.sortableHeader}>
-                        <span>{col.label}</span>
-                        <div className={s.sortIconsStack}>
-                          <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
-                          <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+            <div className={s.tableResponsive}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    {[
+                      { label: 'ID', key: 'id' },
+                      { label: 'ITEM', key: 'item_name' },
+                      { label: 'DESCRIPTION', key: 'item_description' },
+                      { label: 'SKU', key: 'sku' },
+                      { label: 'BRAND', key: 'brand' },
+                      { label: 'QTY', key: 'qty' },
+                      { label: 'UOM', key: 'uom' },
+                      { label: 'UNIT PRICE', key: 'unitPrice' },
+                      { label: 'PRICE', key: 'price' },
+                      { label: 'STATUS', key: 'status' },
+                    ].map(col => (
+                      <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
+                        <div className={s.sortableHeader}>
+                          <span>{col.label}</span>
+                          <div className={s.sortIconsStack}>
+                            <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                            <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                          </div>
                         </div>
-                      </div>
-                    </th>
-                  ))}
-                  <th className={s.actionHeader}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedProducts.map(p => (
-                  <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer' }}>
-                    <td>{p.id}</td>
-                    <td>{p.item_name}</td>
-                    <td>{p.item_description}</td>
-                    <td>{p.sku}</td>
-                    <td>{p.brand}</td>
-                    <td>{p.qty}</td>
-                    <td>{p.uom || '—'}</td>
-                    <td>₱ {p.unitPrice?.toLocaleString()}</td>
-                    <td>₱ {p.price?.toLocaleString()}</td>
-                    <td>
-                      <span className={
-                        p.status.includes("Available") ? s.pillGreen
-                        : p.status.includes("Low Stock") ? s.pillYellow
-                        : p.status.includes("Out of Stock") ? s.pillRed
-                        : ""
-                      }>
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className={s.actionCell} onClick={e => e.stopPropagation()}>
-                      <LuEllipsisVertical
-                        className={s.moreIcon}
-                        onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
-                      />
-                      {activeMenuId === p.id && (
-                        <div className={s.popoverMenu} ref={menuRef}>
-                          {canModify ? (
-                            <>
-                              <button className={s.popAddBtn} onClick={(e) => { e.stopPropagation(); setDefaultSupplierName((p as any).supplierName || ''); setShowModal(true); }}> ADD</button>
-                              <button className={s.popEditBtn} onClick={(e) => { e.stopPropagation(); handleEditClick(p); }}><LuPencil size={12}/> Edit</button>
-                              <button className={s.popArchiveBtn} onClick={(e) => { e.stopPropagation(); handleToggleArchive(p.id); }}><LuArchive size={12}/> Archive</button>
-                            </>
-                          ) : (
-                            <span style={{ padding: '8px 12px', color: '#94a3b8', fontSize: '0.85rem' }}>
-                              View only
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
+                      </th>
+                    ))}
+                    <th className={s.actionHeader}>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginatedProducts.map(p => (
+                    <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer' }}>
+                      <td>{p.id}</td>
+                      <td>{p.item_name}</td>
+                      <td>{p.item_description}</td>
+                      <td>{p.sku}</td>
+                      <td>{p.brand}</td>
+                      <td>{p.qty}</td>
+                      <td>{p.uom || '—'}</td>
+                      <td>₱ {p.unitPrice?.toLocaleString()}</td>
+                      <td>₱ {p.price?.toLocaleString()}</td>
+                      <td>
+                        <span className={
+                          p.status.includes("Available") ? s.pillGreen
+                          : p.status.includes("Low Stock") ? s.pillYellow
+                          : p.status.includes("Out of Stock") ? s.pillRed
+                          : ""
+                        }>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className={s.actionCell} onClick={e => e.stopPropagation()}>
+                        <LuEllipsisVertical
+                          className={s.moreIcon}
+                          onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)}
+                        />
+                        {activeMenuId === p.id && (
+                          <div className={s.popoverMenu} ref={menuRef}>
+                            {canModify ? (
+                              <>
+                                <button className={s.popAddBtn} onClick={(e) => { e.stopPropagation(); setDefaultSupplierName((p as any).supplierName || ''); setShowModal(true); }}> ADD</button>
+                                <button className={s.popEditBtn} onClick={(e) => { e.stopPropagation(); handleEditClick(p); }}><LuPencil size={12}/> Edit</button>
+                                <button className={s.popArchiveBtn} onClick={(e) => { e.stopPropagation(); handleToggleArchive(p.id); }}><LuArchive size={12}/> Archive</button>
+                              </>
+                            ) : (
+                              <span style={{ padding: '8px 12px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                                View only
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             <div className={s.footer}>
               <div className={s.footerLeft}>

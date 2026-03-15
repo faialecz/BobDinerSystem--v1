@@ -9,7 +9,7 @@ import AddOrderModal from './addOrderModal';
 import ArchiveTable from './archiveOrderModal';
 import { 
   LuSearch, LuChevronUp, LuChevronDown, LuEllipsisVertical, 
-  LuArchive, LuChevronRight, LuPencil, LuX, LuPrinter
+  LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX, LuPrinter
 } from 'react-icons/lu';
 
 const STATUS_PRIORITY: Record<string, number> = { 'TO SHIP': 1, 'RECEIVED': 2, 'CANCELLED': 3 };
@@ -353,6 +353,30 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
   const vatableBase = selectedOrderForView ? selectedOrderForView.totalAmount / (1 + vatRate) : 0;
   const vatAmount   = selectedOrderForView ? selectedOrderForView.totalAmount - vatableBase : 0;
 
+  const renderPageNumbers = () => {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    const pages = [];
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <button
+          key={i}
+          className={currentPage === i ? s.pageCircleActive : s.pageCircle}
+          onClick={() => setCurrentPage(i)}
+        >
+          {i}
+        </button>
+      );
+    }
+    return pages;
+  };
+
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
@@ -414,63 +438,71 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
               </div>
             </div>
 
-            <table className={s.table}>
-              <thead>
-                <tr>
-                  {[
-                    { label: 'ID', key: 'id', sortable: true }, { label: 'CUSTOMER', key: 'customer', sortable: true },
-                    { label: 'ADDRESS', key: 'address', sortable: true }, { label: 'QTY', key: 'totalQty', sortable: true },
-                    { label: 'TOTAL', key: 'totalAmount', sortable: true }, { label: 'PAYMENT', key: 'paymentMethod', sortable: true },
-                    { label: 'DATE', key: 'date', sortable: true }, { label: 'STATUS', key: 'status', sortable: true },
-                    { label: 'ACTION', key: null, sortable: false },
-                  ].map(col => (
-                    <th key={col.label} onClick={() => col.sortable && col.key && handleSort(col.key as Exclude<SortKey, null>)} style={{ cursor: col.sortable ? 'pointer' : 'default' }}>
-                      <div className={s.sortableHeader}>
-                        <span>{col.label}</span>
-                        {col.sortable && col.key && (
-                          <div className={s.sortIconsStack}>
-                            <LuChevronUp size={12} style={{ color: sortConfig.key === col.key && sortConfig.direction === 'asc' ? '#1a4263' : '#cbd5e1' }} />
-                            <LuChevronDown size={12} style={{ color: sortConfig.key === col.key && sortConfig.direction === 'desc' ? '#1a4263' : '#cbd5e1' }} />
+            <div className={s.tableResponsive}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    {[
+                      { label: 'ID', key: 'id', sortable: true }, { label: 'CUSTOMER', key: 'customer', sortable: true },
+                      { label: 'ADDRESS', key: 'address', sortable: true }, { label: 'QTY', key: 'totalQty', sortable: true },
+                      { label: 'TOTAL', key: 'totalAmount', sortable: true }, { label: 'PAYMENT', key: 'paymentMethod', sortable: true },
+                      { label: 'DATE', key: 'date', sortable: true }, { label: 'STATUS', key: 'status', sortable: true },
+                      { label: 'ACTION', key: null, sortable: false },
+                    ].map(col => (
+                      <th key={col.label} onClick={() => col.sortable && col.key && handleSort(col.key as Exclude<SortKey, null>)} style={{ cursor: col.sortable ? 'pointer' : 'default' }}>
+                        <div className={s.sortableHeader}>
+                          <span>{col.label}</span>
+                          {col.sortable && col.key && (
+                            <div className={s.sortIconsStack}>
+                              <LuChevronUp size={12} style={{ color: sortConfig.key === col.key && sortConfig.direction === 'asc' ? '#1a4263' : '#cbd5e1' }} />
+                              <LuChevronDown size={12} style={{ color: sortConfig.key === col.key && sortConfig.direction === 'desc' ? '#1a4263' : '#cbd5e1' }} />
+                            </div>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((o, i) => (
+                    <tr key={o.id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(o)} style={{ cursor: 'pointer' }}>
+                      <td style={{ textAlign: 'center' }}>{o.id}</td>
+                      <td style={{ textAlign: 'left', paddingLeft: '1rem' }}><strong>{o.customer}</strong></td>
+                      <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.address}</td>
+                      <td style={{ textAlign: 'center' }}>{o.totalQty}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₱{o.totalAmount?.toLocaleString()}</td>
+                      <td style={{ textAlign: 'center' }}>{o.paymentMethod}</td>
+                      <td style={{ textAlign: 'center' }}>{o.date}</td>
+                      <td style={{ textAlign: 'center' }}><span className={getStatusStyle(o.status)}>{o.status}</span></td>
+                      <td className={s.actionCell} onClick={e => e.stopPropagation()}>
+                        <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)} />
+                        {openMenuId === o.id && (
+                          <div className={s.popupMenu}>
+                            <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
+                            <button className={s.popBtnArchive} onClick={() => handleToggleArchive(o.id)}><LuArchive size={14} /> Archive</button>
+                            <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
                           </div>
                         )}
-                      </div>
-                    </th>
+                      </td>
+                    </tr>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.map((o, i) => (
-                  <tr key={o.id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(o)} style={{ cursor: 'pointer' }}>
-                    <td style={{ textAlign: 'center' }}>{o.id}</td>
-                    <td style={{ textAlign: 'left', paddingLeft: '1rem' }}><strong>{o.customer}</strong></td>
-                    <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.address}</td>
-                    <td style={{ textAlign: 'center' }}>{o.totalQty}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₱{o.totalAmount?.toLocaleString()}</td>
-                    <td style={{ textAlign: 'center' }}>{o.paymentMethod}</td>
-                    <td style={{ textAlign: 'center' }}>{o.date}</td>
-                    <td style={{ textAlign: 'center' }}><span className={getStatusStyle(o.status)}>{o.status}</span></td>
-                    <td className={s.actionCell} onClick={e => e.stopPropagation()}>
-                      <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)} />
-                      {openMenuId === o.id && (
-                        <div className={s.popupMenu}>
-                          <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
-                          <button className={s.popBtnArchive} onClick={() => handleToggleArchive(o.id)}><LuArchive size={14} /> Archive</button>
-                          <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
+          
 
             <div className={s.footer}>
               <div className={s.showDataText}>Showing <span className={s.countBadge}>{paginated.length}</span> of {sorted.length}</div>
               <div className={s.pagination}>
-                {Array.from({ length: totalPages }, (_, i) => (
-                  <div key={i + 1} className={`${s.pageCircle} ${currentPage === i + 1 ? s.pageCircleActive : ''}`} onClick={() => setCurrentPage(i + 1)}>{i + 1}</div>
-                ))}
-                <button className={s.nextBtn} onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage >= totalPages}><LuChevronRight /></button>
+                <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                  <LuChevronLeft />
+                </button>
+                
+                {renderPageNumbers()}
+                
+                <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
+                  <LuChevronRight />
+                </button>
               </div>
             </div>
           </div>
