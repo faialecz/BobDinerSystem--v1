@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
-import styles from "@/css/inventory.module.css"; 
-import { LuX, LuPlus, LuTrash2, LuSearch } from "react-icons/lu";
+import styles from "@/css/order.module.css"; 
+import { LuX, LuPlus, LuTrash2, LuSearch} from "react-icons/lu";
 
 interface OrderEditModalProps {
   isOpen: boolean;
@@ -17,10 +17,11 @@ interface OrderEditModalProps {
 const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], paymentMethods = [], inventoryItems = [] }: OrderEditModalProps) => {
   const s = styles as Record<string, string>;
   const [formData, setFormData] = useState<any>(null);
+  const [originalData, setOriginalData] = useState<any>(null);
+  const [noChangeError, setNoChangeError] = useState(false);
   
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
 
-  // THE FIX: Filter out archived items immediately
   const activeInventory = (inventoryItems || []).filter((inv: any) => !inv.is_archived);
 
   useEffect(() => {
@@ -35,7 +36,7 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
           }))
         : [{ inventory_id: '', item: '', itemDescription: '—', quantity: '1', amount: 0 }];
 
-      setFormData({
+      const built = {
         id: orderData.id,
         customerName: orderData.name || orderData.customer, 
         contact: orderData.contact || '',
@@ -43,16 +44,23 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
         status: orderData.status || 'Preparing',
         paymentMethod: orderData.paymentMethod || 'Cash',
         items: initialItems
-      });
+      };
+
+      setFormData(built);
+      setOriginalData(JSON.parse(JSON.stringify(built)));
+      setNoChangeError(false);
     }
   }, [orderData]);
+
+  const hasChanges = () => {
+    if (!formData || !originalData) return false;
+    return JSON.stringify(formData) !== JSON.stringify(originalData);
+  };
 
   const handleItemSelect = (index: number, selectedInvId: string) => {
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
-    
     const selectedInv = activeInventory.find((inv: any) => String(inv.id) === selectedInvId);
-    
     if (selectedInv) {
       const currentQty = Number(newItems[index].quantity) || 1;
       newItems[index] = {
@@ -72,9 +80,7 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
     newItems[index].item = text;
-    
     const match = activeInventory.find((inv: any) => inv.item_name.toLowerCase().trim() === text.toLowerCase().trim());
-    
     if (match && Number(match.qty) > 0) {
         newItems[index].inventory_id = match.id;
         newItems[index].itemDescription = match.item_description || 'No Description';
@@ -89,7 +95,6 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
         newItems[index].itemDescription = '—';
         newItems[index].amount = 0;
     }
-    
     setFormData({ ...formData, items: newItems });
   };
 
@@ -97,16 +102,10 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
     const qtyNum = Number(newQty) || 0;
-    
     const invItem = activeInventory.find((inv: any) => String(inv.id) === String(newItems[index].inventory_id));
     const existingPrice = (Number(newItems[index].amount) / (Number(newItems[index].quantity) || 1)) || 0;
     const price = invItem ? Number(invItem.price) : existingPrice;
-
-    newItems[index] = { 
-      ...newItems[index], 
-      quantity: newQty,
-      amount: price * qtyNum 
-    };
+    newItems[index] = { ...newItems[index], quantity: newQty, amount: price * qtyNum };
     setFormData({ ...formData, items: newItems });
   };
 
@@ -252,7 +251,6 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', maxHeight: '250px', overflowY: 'auto',
                           marginTop: '4px'
                         }}>
-                          {/* THE FIX: Replaced all inventoryItems with activeInventory */}
                           {activeInventory
                             .filter((inv: any) => Number(inv.qty) > 0)
                             .filter((inv: any) => 
@@ -279,7 +277,6 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                             ))
                           }
                           
-                          {/* THE FIX: Replaced all inventoryItems with activeInventory */}
                           {activeInventory.filter((inv: any) => Number(inv.qty) <= 0 && inv.item_name.toLowerCase().includes((item.item || '').toLowerCase())).length > 0 && (
                              <div style={{ padding: '10px 12px', fontSize: '0.8rem', color: '#ef4444', textAlign: 'center', backgroundColor: '#fef2f2' }}>
                                 Some matches are currently Out of Stock.
@@ -292,19 +289,8 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                    <div className={s.formGroup} style={{ minWidth: 0 }}>
                       <label className={s.miniLabel}>Description</label>
                       <div style={{ 
-                            padding: '0 12px', 
-                            height: '38px', 
-                            borderRadius: '6px', 
-                            border: '1px solid #e5e7eb', 
-                            fontSize: '0.9rem', 
-                            
-                            display: 'block',         
-                            lineHeight: '36px',       
-                            overflow: 'hidden',       
-                            whiteSpace: 'nowrap',     
-                            textOverflow: 'ellipsis', 
-                            width: '100%',            
-
+                            padding: '0 12px', height: '38px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '0.9rem', 
+                            display: 'block', lineHeight: '36px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', width: '100%',            
                             backgroundColor: (!item.inventory_id && item.item.length > 0) ? '#fef2f2' : '#f3f4f6',
                             color: (!item.inventory_id && item.item.length > 0) ? '#ef4444' : '#6b7280'
                           }}>
@@ -344,9 +330,29 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
 
         </div>
 
+        {noChangeError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          background: '#fee2e2', border: '1px solid #fca5a5',
+          color: '#dc2626', borderRadius: '8px',
+          padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
+          margin: '0 24px',
+        }}>
+          <span style={{ fontSize: '1rem' }}>⚠</span>
+          No changes detected. Please modify at least one field before updating.
+        </div>
+      )}
+
         <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', marginTop: 0, display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
           <button className={s.cancelBtn} onClick={onClose}>Cancel</button>
-          <button className={s.saveBtn} onClick={() => onSave({ ...formData, totalQty, totalAmt })}>Save Changes</button>
+          <button className={s.saveBtn} onClick={() => {
+            if (!hasChanges()) {
+              setNoChangeError(true);
+              return;
+            }
+            setNoChangeError(false);
+            onSave({ ...formData, totalQty, totalAmt });
+          }}>Save Changes</button>
         </div>
 
       </div>
