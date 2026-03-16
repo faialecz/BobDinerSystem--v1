@@ -605,7 +605,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                           <div className={s.popoverMenu} ref={menuRef}>
                             {canModify ? (
                               <>
-                                <button className={s.popAddBtn} onClick={(e) => { e.stopPropagation(); setDefaultSupplierName((p as any).supplierName || ''); setShowModal(true); }}> ADD</button>
+                               
                                 <button className={s.popEditBtn} onClick={(e) => { e.stopPropagation(); handleEditClick(p); }}><LuPencil size={12}/> Edit</button>
                                 <button className={s.popArchiveBtn} onClick={(e) => { e.stopPropagation(); handleToggleArchive(p.id); }}><LuArchive size={12}/> Archive</button>
                               </>
