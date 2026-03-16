@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import Login from "@/app/auth/auth";
-import Dashboard from "@/app/dashboard/page";
+import Dashboard from "@/app/dashboard/dashboard";
 import Sidebar from "@/components/layout/SideNavBar";
-import Reports from "@/app/reports/page";
+import Reports from "@/app/reports/reports";
 import Settings from "@/app/settings/settings";
-import Help from "@/app/help/page";
-import Inventory from "@/app/inventory/page";
-import Sales from "@/app/sales/page";
-import Orders from "@/app/order/page";
+import Help from "@/app/help/help";
+import Inventory from "@/app/inventory/inventory";
+import Sales from "@/app/sales/sales";
+import Orders from "@/app/order/order";
 import Suppliers from "@/app/suppliers/suppliers";
 import type { UserInfo } from "@/types/user";
 
@@ -54,7 +54,7 @@ export default function Home() {
               ${isCollapsed ? "ml-*" : "ml-*"}`}
           >
             {activeTab === "Dashboard" ? (
-              <Dashboard role={userInfo.roleName} onLogout={handleLogout} />
+              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTab} />
             ) : activeTab === "Inventory" ? (
               <Inventory role={userInfo.roleName} department={userInfo.department} employeeId={userInfo.employeeId} onLogout={handleLogout} />
             ) : activeTab === "Sales" ? (
