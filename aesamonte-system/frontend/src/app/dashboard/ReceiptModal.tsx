@@ -13,10 +13,11 @@ function fmt(n: number | undefined | null) {
 }
 
 interface ReceiptModalProps {
-  receipt: OrderReceipt | null;
+  receipt: OrderReceipt;
   receiptLoading: boolean;
   onClose: () => void;
   onOrdersUpdate: (updater: (prev: RecentOrder[]) => RecentOrder[]) => void;
+  onReceiptStatusUpdate: (orderId: number, status: string) => void;
 }
 
 export default function ReceiptModal({
@@ -24,25 +25,14 @@ export default function ReceiptModal({
   receiptLoading,
   onClose,
   onOrdersUpdate,
+  onReceiptStatusUpdate,
 }: ReceiptModalProps) {
   const [confirmAction, setConfirmAction] = useState<"PREPARING" | "RECEIVED" | null>(null);
-  const [localReceipt, setLocalReceipt] = useState<OrderReceipt | null>(receipt);
-
-  // Sync localReceipt when receipt prop changes (new order opened)
-  if (receipt && receipt.orderId !== localReceipt?.orderId) {
-    setLocalReceipt(receipt);
-  }
-  if (!receipt && localReceipt) {
-    setLocalReceipt(null);
-  }
-
-  const currentReceipt = localReceipt ?? receipt;
 
   const handleStatusAdvance = async (targetStatus: "PREPARING" | "RECEIVED") => {
-    if (!currentReceipt) return;
     try {
       const res = await fetch(
-        `${API}/api/dashboard/order-status/${currentReceipt.orderId}`,
+        `${API}/api/dashboard/order-status/${receipt.orderId}`,
         {
           method: "PATCH",
           credentials: "include",
@@ -52,10 +42,10 @@ export default function ReceiptModal({
       );
       const data = await res.json();
       if (data.status) {
-        setLocalReceipt((prev) => (prev ? { ...prev, status: data.status } : prev));
+        onReceiptStatusUpdate(receipt.orderId, data.status);
         onOrdersUpdate((prev) =>
           prev.map((o) =>
-            o.orderId === currentReceipt.orderId ? { ...o, status: data.status } : o
+            o.orderId === receipt.orderId ? { ...o, status: data.status } : o
           )
         );
       }
@@ -65,7 +55,6 @@ export default function ReceiptModal({
   };
 
   const handlePrint = () => {
-    if (!currentReceipt) return;
     const pw = window.open("", "_blank");
     if (!pw) {
       alert(
@@ -74,7 +63,7 @@ export default function ReceiptModal({
       return;
     }
 
-    const items = currentReceipt.items;
+    const items = receipt.items;
     const totalRows = Math.max(25, items.length);
     const rows = Array.from({ length: totalRows }, (_, i) => {
       const item = items[i];
@@ -86,7 +75,7 @@ export default function ReceiptModal({
     pw.document.write(`<!DOCTYPE html>
       <html>
       <head>
-        <title>Delivery Receipt - No. ${currentReceipt.orderId}</title>
+        <title>Delivery Receipt - No. ${receipt.orderId}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 24px 28px; }
@@ -131,8 +120,8 @@ export default function ReceiptModal({
           </div>
           <div class="receipt-block">
             <div class="receipt-title">DELIVERY RECEIPT</div>
-            <div class="receipt-no"><span>N<sup>o</sup></span> ${currentReceipt.orderId}</div>
-            <div class="meta-row"><span class="meta-label">Date:</span><span class="meta-value">${currentReceipt.orderDate}</span></div>
+            <div class="receipt-no"><span>N<sup>o</sup></span> ${receipt.orderId}</div>
+            <div class="meta-row"><span class="meta-label">Date:</span><span class="meta-value">${receipt.orderDate}</span></div>
             <div class="meta-row"><span class="meta-label">P.O. No.:</span><span class="meta-value">&nbsp;</span></div>
             <div class="meta-row"><span class="meta-label">RFQ No.:</span><span class="meta-value">&nbsp;</span></div>
             <div class="meta-row"><span class="meta-label">TIN No.:</span><span class="meta-value">&nbsp;</span></div>
@@ -141,11 +130,11 @@ export default function ReceiptModal({
         <div class="deliver-section">
           <div class="deliver-row">
             <span class="deliver-label">DELIVERED TO:</span>
-            <span class="deliver-line">${currentReceipt.customerName}</span>
+            <span class="deliver-line">${receipt.customerName}</span>
           </div>
           <div class="deliver-row">
             <span class="deliver-label">Address:</span>
-            <span class="deliver-line">${currentReceipt.customerAddress || ""}</span>
+            <span class="deliver-line">${receipt.customerAddress || ""}</span>
           </div>
         </div>
         <table>
@@ -184,8 +173,6 @@ export default function ReceiptModal({
     pw.print();
   };
 
-  if (!currentReceipt) return null;
-
   return (
     <>
       {/* Confirm Modal */}
@@ -194,9 +181,7 @@ export default function ReceiptModal({
           <div className={styles.confirmBox} onClick={(e) => e.stopPropagation()}>
             <div
               className={
-                confirmAction === "RECEIVED"
-                  ? styles.confirmHeader
-                  : styles.confirmHeaderAmber
+                confirmAction === "RECEIVED" ? styles.confirmHeader : styles.confirmHeaderAmber
               }
             >
               <div className={styles.confirmIconCircle}>
@@ -224,17 +209,12 @@ export default function ReceiptModal({
                 )}
               </p>
               <div className={styles.confirmActions}>
-                <button
-                  className={styles.confirmCancelBtn}
-                  onClick={() => setConfirmAction(null)}
-                >
+                <button className={styles.confirmCancelBtn} onClick={() => setConfirmAction(null)}>
                   Cancel
                 </button>
                 <button
                   className={
-                    confirmAction === "RECEIVED"
-                      ? styles.confirmGreenBtn
-                      : styles.confirmAmberBtn
+                    confirmAction === "RECEIVED" ? styles.confirmGreenBtn : styles.confirmAmberBtn
                   }
                   onClick={() => {
                     handleStatusAdvance(confirmAction);
@@ -261,7 +241,7 @@ export default function ReceiptModal({
           <div className={styles.receiptHeader}>
             <div>
               <p className={styles.receiptTitle}>Order Receipt</p>
-              <p className={styles.receiptOrderId}>#{currentReceipt.orderId}</p>
+              <p className={styles.receiptOrderId}>#{receipt.orderId}</p>
             </div>
             <button className={styles.receiptClose} onClick={onClose}>
               ✕
@@ -274,11 +254,11 @@ export default function ReceiptModal({
               <div className={styles.receiptMeta}>
                 <div>
                   <p className={styles.receiptMetaLabel}>Customer</p>
-                  <p className={styles.receiptMetaVal}>{currentReceipt.customerName}</p>
+                  <p className={styles.receiptMetaVal}>{receipt.customerName}</p>
                 </div>
                 <div className={styles.receiptMetaRight}>
-                  <p className={styles.receiptMetaLabel}>{currentReceipt.orderDate}</p>
-                  <p className={styles.receiptMetaVal}>{currentReceipt.paymentMethod}</p>
+                  <p className={styles.receiptMetaLabel}>{receipt.orderDate}</p>
+                  <p className={styles.receiptMetaVal}>{receipt.paymentMethod}</p>
                 </div>
               </div>
               <div className={styles.receiptDivider} />
@@ -288,7 +268,7 @@ export default function ReceiptModal({
                 <span>Amount</span>
               </div>
               <div className={styles.receiptItems}>
-                {currentReceipt.items.map((item, i) => (
+                {receipt.items.map((item, i) => (
                   <div key={i} className={styles.receiptItem}>
                     <span className={styles.receiptItemName}>{item.item_name}</span>
                     <span className={styles.receiptItemQty}>
@@ -301,10 +281,10 @@ export default function ReceiptModal({
               <div className={styles.receiptDivider} />
               <div className={styles.receiptTotal}>
                 <span>Total</span>
-                <span>{fmt(currentReceipt.totalAmount)}</span>
+                <span>{fmt(receipt.totalAmount)}</span>
               </div>
               <div className={styles.receiptStatusActions}>
-                {currentReceipt.status === "PENDING" && (
+                {receipt.status === "PENDING" && (
                   <button
                     className={styles.receiptStatusBtn}
                     onClick={() => setConfirmAction("PREPARING")}
@@ -312,8 +292,7 @@ export default function ReceiptModal({
                     Mark as Preparing
                   </button>
                 )}
-                {(currentReceipt.status === "PENDING" ||
-                  currentReceipt.status === "PREPARING") && (
+                {(receipt.status === "PENDING" || receipt.status === "PREPARING") && (
                   <button
                     className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnGreen}`}
                     onClick={() => setConfirmAction("RECEIVED")}
@@ -321,7 +300,7 @@ export default function ReceiptModal({
                     Mark as Received
                   </button>
                 )}
-                {currentReceipt.status === "RECEIVED" && (
+                {receipt.status === "RECEIVED" && (
                   <span className={styles.receiptStatusDone}>✓ Received</span>
                 )}
               </div>

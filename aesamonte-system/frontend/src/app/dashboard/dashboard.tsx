@@ -48,6 +48,10 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
       .finally(() => setLoading(false));
   }, []);
 
+  const handleReceiptStatusUpdate = (orderId: number, status: string) => {
+    setReceipt((prev) => (prev ? { ...prev, status } : prev));
+  };
+
   const handleOrderClick = async (orderId: number) => {
     setReceiptLoading(true);
     setReceipt({
@@ -112,6 +116,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
           receiptLoading={receiptLoading}
           onClose={() => setReceipt(null)}
           onOrdersUpdate={setRecentOrders}
+          onReceiptStatusUpdate={handleReceiptStatusUpdate}
         />
       )}
     </div>
