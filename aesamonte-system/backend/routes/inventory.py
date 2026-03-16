@@ -9,30 +9,32 @@ inventory_bp = Blueprint("inventory", __name__)
 def get_inventory():
     conn = get_connection()
     cur = conn.cursor()
-
-    # We are now grabbing i.item_status_id directly!
-    cur.execute("""
-        SELECT 
-            i.inventory_id,
-            i.item_name,
-            i.item_description,
-            i.item_sku,
-            i.brand,
-            i.item_quantity,
-            u.uom_code AS uom,  
-            s.status_name AS item_status,
-            i.item_unit_price,
-            i.item_selling_price,
-            i.item_status_id 
-        FROM inventory i
-        LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
-        JOIN static_status s ON i.item_status_id = s.status_id
-        ORDER BY i.inventory_id ASC;
-    """)
-
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("""
+            SELECT
+                i.inventory_id,
+                i.item_name,
+                i.item_description,
+                i.item_sku,
+                i.brand,
+                i.item_quantity,
+                u.uom_code AS uom,
+                s.status_name AS item_status,
+                i.item_unit_price,
+                i.item_selling_price,
+                i.item_status_id
+            FROM inventory i
+            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
+            JOIN static_status s ON i.item_status_id = s.status_id
+            ORDER BY i.inventory_id ASC;
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        print("Inventory GET error:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
     result = []
     for r in rows:
@@ -216,78 +218,77 @@ def add_inventory_batch():
 def get_uoms():
     conn = get_connection()
     cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT uom_id, uom_code, uom_name
+            FROM unit_of_measure
+            WHERE is_active = true
+            ORDER BY uom_name ASC
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        print("UOM GET error:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
-    cur.execute("""
-        SELECT uom_id, uom_code, uom_name 
-        FROM unit_of_measure 
-        WHERE is_active = true 
-        ORDER BY uom_name ASC
-    """)
-    
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    uoms = [
-        {"id": r[0], "code": r[1], "name": r[2]}
-        for r in rows
-    ]
-
-    return jsonify(uoms)
+    return jsonify([{"id": r[0], "code": r[1], "name": r[2]} for r in rows])
 
 # ================= Edit Inventory Item =================
 @inventory_bp.route("/api/inventory/<string:id>", methods=["GET"])
 def get_inventory_item(id):
     conn = get_connection()
     cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                i.inventory_id, i.item_name, i.item_description, i.item_sku, i.brand,
+                i.item_quantity, u.uom_code, i.item_unit_price, i.item_selling_price,
+                s.supplier_name, s.contact_person, s.supplier_contact,
+                ia.lead_time_days, ia.min_order_qty, ia.reorder_qty,
+                i.supplier_ids
+            FROM inventory i
+            LEFT JOIN supplier s ON i.supplier_id = s.supplier_id
+            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
+            LEFT JOIN inventory_action ia ON i.inventory_id = ia.inventory_id
+            WHERE i.inventory_id = %s
+        """, (id,))
+        r = cur.fetchone()
 
-    cur.execute("""
-        SELECT
-            i.inventory_id, i.item_name, i.item_description, i.item_sku, i.brand,
-            i.item_quantity, u.uom_code, i.item_unit_price, i.item_selling_price,
-            s.supplier_name, s.contact_person, s.supplier_contact,
-            ia.lead_time_days, ia.min_order_qty, ia.reorder_qty,
-            i.supplier_ids
-        FROM inventory i
-        LEFT JOIN supplier s ON i.supplier_id = s.supplier_id
-        LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
-        LEFT JOIN inventory_action ia ON i.inventory_id = ia.inventory_id
-        WHERE i.inventory_id = %s
-    """, (id,))
-    r = cur.fetchone()
+        if not r:
+            return jsonify({"error": "Item not found"}), 404
 
-    if not r:
-        cur.close(); conn.close()
-        return jsonify({"error": "Item not found"}), 404
+        import json as _json
+        raw_sup_ids = r[15]
+        if raw_sup_ids:
+            suppliers_list = raw_sup_ids if isinstance(raw_sup_ids, list) else _json.loads(raw_sup_ids)
+            for sup in suppliers_list:
+                if sup.get('supplier_id'):
+                    cur.execute("SELECT contact_person, supplier_contact FROM supplier WHERE supplier_id = %s", (sup['supplier_id'],))
+                    cr = cur.fetchone()
+                    if cr:
+                        sup['contactPerson'] = cr[0] or ''
+                        sup['contactNumber'] = cr[1] or ''
+        else:
+            suppliers_list = [{
+                "supplierName": r[9] or '', "contactPerson": r[10] or '', "contactNumber": r[11] or '',
+                "leadTime": r[12] or 0, "minOrder": r[13] or 0, "isPrimary": True
+            }] if r[9] else []
 
-    import json as _json
-    # supplier_ids JSONB column holds the full multi-supplier list
-    raw_sup_ids = r[15]
-    if raw_sup_ids:
-        suppliers_list = raw_sup_ids if isinstance(raw_sup_ids, list) else _json.loads(raw_sup_ids)
-        # Enrich with contact info from supplier table
-        for sup in suppliers_list:
-            if sup.get('supplier_id'):
-                cur.execute("SELECT contact_person, supplier_contact FROM supplier WHERE supplier_id = %s", (sup['supplier_id'],))
-                cr = cur.fetchone()
-                if cr:
-                    sup['contactPerson'] = cr[0] or ''
-                    sup['contactNumber'] = cr[1] or ''
-    else:
-        # Fall back to single supplier from inventory.supplier_id
-        suppliers_list = [{
+        return jsonify({
+            "id": r[0], "itemName": r[1], "itemDescription": r[2], "sku": r[3], "brand": r[4],
+            "qty": r[5], "uom": r[6] or 'Select', "unitPrice": float(r[7]), "sellingPrice": float(r[8]),
             "supplierName": r[9] or '', "contactPerson": r[10] or '', "contactNumber": r[11] or '',
-            "leadTime": r[12] or 0, "minOrder": r[13] or 0, "isPrimary": True
-        }] if r[9] else []
-
-    cur.close(); conn.close()
-    return jsonify({
-        "id": r[0], "itemName": r[1], "itemDescription": r[2], "sku": r[3], "brand": r[4],
-        "qty": r[5], "uom": r[6] or 'Select', "unitPrice": float(r[7]), "sellingPrice": float(r[8]),
-        "supplierName": r[9] or '', "contactPerson": r[10] or '', "contactNumber": r[11] or '',
-        "leadTime": r[12] or 0, "minOrder": r[13] or 0, "reorderPoint": r[14] or 0,
-        "suppliers": suppliers_list,
-    })
+            "leadTime": r[12] or 0, "minOrder": r[13] or 0, "reorderPoint": r[14] or 0,
+            "suppliers": suppliers_list,
+        })
+    except Exception as e:
+        print("Inventory item GET error:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 @inventory_bp.route("/api/inventory/update/<string:id>", methods=["PUT"])
 def update_inventory_item(id):

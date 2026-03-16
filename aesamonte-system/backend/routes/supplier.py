@@ -9,27 +9,30 @@ supplier_bp = Blueprint("supplier", __name__, url_prefix="/api/suppliers")
 def get_suppliers():
     conn = get_connection()
     cur = conn.cursor()
-
-    cur.execute("""
-        SELECT 
-            s.supplier_id,
-            s.supplier_name,
-            s.contact_person,
-            s.supplier_contact,
-            s.supplier_email,
-            s.supplier_address,
-            st.status_name AS supplier_status,
-            st.status_code
-        FROM supplier s
-        LEFT JOIN static_status st 
-            ON s.supplier_status_id = st.status_id
-        WHERE st.status_scope = 'SUPPLIER_STATUS'
-        ORDER BY s.supplier_id DESC
-    """)
-
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("""
+            SELECT
+                s.supplier_id,
+                s.supplier_name,
+                s.contact_person,
+                s.supplier_contact,
+                s.supplier_email,
+                s.supplier_address,
+                st.status_name AS supplier_status,
+                st.status_code
+            FROM supplier s
+            LEFT JOIN static_status st
+                ON s.supplier_status_id = st.status_id
+            WHERE st.status_scope = 'SUPPLIER_STATUS'
+            ORDER BY s.supplier_id DESC
+        """)
+        rows = cur.fetchall()
+    except Exception as e:
+        print("Supplier GET error:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
     suppliers = [
         {
@@ -40,7 +43,7 @@ def get_suppliers():
             "email": r[4],
             "address": r[5],
             "status": r[6],
-            "is_archived": r[7] == 'INACTIVE'  
+            "is_archived": r[7] == 'INACTIVE'
         }
         for r in rows
     ]

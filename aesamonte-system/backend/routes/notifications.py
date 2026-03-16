@@ -20,142 +20,144 @@ def get_notifications():
     cur = conn.cursor()
     notifications = []
 
-    # ── 1. PENDING / PREPARING / CANCELLED / RECEIVED orders ─────────────────
     try:
-        cur.execute("""
-            SELECT
-                ot.order_id,
-                ss.status_code,
-                ss.status_name,
-                COALESCE(
-                    (SELECT MAX(oal.order_audit_log_date)
-                     FROM order_audit_log oal
-                     WHERE oal.order_id = ot.order_id),
-                    ot.order_date::timestamp
-                ) AS event_time
-            FROM order_transaction ot
-            JOIN static_status ss ON ot.order_status_id = ss.status_id
-            WHERE ss.status_scope = 'ORDER_STATUS'
-              AND ss.status_code IN ('PENDING', 'PREPARING', 'CANCELLED', 'RECEIVED')
-            ORDER BY event_time DESC
-            LIMIT 10
-        """)
-        for row in cur.fetchall():
-            order_id, status_code, status_name, event_time = row
-            notifications.append({
-                "category": "ORDER",
-                "reference": str(order_id),
-                "status_code": status_code,
-                "status_name": status_name,
-                "event_time": event_time,
-            })
-    except Exception as e:
-        print("Notifications [orders active] error:", e)
-        conn.rollback()
+        # ── 1. PENDING / PREPARING / CANCELLED / RECEIVED orders ─────────────────
+        try:
+            cur.execute("""
+                SELECT
+                    ot.order_id,
+                    ss.status_code,
+                    ss.status_name,
+                    COALESCE(
+                        (SELECT MAX(oal.order_audit_log_date)
+                         FROM order_audit_log oal
+                         WHERE oal.order_id = ot.order_id),
+                        ot.order_date::timestamp
+                    ) AS event_time
+                FROM order_transaction ot
+                JOIN static_status ss ON ot.order_status_id = ss.status_id
+                WHERE ss.status_scope = 'ORDER_STATUS'
+                  AND ss.status_code IN ('PENDING', 'PREPARING', 'CANCELLED', 'RECEIVED')
+                ORDER BY event_time DESC
+                LIMIT 10
+            """)
+            for row in cur.fetchall():
+                order_id, status_code, status_name, event_time = row
+                notifications.append({
+                    "category": "ORDER",
+                    "reference": str(order_id),
+                    "status_code": status_code,
+                    "status_name": status_name,
+                    "event_time": event_time,
+                })
+        except Exception as e:
+            print("Notifications [orders active] error:", e)
+            conn.rollback()
 
-    # ── 2. PAID orders (from sales_transaction) ───────────────────────────────
-    try:
-        cur.execute("""
-            SELECT
-                ot.order_id,
-                'PAID',
-                'Paid',
-                COALESCE(
-                    (SELECT MAX(oal.order_audit_log_date)
-                     FROM order_audit_log oal
-                     WHERE oal.order_id = ot.order_id),
-                    st.sales_date::timestamp
-                ) AS event_time
-            FROM sales_transaction st
-            JOIN order_transaction ot ON ot.order_id = st.order_id
-            JOIN static_status ss ON st.sales_status_id = ss.status_id
-            WHERE ss.status_code = 'PAID'
-            ORDER BY event_time DESC
-            LIMIT 10
-        """)
-        for row in cur.fetchall():
-            order_id, status_code, status_name, event_time = row
-            notifications.append({
-                "category": "ORDER",
-                "reference": str(order_id),
-                "status_code": status_code,
-                "status_name": status_name,
-                "event_time": event_time,
-            })
-    except Exception as e:
-        print("Notifications [paid orders] error:", e)
-        conn.rollback()
+        # ── 2. PAID orders (from sales_transaction) ───────────────────────────────
+        try:
+            cur.execute("""
+                SELECT
+                    ot.order_id,
+                    'PAID',
+                    'Paid',
+                    COALESCE(
+                        (SELECT MAX(oal.order_audit_log_date)
+                         FROM order_audit_log oal
+                         WHERE oal.order_id = ot.order_id),
+                        st.sales_date::timestamp
+                    ) AS event_time
+                FROM sales_transaction st
+                JOIN order_transaction ot ON ot.order_id = st.order_id
+                JOIN static_status ss ON st.sales_status_id = ss.status_id
+                WHERE ss.status_code = 'PAID'
+                ORDER BY event_time DESC
+                LIMIT 10
+            """)
+            for row in cur.fetchall():
+                order_id, status_code, status_name, event_time = row
+                notifications.append({
+                    "category": "ORDER",
+                    "reference": str(order_id),
+                    "status_code": status_code,
+                    "status_name": status_name,
+                    "event_time": event_time,
+                })
+        except Exception as e:
+            print("Notifications [paid orders] error:", e)
+            conn.rollback()
 
-    # ── 3. Out of stock items ─────────────────────────────────────────────────
-    try:
-        cur.execute("""
-            SELECT
-                COALESCE(i.item_sku, i.inventory_id::text),
-                'OUT_OF_STOCK',
-                'Out of Stock',
-                COALESCE(
-                    (SELECT MAX(ial.inventory_audit_log_date)
-                     FROM inventory_audit_log ial
-                     WHERE ial.inventory_id = i.inventory_id),
-                    NOW()
-                ) AS event_time
-            FROM inventory i
-            JOIN static_status ss ON i.item_status_id = ss.status_id
-            WHERE ss.status_code != 'INACTIVE'
-              AND i.item_quantity = 0
-            ORDER BY event_time DESC
-            LIMIT 10
-        """)
-        for row in cur.fetchall():
-            ref, status_code, status_name, event_time = row
-            notifications.append({
-                "category": "INVENTORY",
-                "reference": ref,
-                "status_code": status_code,
-                "status_name": status_name,
-                "event_time": event_time,
-            })
-    except Exception as e:
-        print("Notifications [out of stock] error:", e)
-        conn.rollback()
+        # ── 3. Out of stock items ─────────────────────────────────────────────────
+        try:
+            cur.execute("""
+                SELECT
+                    COALESCE(i.item_sku, i.inventory_id::text),
+                    'OUT_OF_STOCK',
+                    'Out of Stock',
+                    COALESCE(
+                        (SELECT MAX(ial.inventory_audit_log_date)
+                         FROM inventory_audit_log ial
+                         WHERE ial.inventory_id = i.inventory_id),
+                        NOW()
+                    ) AS event_time
+                FROM inventory i
+                JOIN static_status ss ON i.item_status_id = ss.status_id
+                WHERE ss.status_code != 'INACTIVE'
+                  AND i.item_quantity = 0
+                ORDER BY event_time DESC
+                LIMIT 10
+            """)
+            for row in cur.fetchall():
+                ref, status_code, status_name, event_time = row
+                notifications.append({
+                    "category": "INVENTORY",
+                    "reference": ref,
+                    "status_code": status_code,
+                    "status_name": status_name,
+                    "event_time": event_time,
+                })
+        except Exception as e:
+            print("Notifications [out of stock] error:", e)
+            conn.rollback()
 
-    # ── 4. Low stock items ────────────────────────────────────────────────────
-    try:
-        cur.execute("""
-            SELECT
-                COALESCE(i.item_sku, i.inventory_id::text),
-                'LOW_STOCK',
-                'Low Stock',
-                COALESCE(
-                    (SELECT MAX(ial.inventory_audit_log_date)
-                     FROM inventory_audit_log ial
-                     WHERE ial.inventory_id = i.inventory_id),
-                    NOW()
-                ) AS event_time
-            FROM inventory i
-            LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
-            JOIN static_status ss ON i.item_status_id = ss.status_id
-            WHERE ss.status_code != 'INACTIVE'
-              AND i.item_quantity > 0
-              AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
-            ORDER BY event_time DESC
-            LIMIT 10
-        """)
-        for row in cur.fetchall():
-            ref, status_code, status_name, event_time = row
-            notifications.append({
-                "category": "INVENTORY",
-                "reference": ref,
-                "status_code": status_code,
-                "status_name": status_name,
-                "event_time": event_time,
-            })
-    except Exception as e:
-        print("Notifications [low stock] error:", e)
-        conn.rollback()
+        # ── 4. Low stock items ────────────────────────────────────────────────────
+        try:
+            cur.execute("""
+                SELECT
+                    COALESCE(i.item_sku, i.inventory_id::text),
+                    'LOW_STOCK',
+                    'Low Stock',
+                    COALESCE(
+                        (SELECT MAX(ial.inventory_audit_log_date)
+                         FROM inventory_audit_log ial
+                         WHERE ial.inventory_id = i.inventory_id),
+                        NOW()
+                    ) AS event_time
+                FROM inventory i
+                LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
+                JOIN static_status ss ON i.item_status_id = ss.status_id
+                WHERE ss.status_code != 'INACTIVE'
+                  AND i.item_quantity > 0
+                  AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
+                ORDER BY event_time DESC
+                LIMIT 10
+            """)
+            for row in cur.fetchall():
+                ref, status_code, status_name, event_time = row
+                notifications.append({
+                    "category": "INVENTORY",
+                    "reference": ref,
+                    "status_code": status_code,
+                    "status_name": status_name,
+                    "event_time": event_time,
+                })
+        except Exception as e:
+            print("Notifications [low stock] error:", e)
+            conn.rollback()
 
-    cur.close()
-    conn.close()
+    finally:
+        cur.close()
+        conn.close()
 
     # Sort combined list and take top 20
     notifications.sort(key=lambda x: _strip_tz(x["event_time"]), reverse=True)

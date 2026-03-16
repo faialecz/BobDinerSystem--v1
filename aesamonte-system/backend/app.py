@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from routes.auth import auth_bp
 from routes.inventory import inventory_bp
@@ -35,6 +35,21 @@ app.register_blueprint(roles_bp, url_prefix="/api")
 app.register_blueprint(backup_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(notifications_bp)
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    traceback.print_exc()
+    return jsonify({"error": str(e)}), 500
+
+@app.errorhandler(404)
+def handle_404(e):
+    return jsonify({"error": "Not found"}), 404
+
+@app.errorhandler(405)
+def handle_405(e):
+    return jsonify({"error": "Method not allowed"}), 405
 
 
 if __name__ == "__main__":
