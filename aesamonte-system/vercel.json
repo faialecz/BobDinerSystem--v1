@@ -1,16 +1,10 @@
 {
   "version": 2,
   "regions": ["sin1"],
-  "builds": [
+  "rewrites": [
     {
-      "src": "backend/api/index.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/api/index.py"
+      "source": "/api/:path*",
+      "destination": "/api/index"
     }
   ],
   "crons": [
