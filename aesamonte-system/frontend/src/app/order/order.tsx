@@ -315,7 +315,15 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
     const term = searchTerm.trim().toLowerCase();
     return orders.filter(o => {
       const matchesArchiveView = isArchiveView ? Boolean(o.is_archived) : !o.is_archived;
-      return matchesArchiveView && (o.id.toString().includes(term) || o.customer.toLowerCase().includes(term) || o.date.toLowerCase().includes(term) || o.status.toLowerCase().includes(term));
+      return matchesArchiveView && (
+        o.id.toString().toLowerCase().includes(term) ||
+        o.customer.toLowerCase().includes(term) ||
+        (o.address ?? '').toLowerCase().includes(term) ||
+        (o.contact ?? '').toLowerCase().includes(term) ||
+        (o.paymentMethod ?? '').toLowerCase().includes(term) ||
+        o.date.toLowerCase().includes(term) ||
+        o.status.toLowerCase().includes(term)
+      );
     });
   }, [orders, searchTerm, isArchiveView]);
 

@@ -64,9 +64,10 @@ interface SalesProps {
   department?: string | null
   employeeId?: number
   onLogout: () => void
+  initialSearch?: string
 }
 
-export default function SalesPage({ role = 'Admin', department, employeeId = 0, onLogout }: SalesProps) {
+export default function SalesPage({ role = 'Admin', department, employeeId = 0, onLogout, initialSearch }: SalesProps) {
   const s = styles as Record<string, string>
 
   const isSalesHead       = role === 'Head' && department === 'Sales'
@@ -78,7 +79,11 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
   const [summary, setSummary]           = useState<SalesSummary | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading]       = useState(true)
-  const [searchTerm, setSearchTerm]     = useState('')
+  const [searchTerm, setSearchTerm]     = useState(initialSearch ?? '')
+
+  useEffect(() => {
+    if (initialSearch) setSearchTerm(initialSearch)
+  }, [initialSearch])
   const [showExportModal, setShowExportModal] = useState(false)
   const [isArchiveView, setIsArchiveView]     = useState(false)
   const [currentPage, setCurrentPage]         = useState(1)

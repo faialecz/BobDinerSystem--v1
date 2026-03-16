@@ -64,6 +64,7 @@ def get_notifications():
                     ot.order_id,
                     'PAID',
                     'Paid',
+                    st.sales_id,
                     c.customer_name,
                     COALESCE(
                         (SELECT MAX(oal.order_audit_log_date)
@@ -80,10 +81,11 @@ def get_notifications():
                 LIMIT 10
             """)
             for row in cur.fetchall():
-                order_id, status_code, status_name, customer_name, event_time = row
+                order_id, status_code, status_name, sales_id, customer_name, event_time = row
                 notifications.append({
                     "category": "ORDER",
                     "reference": str(order_id),
+                    "sales_id": str(sales_id),
                     "customer_name": customer_name,
                     "status_code": status_code,
                     "status_name": status_name,
@@ -194,6 +196,7 @@ def get_notifications():
             "label": n["status_name"],
             "reference": n["reference"],
             "name": n.get("item_name") or n.get("customer_name"),
+            "sales_id": n.get("sales_id"),
             "sku": n.get("item_sku"),
             "date": date_str,
             "time": time_str,

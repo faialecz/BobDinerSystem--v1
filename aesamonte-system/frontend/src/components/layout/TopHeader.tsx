@@ -17,7 +17,7 @@ const TYPE_NAV_MAP: Record<string, string> = {
   preparing:    'Orders',
   cancelled:    'Orders',
   received:     'Orders',
-  paid:         'Orders',
+  paid:         'Sales',
 };
 
 type NotifType = 'out_of_stock' | 'low_stock' | 'paid' | 'pending' | 'preparing' | 'cancelled' | 'received';
@@ -30,6 +30,7 @@ interface Notification {
   reference: string;
   name?: string;
   sku?: string;
+  sales_id?: string;
   date: string;
   time: string;
 }
@@ -111,7 +112,13 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
   const unreadCount = visibleNotifications.length;
 
   function getSearchTerm(notif: Notification): string {
-    return notif.name ?? notif.reference;
+    if (['out_of_stock', 'low_stock'].includes(notif.type)) {
+      return notif.name ?? notif.reference;
+    }
+    if (notif.type === 'paid') {
+      return notif.sales_id ?? notif.reference;
+    }
+    return notif.reference;
   }
 
   function handleNotifClick(notif: Notification) {
@@ -166,7 +173,11 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
                           {notif.label}
                         </span>
                         <span className={styles.notifRef}>
-                          {notif.sku ? `SKU: ${notif.sku}` : notif.reference}
+                          {notif.sku
+                            ? `SKU: ${notif.sku}`
+                            : notif.type === 'paid' && notif.sales_id
+                              ? `Sales ID: ${notif.sales_id}`
+                              : `Order ID: ${notif.reference}`}
                         </span>
                         {notif.name && (
                           <span className={styles.notifName}>{notif.name}</span>
