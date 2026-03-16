@@ -111,10 +111,7 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
   const unreadCount = visibleNotifications.length;
 
   function getSearchTerm(notif: Notification): string {
-    if (['out_of_stock', 'low_stock'].includes(notif.type)) {
-      return notif.name ?? notif.reference;
-    }
-    return notif.reference;
+    return notif.name ?? notif.reference;
   }
 
   function handleNotifClick(notif: Notification) {
