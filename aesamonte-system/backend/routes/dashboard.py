@@ -2,13 +2,34 @@ from flask import Blueprint, jsonify, request
 from database.db_config import get_connection
 from datetime import date, timedelta
 import calendar
+import time
 
 dashboard_bp = Blueprint("dashboard", __name__)
+
+# ── Simple in-memory cache ────────────────────────────────────────────────────
+_cache: dict = {}
+
+def _get(key: str):
+    entry = _cache.get(key)
+    if entry and time.time() < entry["expires"]:
+        return entry["data"]
+    return None
+
+def _set(key: str, data, ttl: int):
+    _cache[key] = {"data": data, "expires": time.time() + ttl}
+
+def _invalidate(*keys: str):
+    for k in keys:
+        _cache.pop(k, None)
 
 
 # ── 1. TOP METRICS ──────────────────────────────────────────────────────────
 @dashboard_bp.route("/api/dashboard/metrics", methods=["GET"])
 def get_dashboard_metrics():
+    cached = _get("metrics")
+    if cached:
+        return jsonify(cached), 200
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -77,13 +98,15 @@ def get_dashboard_metrics():
         """)
         low_stock = int(cur.fetchone()[0] or 0)
 
-        return jsonify({
+        result = {
             "salesToday": sales_today,
             "salesChange": sales_change,
             "pendingOrders": pending_orders,
             "ordersChange": orders_change,
             "lowStock": low_stock,
-        }), 200
+        }
+        _set("metrics", result, ttl=120)  # 2-minute cache
+        return jsonify(result), 200
     except Exception as e:
         print("Dashboard metrics error:", str(e))
         return jsonify({"error": str(e)}), 500
@@ -95,6 +118,10 @@ def get_dashboard_metrics():
 # ── 2. RECENT ORDERS (Quick POS) ─────────────────────────────────────────────
 @dashboard_bp.route("/api/dashboard/recent-orders", methods=["GET"])
 def get_recent_orders():
+    cached = _get("recent_orders")
+    if cached:
+        return jsonify(cached), 200
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -121,6 +148,7 @@ def get_recent_orders():
             }
             for row in rows
         ]
+        _set("recent_orders", orders, ttl=120)  # 2-minute cache
         return jsonify(orders), 200
     except Exception as e:
         print("Recent orders error:", str(e))
@@ -133,6 +161,10 @@ def get_recent_orders():
 # ── 3. CHARTS DATA ───────────────────────────────────────────────────────────
 @dashboard_bp.route("/api/dashboard/charts", methods=["GET"])
 def get_dashboard_charts():
+    cached = _get("charts")
+    if cached:
+        return jsonify(cached), 200
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -310,7 +342,7 @@ def get_dashboard_charts():
         # Forecast revenue for current year (sum of all months including projected)
         forecast_total = sum(m["sales"] for m in monthly_sales)
 
-        return jsonify({
+        result = {
             "monthlySales": monthly_sales,
             "weeklySales": weekly_sales,
             "quarterlySales": quarterly_sales,
@@ -318,7 +350,9 @@ def get_dashboard_charts():
             "yearlySales": yearly_sales,
             "goalPercent": goal_pct,
             "forecastTotal": forecast_total,
-        }), 200
+        }
+        _set("charts", result, ttl=600)  # 10-minute cache
+        return jsonify(result), 200
     except Exception as e:
         print("Dashboard charts error:", str(e))
         return jsonify({"error": str(e)}), 500
@@ -329,6 +363,10 @@ def get_dashboard_charts():
 
 @dashboard_bp.route("/api/dashboard/insights", methods=["GET"])
 def get_dashboard_insights():
+    cached = _get("insights")
+    if cached:
+        return jsonify(cached), 200
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -428,10 +466,12 @@ def get_dashboard_insights():
                 "is_low_stock": is_low,
             })
 
-        return jsonify({
+        result = {
             "reorderSuggestions": reorder_suggestions,
             "stockoutPredictions": stockout_predictions,
-        }), 200
+        }
+        _set("insights", result, ttl=600)  # 10-minute cache
+        return jsonify(result), 200
     except Exception as e:
         print("Dashboard insights error:", str(e))
         return jsonify({"error": str(e)}), 500
@@ -440,7 +480,33 @@ def get_dashboard_insights():
         conn.close()
 
 
-# ── 5. QUICK STATUS TOGGLE ───────────────────────────────────────────────────
+# ── 5. ALL-IN-ONE DASHBOARD ──────────────────────────────────────────────────
+@dashboard_bp.route("/api/dashboard/all", methods=["GET"])
+def get_dashboard_all():
+    """Single endpoint returning metrics + recent-orders + charts + insights."""
+    metrics_data  = _get("metrics")
+    orders_data   = _get("recent_orders")
+    charts_data   = _get("charts")
+    insights_data = _get("insights")
+
+    if metrics_data is None:
+        metrics_data = get_dashboard_metrics()[0].get_json()
+    if orders_data is None:
+        orders_data = get_recent_orders()[0].get_json()
+    if charts_data is None:
+        charts_data = get_dashboard_charts()[0].get_json()
+    if insights_data is None:
+        insights_data = get_dashboard_insights()[0].get_json()
+
+    return jsonify({
+        "metrics":      metrics_data,
+        "recentOrders": orders_data,
+        "charts":       charts_data,
+        "insights":     insights_data,
+    }), 200
+
+
+# ── 6. QUICK STATUS TOGGLE ───────────────────────────────────────────────────
 @dashboard_bp.route("/api/dashboard/order-status/<string:order_id>", methods=["PATCH", "OPTIONS"])
 def update_order_status(order_id: str):
     if request.method == "OPTIONS":
@@ -475,6 +541,7 @@ def update_order_status(order_id: str):
         cur.execute("UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s",
                     (res[0], order_id))
         conn.commit()
+        _invalidate("metrics", "recent_orders")  # stale after status change
         return jsonify({"status": target_status}), 200
     except Exception as e:
         conn.rollback()

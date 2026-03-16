@@ -151,17 +151,13 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
   const [confirmReceiptAction, setConfirmReceiptAction] = useState<"PREPARING" | "RECEIVED" | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch(`${API}/api/dashboard/metrics`, { credentials: "include" }).then((r) => r.json()),
-      fetch(`${API}/api/dashboard/recent-orders`, { credentials: "include" }).then((r) => r.json()),
-      fetch(`${API}/api/dashboard/charts`, { credentials: "include" }).then((r) => r.json()),
-      fetch(`${API}/api/dashboard/insights`, { credentials: "include" }).then((r) => r.json()),
-    ])
-      .then(([m, ro, ch, ins]) => {
-        if (!m.error) setMetrics(m);
+    fetch(`${API}/api/dashboard/all`, { credentials: "include" })
+      .then((r) => r.json())
+      .then(({ metrics: m, recentOrders: ro, charts: ch, insights: ins }) => {
+        if (m && !m.error) setMetrics(m);
         if (Array.isArray(ro)) setRecentOrders(ro);
-        if (!ch.error) setCharts(ch);
-        if (!ins.error) setInsights(ins);
+        if (ch && !ch.error) setCharts(ch);
+        if (ins && !ins.error) setInsights(ins);
       })
       .catch((e) => console.error("Dashboard fetch error:", e))
       .finally(() => setLoading(false));
