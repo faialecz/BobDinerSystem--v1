@@ -53,13 +53,17 @@
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  margin-bottom: 1.5rem;
+  max-width: 100%;
+  box-sizing: border-box;
 }
+
 .table th {
   text-align: left;
   padding: 15px;
   font-size: 0.9rem;
   border-bottom: 1px solid #f1f3f4;
-  vertical-align: middle;   /* ADD THIS */
+  vertical-align: middle;
 }
 
 /* ===== TABLE HEADER ===== */
@@ -132,6 +136,7 @@
 /* ===== TABLE STYLING ===== */
 .table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
 }
 
@@ -190,6 +195,7 @@
 .activeSort {
   color: #1a4263 !important;
 }
+
 /* ===== ACTIONS ===== */
 th.actionHeader {
   text-align: center;
@@ -604,6 +610,7 @@ th.actionHeader .sortHeaderInner {
 .removeItemBtn:hover {
   text-decoration: underline;
 }
+
 /* ===== ALERT / TOAST ===== */
 .toastOverlay {
   position: fixed;
@@ -812,8 +819,7 @@ th.actionHeader .sortHeaderInner {
   100% { transform: scale(1); opacity: 1; }
 }
 
-/*restore btn*/
-
+/* ===== RESTORE BUTTON ===== */
 .archiveBtn {
   display: flex;
   align-items: center;
@@ -838,7 +844,8 @@ th.actionHeader .sortHeaderInner {
   justify-content: center;
   align-items: center;
 }
-/* ===== VIEW / RECEIPT MODAL ===== */
+
+/* ===== OLD VIEW / RECEIPT MODAL (kept for reference) ===== */
 .viewBackdrop {
   position: fixed;
   inset: 0;
@@ -862,22 +869,10 @@ th.actionHeader .sortHeaderInner {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-.viewModal::-webkit-scrollbar {
-  width: 6px;
-}
-
-.viewModal::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.viewModal::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 3px;
-}
-
-.viewModal::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
-}
+.viewModal::-webkit-scrollbar { width: 6px; }
+.viewModal::-webkit-scrollbar-track { background: transparent; }
+.viewModal::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
+.viewModal::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
 
 .viewModalHeader {
   padding: 20px 24px 0;
@@ -918,9 +913,7 @@ th.actionHeader .sortHeaderInner {
   transition: color 0.15s;
 }
 
-.viewCloseBtn:hover {
-  color: #475569;
-}
+.viewCloseBtn:hover { color: #475569; }
 
 .viewDateRow {
   padding: 4px 24px 0;
@@ -930,63 +923,29 @@ th.actionHeader .sortHeaderInner {
   color: #64748b;
 }
 
-/* Status badges for view modal */
 .viewStatusPreparing {
-  padding: 3px 14px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1.5px solid #3b82f6;
-  color: #1d4ed8;
-  background: #eff6ff;
+  padding: 3px 14px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid #3b82f6; color: #1d4ed8; background: #eff6ff;
 }
-
 .viewStatusToShip {
-  padding: 3px 14px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1.5px solid #f59e0b;
-  color: #b45309;
-  background: #fffbeb;
+  padding: 3px 14px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid #f59e0b; color: #b45309; background: #fffbeb;
 }
-
 .viewStatusReceived {
-  padding: 3px 14px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1.5px solid #22c55e;
-  color: #15803d;
-  background: #f0fdf4;
+  padding: 3px 14px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid #22c55e; color: #15803d; background: #f0fdf4;
 }
-
 .viewStatusCancelled {
-  padding: 3px 14px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1.5px solid #ef4444;
-  color: #b91c1c;
-  background: #fef2f2;
+  padding: 3px 14px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid #ef4444; color: #b91c1c; background: #fef2f2;
 }
-
 .viewStatusDefault {
-  padding: 3px 14px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1.5px solid #94a3b8;
-  color: #475569;
-  background: #f8fafc;
+  padding: 3px 14px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid #94a3b8; color: #475569; background: #f8fafc;
 }
 
-/* Printable body */
-.viewPrintBody {
-  padding: 0 24px;
-}
+.viewPrintBody { padding: 0 24px; }
 
-/* Customer section */
 .viewCustomerSection {
   background: #f8fafc;
   border-radius: 8px;
@@ -1009,175 +968,368 @@ th.actionHeader .sortHeaderInner {
   gap: 12px;
 }
 
-.viewInfoLabel {
-  font-size: 11px;
-  color: #94a3b8;
-  margin: 0 0 2px;
-}
+.viewInfoLabel { font-size: 11px; color: #94a3b8; margin: 0 0 2px; }
+.viewInfoValue { font-size: 13px; font-weight: 600; color: #1e293b; margin: 0; }
 
-.viewInfoValue {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-  margin: 0;
-}
-
-/* Items table */
-.viewItemsTable {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 4px 0 12px;
-}
+.viewItemsTable { width: 100%; border-collapse: collapse; margin: 4px 0 12px; }
 
 .viewItemsTable thead th {
-  font-size: 11px;
-  color: #64748b;
-  padding: 8px;
-  border-bottom: 1px solid #e2e8f0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-  text-align: right;
+  font-size: 11px; color: #64748b; padding: 8px;
+  border-bottom: 1px solid #e2e8f0; text-transform: uppercase;
+  letter-spacing: 0.04em; font-weight: 600; text-align: right;
 }
-
-.viewItemsTable thead th:first-child {
-  text-align: left;
-}
+.viewItemsTable thead th:first-child { text-align: left; }
 
 .viewItemsTable tbody td {
-  padding: 10px 8px;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
-  color: #334155;
-  text-align: right;
+  padding: 10px 8px; border-bottom: 1px solid #f1f5f9;
+  font-size: 13px; color: #334155; text-align: right;
 }
+.viewItemsTable tbody td:first-child { text-align: left; }
 
-.viewItemsTable tbody td:first-child {
-  text-align: left;
-}
+.viewItemName { margin: 0; }
+.viewItemStatus { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.viewEmptyRow td { padding: 20px 8px; text-align: center; color: #94a3b8; font-size: 13px; }
 
-.viewItemName {
-  margin: 0;
-}
-
-.viewItemStatus {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 2px;
-}
-
-.viewEmptyRow td {
-  padding: 20px 8px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-/* Totals */
-.viewTotalsWrapper {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.viewTotalsBox {
-  width: 220px;
-}
+.viewTotalsWrapper { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.viewTotalsBox { width: 220px; }
 
 .viewTotalLine {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 0;
-  font-size: 13px;
-  color: #64748b;
+  display: flex; justify-content: space-between;
+  padding: 4px 0; font-size: 13px; color: #64748b;
 }
 
 .viewTotalFinal {
+  display: flex; justify-content: space-between;
+  padding: 10px 0 0; margin-top: 6px;
+  border-top: 1.5px solid #1e293b;
+  font-size: 16px; font-weight: 700; color: #0f172a;
+}
+
+.viewModalFooter {
+  padding: 14px 24px 20px;
+  border-top: 1px solid #f1f5f9;
+  display: flex; justify-content: flex-end;
+  gap: 10px; margin-top: 8px;
+}
+
+.viewBtnPrint {
+  padding: 8px 20px; border-radius: 8px; border: none;
+  background: #1a4263; color: #ffffff; font-size: 13px;
+  font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: background 0.15s;
+}
+.viewBtnPrint:hover { background: #164163; opacity: 0.9; }
+
+/* ===== TABLE RESPONSIVE ===== */
+.tableResponsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1rem;
+}
+
+/* ===== FORM INPUT HELPERS (used by AddOrderModal / EditOrderModal) ===== */
+.miniLabel {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cleanInput {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  background: #fff;
+  color: #1e293b;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.cleanInput:focus {
+  border-color: #1a4263;
+  box-shadow: 0 0 0 3px rgba(26, 66, 99, 0.08);
+}
+
+/* ===== NEW RECEIPT VIEW MODAL ===== */
+
+/* Backdrop */
+.receiptBackdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5000;
+  padding: 16px;
+  animation: toastPop 0.15s ease;
+}
+
+/* Modal card */
+.receiptModal {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 28px 28px 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  position: relative;
+}
+
+.receiptModal::-webkit-scrollbar { width: 6px; }
+.receiptModal::-webkit-scrollbar-track { background: transparent; }
+.receiptModal::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 3px; }
+.receiptModal::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+/* ── Header ── */
+.receiptHeader {
   display: flex;
   justify-content: space-between;
-  padding: 10px 0 0;
-  margin-top: 6px;
-  border-top: 1.5px solid #1e293b;
-  font-size: 16px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.receiptTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.receiptRef {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.receiptCloseBtn {
+  background: #f1f5f9;
+  border: none;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.receiptCloseBtn:hover {
+  background: #e2e8f0;
+}
+
+/* ── Customer section ── */
+.receiptCustomerSection {
+  border-top: 1px solid #f1f5f9;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.receiptMetaRow {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.receiptMetaLabel {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.receiptCustomerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.receiptCustomerName {
+  font-size: 1rem;
   font-weight: 700;
   color: #0f172a;
 }
 
-/* Footer */
-.viewModalFooter {
-  padding: 14px 24px 20px;
-  border-top: 1px solid #f1f5f9;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 8px;
+.receiptPaymentMethod {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
 }
 
-.viewBtnPrint {
-  padding: 8px 20px;
-  border-radius: 8px;
-  border: none;
-  background: #1a4263;
-  color: #ffffff;
-  font-size: 13px;
+.receiptSubInfo {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+
+/* ── Items section ── */
+.receiptItemsSection {
+  border-top: 1px solid #f1f5f9;
+  margin-top: 16px;
+  padding-top: 12px;
+}
+
+.receiptItemsHeader {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.receiptColLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.receiptColCenter {
+  text-align: center;
+  min-width: 60px;
+}
+
+.receiptColRight {
+  text-align: right;
+  min-width: 70px;
+}
+
+/* Individual item row */
+.receiptItemRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f8fafc;
+  align-items: center;
+}
+
+.receiptItemName {
+  font-size: 0.88rem;
+  color: #1e293b;
   font-weight: 500;
+}
+
+.receiptItemQty {
+  font-size: 0.82rem;
+  color: #64748b;
+  text-align: center;
+  min-width: 60px;
+}
+
+.receiptItemAmount {
+  font-size: 0.88rem;
+  color: #0f172a;
+  font-weight: 600;
+  text-align: right;
+  min-width: 70px;
+}
+
+.receiptEmpty {
+  padding: 16px 0;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+/* ── Total row ── */
+.receiptTotalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1.5px solid #e2e8f0;
+}
+
+.receiptTotalLabel {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.receiptTotalAmount {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* ── Status pill ── */
+.receiptStatusWrap {
+  margin-top: 20px;
+}
+
+.receiptStatusPill {
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+}
+
+/* ── Print button ── */
+.receiptPrintBtn {
+  margin-top: 12px;
+  width: 100%;
+  padding: 14px;
+  background: #1e3a5f;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   transition: background 0.15s;
 }
 
-.viewBtnPrint:hover {
-  background: #164163;
-  opacity: 0.9;
+.receiptPrintBtn:hover {
+  background: #162d4a;
 }
 
-/* ===== TABLE CONTAINER ===== */
-.tableContainer {
-  background: #fff;
-  padding: 2rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  margin-bottom: 1.5rem;
-  max-width: 100%; /* ADD THIS: Prevents the container from breaking past its parent */
-  box-sizing: border-box; /* ADD THIS: Keeps padding inside the max-width */
-}
-
-/* ADD THIS NEW CLASS */
-.tableResponsive {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS devices */
-  margin-bottom: 1rem; /* Optional: Adds breathing room before the footer */
-}
-
-/* ===== TABLE BODY ===== */
-.table {
-  width: 100%;
-  min-width: 900px; /* ADD THIS: Forces the table to stay wide enough, triggering the scrollbar on smaller screens */
-  border-collapse: collapse;
-}
-
+/* ===== RESPONSIVE ===== */
 @media (max-width: 600px) {
-   .footer {
+  .footer {
     justify-content: center;
     text-align: center;
   }
-  
+
   .header {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .controls {
     max-width: 100%;
     width: 100%;
     justify-content: space-between; 
   }
-  
+
   .searchWrapper {
     max-width: 100%; 
     order: 3; 
+  }
+
+  .receiptModal {
+    padding: 20px 16px 20px;
+    border-radius: 16px;
   }
 }

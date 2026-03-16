@@ -110,10 +110,11 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOrderData),
       });
       if (response.ok) {
+        // FIX 1: use newOrderData.customerName (the field name sent by AddOrderModal)
         setSubmittedData({
-          customer: newOrderData.customer,
+          customer: newOrderData.customerName,
           total: newOrderData.items?.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0) || 0,
-          method: newOrderData.payment_method || newOrderData.paymentMethod || newOrderData.items[0]?.paymentMethod || '—',
+          method: newOrderData.items?.[0]?.paymentMethod || newOrderData.payment_method || newOrderData.paymentMethod || '—',
           dateTime: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
         setToastTitle("Order Submitted!"); setToastMessage("Your new order has been successfully added.");
@@ -394,7 +395,8 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                   <div className={s.alertDataRow}><span>Customer:</span><strong>{submittedData.customer}</strong></div>
                   <div className={s.alertDataRow}><span>Total:</span><strong>₱{submittedData.total.toLocaleString()}</strong></div>
                   <div className={s.alertDataRow}><span>Method:</span><strong>{submittedData.method}</strong></div>
-                  <div className={s.alertDataRow}><span>Time:</span><strong>{submittedData.dateTime}</strong></div>
+                  <div className={s.alertDataRow}><span>Date:</span><strong>{submittedData.dateTime.split(' ')[0]}</strong></div>
+                  <div className={s.alertDataRow}><span>Time:</span><strong>{submittedData.dateTime.split(' ').slice(1).join(' ')}</strong></div>
                 </div>
                 <button className={s.okButtonAdd} onClick={() => { setShowToast(false); setSubmittedData(null); }}>OK</button>
               </div>
@@ -521,7 +523,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
             <div className={s.viewModalHeader}>
               <div>
                 <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
-                <p className={s.viewOrderNumber}>No. {selectedOrderForView.id}</p>
+                <p className={s.viewOrderNumber}>No. OR{new Date().getFullYear()}-{String(selectedOrderForView.id).padStart(6, '0')}</p>
               </div>
               <div className={s.viewHeaderRight}>
                 <span className={getViewStatusClass(selectedOrderForView.status, s)}>{selectedOrderForView.status?.toUpperCase()}</span>
@@ -551,7 +553,7 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                 <thead>
                   <tr>
                     <th>Item Description</th>
-                    <th>QTY</th>
+                    <th>Qty</th>
                     <th>Unit Cost</th>
                     <th>Amount</th>
                   </tr>
