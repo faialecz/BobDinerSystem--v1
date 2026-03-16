@@ -92,11 +92,11 @@ export default function Suppliers({
   const [editDupError, setEditDupError] = useState(''); // ── ADDED ──
 
   const [sortConfig, setSortConfig] = useState<{
-    key: SortKey;
+    key: SortKey | null;
     direction: 'asc' | 'desc' | null;
   }>({
-    key: 'id',
-    direction: 'asc'
+    key: null,
+    direction: null
   });
 
   /* ================= FETCH ================= */
@@ -396,17 +396,34 @@ export default function Suppliers({
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
-    if (!sortConfig.key || !sortConfig.direction) return arr.sort((a, b) => a.id - b.id);
+    
+    // 1. Safe default fallback (extracts digits just in case)
+    if (!sortConfig.key || !sortConfig.direction) {
+      return arr.sort((a, b) => {
+        const numA = Number(String(a.id).replace(/\D/g, '')) || 0;
+        const numB = Number(String(b.id).replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
+    }
+
+    const { key, direction } = sortConfig;
     return arr.sort((a, b) => {
-      const A = a[sortConfig.key!];
-      const B = b[sortConfig.key!];
-      if (typeof A === 'number' && typeof B === 'number') {
-        return sortConfig.direction === 'asc' ? A - B : B - A;
+      const A = a[key!];
+      const B = b[key!];
+
+      // 2. Strip letters/dashes, extract ONLY the numbers from "SUP-0000011"
+      if (key === 'id') {
+        const numA = Number(String(A).replace(/\D/g, '')) || 0;
+        const numB = Number(String(B).replace(/\D/g, '')) || 0;
+        return direction === 'asc' ? numA - numB : numB - numA;
       }
-      const strA = String(A).toLowerCase();
-      const strB = String(B).toLowerCase();
-      if (strA < strB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (strA > strB) return sortConfig.direction === 'asc' ? 1 : -1;
+
+      // 3. Handle Strings (Names, Contacts, Emails, Address)
+      const strA = String(A ?? '').toLowerCase();
+      const strB = String(B ?? '').toLowerCase();
+      
+      if (strA < strB) return direction === 'asc' ? -1 : 1;
+      if (strA > strB) return direction === 'asc' ? 1 : -1;
       return 0;
     });
   }, [filtered, sortConfig]);
@@ -523,8 +540,8 @@ export default function Suppliers({
                         <div className={s.sortHeaderInner}>
                           <span>{col.label}</span>
                           <div className={s.sortIconsStack}>
-                            <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
-                            <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                            <LuChevronUp size={12} className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                            <LuChevronDown size={12} className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
                           </div>
                         </div>
                       </th>

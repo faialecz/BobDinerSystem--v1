@@ -35,7 +35,7 @@ type Summary = {
   totalOrders: { count: number; growth: number };
 };
 
-type SortKey = 'id' | 'customer' | 'address' | 'qty' | 'total' | 'payment' | 'date' | 'status' | null;
+type SortKey = 'id' | 'customer' | 'address' | 'totalQty' | 'totalAmount' | 'paymentMethod' | 'date' | 'status' | null;
 
 const getViewStatusClass = (status: string, s: Record<string, string>) => {
   switch (status?.toUpperCase()) {
@@ -317,6 +317,8 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
+    
+    // Custom Status Cycle Logic
     if (sortConfig.key === 'status') {
       const activeStatus = STATUS_ORDER[statusCycleIndex];
       return arr.sort((a, b) => {
@@ -325,14 +327,37 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
         return (STATUS_PRIORITY[a.status.toUpperCase()] || 0) - (STATUS_PRIORITY[b.status.toUpperCase()] || 0) || a.id - b.id;
       });
     }
-    if (!sortConfig.key) return arr.sort((a, b) => (STATUS_PRIORITY[a.status.toUpperCase()] || 0) - (STATUS_PRIORITY[b.status.toUpperCase()] || 0) || a.id - b.id);
+    
+    // Default fallback
+    if (!sortConfig.key || !sortConfig.direction) {
+      return arr.sort((a, b) => (STATUS_PRIORITY[a.status.toUpperCase()] || 0) - (STATUS_PRIORITY[b.status.toUpperCase()] || 0) || a.id - b.id);
+    }
+    
     const { key, direction } = sortConfig;
     return arr.sort((a, b) => {
-      const A = a[key as keyof Order], B = b[key as keyof Order];
-      if (key === 'id') return direction === 'asc' ? (A as number) - (B as number) : (B as number) - (A as number);
-      if (key === 'date') return direction === 'asc' ? new Date(A as string).getTime() - new Date(B as string).getTime() : new Date(B as string).getTime() - new Date(A as string).getTime();
-      const sA = (A as string).toLowerCase(), sB = (B as string).toLowerCase();
-      return direction === 'asc' ? sA.localeCompare(sB) : sB.localeCompare(sA);
+      const A = a[key as keyof Order];
+      const B = b[key as keyof Order];
+      
+      // Handle Dates
+      if (key === 'date') {
+        return direction === 'asc' 
+          ? new Date(A as string).getTime() - new Date(B as string).getTime() 
+          : new Date(B as string).getTime() - new Date(A as string).getTime();
+      }
+
+      // FIX: Explicitly convert these exact columns to pure numbers before sorting
+      if (key === 'id' || key === 'totalQty' || key === 'totalAmount') {
+        const numA = Number(A) || 0;
+        const numB = Number(B) || 0;
+        return direction === 'asc' ? numA - numB : numB - numA;
+      }
+      
+      // Handle Strings (Names, Addresses, Payment Methods)
+      const sA = String(A ?? '').toLowerCase();
+      const sB = String(B ?? '').toLowerCase();
+      if (sA < sB) return direction === 'asc' ? -1 : 1;
+      if (sA > sB) return direction === 'asc' ? 1 : -1;
+      return 0;
     });
   }, [filtered, sortConfig, statusCycleIndex]);
 
@@ -457,8 +482,8 @@ export default function OrderPage({ role, onLogout }: { role: string; onLogout: 
                           <span>{col.label}</span>
                           {col.sortable && col.key && (
                             <div className={s.sortIconsStack}>
-                              <LuChevronUp size={12} style={{ color: sortConfig.key === col.key && sortConfig.direction === 'asc' ? '#1a4263' : '#cbd5e1' }} />
-                              <LuChevronDown size={12} style={{ color: sortConfig.key === col.key && sortConfig.direction === 'desc' ? '#1a4263' : '#cbd5e1' }} />
+                              <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                              <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
                             </div>
                           )}
                         </div>

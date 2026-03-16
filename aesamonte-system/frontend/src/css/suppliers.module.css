@@ -186,14 +186,13 @@
 
 .sortIconsStack svg {
   display: block;
-  width: 10px;
-  height: 10px;
   color: #cbd5e1;
-  transition: color 0.2s;
+  transition: all 0.2s; 
 }
 
 .sortIconsStack svg:hover {
   color: #1a4263;
+  transform: scale(1.2); 
 }
 
 .activeSort {

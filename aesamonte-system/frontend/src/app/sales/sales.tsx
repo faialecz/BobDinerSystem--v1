@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import styles from '@/css/sales.module.css'
 import TopHeader from '@/components/layout/TopHeader'
 import ExportModal from './exportModal'
@@ -217,22 +217,44 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
     return matchesArchiveView && searchStr.includes(searchTerm.toLowerCase())
   })
 
-  const sortedTx = [...filteredTx].sort((a, b) => {
-    if (!sortConfig.key || !sortConfig.direction) return 0
-    const aVal = a[sortConfig.key] ?? ''
-    const bVal = b[sortConfig.key] ?? ''
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1
-    return 0
-  })
+  // 1. Updated requestSort to toggle automatically
+  const requestSort = (key: keyof Transaction) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
+  };
+
+  // 2. Updated sorting logic to handle all data and parse numbers perfectly
+  const sortedTx = useMemo(() => {
+    const arr = [...filteredTx];
+    if (!sortConfig.key || !sortConfig.direction) {
+      return arr; // Default order
+    }
+    
+    const key = sortConfig.key as keyof Transaction;
+    return arr.sort((a, b) => {
+      const A = a[key];
+      const B = b[key];
+      
+      // Explicitly convert QTY and AMOUNT to numbers so they don't sort alphabetically
+      if (key === 'qty' || key === 'amount') {
+        const numA = Number(A) || 0;
+        const numB = Number(B) || 0;
+        return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+      }
+      
+      // Handle String Columns (NAME, ADDRESS, STATUS, etc)
+      const strA = String(A ?? '').toLowerCase();
+      const strB = String(B ?? '').toLowerCase();
+      if (strA < strB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (strA > strB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredTx, sortConfig]);
 
   const totalPages  = Math.ceil(sortedTx.length / itemsPerPage)
   const startIndex  = (currentPage - 1) * itemsPerPage
   const paginatedTx = sortedTx.slice(startIndex, startIndex + itemsPerPage)
-
-  const requestSort = (key: keyof Transaction, direction: 'asc' | 'desc') => {
-    setSortConfig({ key, direction })
-  }
 
   if (isLoading) return <div className={s.loadingContainer}>Connecting to database...</div>
 
@@ -369,12 +391,12 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
                       { label: 'PAYMENT', key: 'paymentMethod' },
                       { label: 'STATUS',  key: 'status' }
                     ].map((col) => (
-                      <th key={col.key}>
+                      <th key={col.key} onClick={() => requestSort(col.key as keyof Transaction)}>
                         <div className={s.sortableHeader}>
                           <span>{col.label}</span>
                           <div className={s.sortIconsStack}>
-                            <LuChevronUp size={12} className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} onClick={() => requestSort(col.key as any, 'asc')} />
-                            <LuChevronDown size={12} className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} onClick={() => requestSort(col.key as any, 'desc')} />
+                            <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                            <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
                           </div>
                         </div>
                       </th>

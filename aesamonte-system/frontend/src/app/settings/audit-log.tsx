@@ -35,9 +35,9 @@ export default function AuditLog({
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' | null }>({
-    key: 'actionDate',
-    direction: 'desc'
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: 'asc' | 'desc' | null }>({
+    key: null,
+    direction: null
   });
 
   // Fetch logs
@@ -105,35 +105,37 @@ export default function AuditLog({
   const sorted = useMemo(() => {
     const arr = [...filtered];
     if (!sortConfig.key || !sortConfig.direction) return arr;
-    const direction = sortConfig.direction === 'asc' ? 1 : -1;
+
+    const { key, direction } = sortConfig;
+    const dirMultiplier = direction === 'asc' ? 1 : -1;
 
     return arr.sort((a, b) => {
-      const { key } = sortConfig;
-      switch (key) {
-        case 'module': {
-          const valA = MODULE_ORDER[normalizeModule(a.module)] ?? 999;
-          const valB = MODULE_ORDER[normalizeModule(b.module)] ?? 999;
-          return (valA - valB) * direction;
-        }
-        case 'actionType': {
-          const valA = ACTION_ORDER[normalizeAction(a.actionType)] ?? 999;
-          const valB = ACTION_ORDER[normalizeAction(b.actionType)] ?? 999;
-          return (valA - valB) * direction;
-        }
-        case 'actionDate': {
-          const dateA = a.actionDate ? new Date(a.actionDate).getTime() : 0;
-          const dateB = b.actionDate ? new Date(b.actionDate).getTime() : 0;
-          return (dateA - dateB) * direction;
-        }
-        case 'recordName':
-        case 'performedBy': {
-          const strA = (a[key] ?? '').toString().toLowerCase();
-          const strB = (b[key] ?? '').toString().toLowerCase();
-          return strA.localeCompare(strB) * direction;
-        }
-        default:
-          return 0;
+      // 1. Handle custom priority maps (Module & Action)
+      if (key === 'module') {
+        const valA = MODULE_ORDER[normalizeModule(a.module)] ?? 999;
+        const valB = MODULE_ORDER[normalizeModule(b.module)] ?? 999;
+        return (valA - valB) * dirMultiplier;
       }
+      if (key === 'actionType') {
+        const valA = ACTION_ORDER[normalizeAction(a.actionType)] ?? 999;
+        const valB = ACTION_ORDER[normalizeAction(b.actionType)] ?? 999;
+        return (valA - valB) * dirMultiplier;
+      }
+      
+      // 2. Handle Dates mathematically
+      if (key === 'actionDate') {
+        const dateA = a.actionDate ? new Date(a.actionDate).getTime() : 0;
+        const dateB = b.actionDate ? new Date(b.actionDate).getTime() : 0;
+        return direction === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+
+      // 3. Handle standard strings (recordName, performedBy)
+      const strA = String(a[key] ?? '').toLowerCase();
+      const strB = String(b[key] ?? '').toLowerCase();
+      
+      if (strA < strB) return direction === 'asc' ? -1 : 1;
+      if (strA > strB) return direction === 'asc' ? 1 : -1;
+      return 0;
     });
   }, [filtered, sortConfig]);
 
@@ -236,9 +238,11 @@ export default function AuditLog({
                         <span>{col.label}</span>
                         <div className={s.sortIconsStack}>
                           <LuChevronUp
+                            size={12}
                             className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
                           />
                           <LuChevronDown
+                            size={12}
                             className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
                           />
                         </div>
