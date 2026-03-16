@@ -95,7 +95,41 @@ def get_notifications():
             print("Notifications [paid orders] error:", e)
             conn.rollback()
 
-        # ── 3. Out of stock items ─────────────────────────────────────────────────
+        # ── 3. Newly added inventory items (last 30 days) ────────────────────────
+        try:
+            cur.execute("""
+                SELECT
+                    i.inventory_id,
+                    i.item_name,
+                    i.item_sku,
+                    'ITEM_ADDED',
+                    'New Item Added',
+                    MIN(ial.inventory_audit_log_date) AS event_time
+                FROM inventory i
+                JOIN inventory_audit_log ial ON ial.inventory_id = i.inventory_id
+                JOIN static_status ss ON i.item_status_id = ss.status_id
+                WHERE ss.status_code != 'INACTIVE'
+                  AND ial.inventory_audit_log_date >= NOW() - INTERVAL '30 days'
+                GROUP BY i.inventory_id, i.item_name, i.item_sku
+                ORDER BY event_time DESC
+                LIMIT 10
+            """)
+            for row in cur.fetchall():
+                inventory_id, item_name, item_sku, status_code, status_name, event_time = row
+                notifications.append({
+                    "category": "INVENTORY",
+                    "reference": str(inventory_id),
+                    "item_name": item_name,
+                    "item_sku": item_sku,
+                    "status_code": status_code,
+                    "status_name": status_name,
+                    "event_time": event_time,
+                })
+        except Exception as e:
+            print("Notifications [new items] error:", e)
+            conn.rollback()
+
+        # ── 5. Out of stock items ─────────────────────────────────────────────────
         try:
             cur.execute("""
                 SELECT
@@ -132,7 +166,7 @@ def get_notifications():
             print("Notifications [out of stock] error:", e)
             conn.rollback()
 
-        # ── 4. Low stock items ────────────────────────────────────────────────────
+        # ── 6. Low stock items ────────────────────────────────────────────────────
         try:
             cur.execute("""
                 SELECT

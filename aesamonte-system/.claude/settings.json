@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/rayah/OneDrive/Desktop/AESamonteSystem--v2/aesamonte-system/backend/**)"
+    ]
+  }
+}

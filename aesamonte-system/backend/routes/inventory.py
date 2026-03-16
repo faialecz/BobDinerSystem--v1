@@ -157,11 +157,8 @@ def add_inventory_batch():
             if not suppliers and item.get('supplierName'):
                 suppliers = [{'supplierName': item['supplierName'], 'leadTime': item.get('leadTime', 0), 'minOrder': item.get('minOrder', 0), 'isPrimary': True}]
 
-            supplier_id = None
-            supplier_ids_json = _json.dumps([])
+            resolved = []
             if suppliers:
-                # Resolve all supplier IDs from existing supplier table
-                resolved = []
                 for sup in suppliers:
                     sname = sup.get('supplierName')
                     if not sname: continue
@@ -175,24 +172,27 @@ def add_inventory_batch():
                         "minOrder": int(sup.get('minOrder') or 0),
                         "isPrimary": sup.get('isPrimary', False),
                     })
-                if resolved:
-                    supplier_id = resolved[0]['supplier_id']
-                    supplier_ids_json = _json.dumps(resolved)
 
-            # Insert inventory (supplier_ids stored as JSONB for multi-supplier)
+            # Insert inventory
             cur.execute("""
                 INSERT INTO public.inventory (
-                    supplier_id, item_name, item_description, item_sku, brand,
-                    unit_of_measure, item_quantity, item_unit_price, item_selling_price, item_status_id, supplier_ids
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+                    item_name, item_description, item_sku, brand,
+                    unit_of_measure, item_quantity, item_unit_price, item_selling_price, item_status_id
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
                 RETURNING inventory_id
             """, (
-                supplier_id, item['itemName'], item.get('itemDescription'),
+                item['itemName'], item.get('itemDescription'),
                 item.get('internalSku'), item.get('brand'), uom_id,
                 int(item.get('qty', 0)), float(item.get('unitPrice', 0)), float(item.get('sellingPrice', 0)),
-                supplier_ids_json
             ))
             new_inventory_id = cur.fetchone()[0]
+
+            # Link suppliers via inventory_supplier junction table
+            for sup in resolved:
+                cur.execute("""
+                    INSERT INTO public.inventory_supplier (inventory_id, supplier_id)
+                    VALUES (%s, %s)
+                """, (new_inventory_id, sup['supplier_id']))
 
             # Insert inventory_action using primary supplier's lead/min
             primary = suppliers[0] if suppliers else {}
@@ -245,11 +245,8 @@ def get_inventory_item(id):
             SELECT
                 i.inventory_id, i.item_name, i.item_description, i.item_sku, i.brand,
                 i.item_quantity, u.uom_code, i.item_unit_price, i.item_selling_price,
-                s.supplier_name, s.contact_person, s.supplier_contact,
-                ia.lead_time_days, ia.min_order_qty, ia.reorder_qty,
-                i.supplier_ids
+                ia.lead_time_days, ia.min_order_qty, ia.reorder_qty
             FROM inventory i
-            LEFT JOIN supplier s ON i.supplier_id = s.supplier_id
             LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
             LEFT JOIN inventory_action ia ON i.inventory_id = ia.inventory_id
             WHERE i.inventory_id = %s
@@ -259,28 +256,31 @@ def get_inventory_item(id):
         if not r:
             return jsonify({"error": "Item not found"}), 404
 
-        import json as _json
-        raw_sup_ids = r[15]
-        if raw_sup_ids:
-            suppliers_list = raw_sup_ids if isinstance(raw_sup_ids, list) else _json.loads(raw_sup_ids)
-            for sup in suppliers_list:
-                if sup.get('supplier_id'):
-                    cur.execute("SELECT contact_person, supplier_contact FROM supplier WHERE supplier_id = %s", (sup['supplier_id'],))
-                    cr = cur.fetchone()
-                    if cr:
-                        sup['contactPerson'] = cr[0] or ''
-                        sup['contactNumber'] = cr[1] or ''
-        else:
-            suppliers_list = [{
-                "supplierName": r[9] or '', "contactPerson": r[10] or '', "contactNumber": r[11] or '',
-                "leadTime": r[12] or 0, "minOrder": r[13] or 0, "isPrimary": True
-            }] if r[9] else []
+        # Fetch linked suppliers from junction table
+        cur.execute("""
+            SELECT s.supplier_id, s.supplier_name, s.contact_person, s.supplier_contact
+            FROM inventory_supplier ins
+            JOIN supplier s ON s.supplier_id = ins.supplier_id
+            WHERE ins.inventory_id = %s
+        """, (id,))
+        supplier_rows = cur.fetchall()
+        suppliers_list = [
+            {
+                "supplier_id": row[0],
+                "supplierName": row[1] or '',
+                "contactPerson": row[2] or '',
+                "contactNumber": row[3] or '',
+                "isPrimary": idx == 0,
+            }
+            for idx, row in enumerate(supplier_rows)
+        ]
 
+        primary = suppliers_list[0] if suppliers_list else {}
         return jsonify({
             "id": r[0], "itemName": r[1], "itemDescription": r[2], "sku": r[3], "brand": r[4],
             "qty": r[5], "uom": r[6] or 'Select', "unitPrice": float(r[7]), "sellingPrice": float(r[8]),
-            "supplierName": r[9] or '', "contactPerson": r[10] or '', "contactNumber": r[11] or '',
-            "leadTime": r[12] or 0, "minOrder": r[13] or 0, "reorderPoint": r[14] or 0,
+            "supplierName": primary.get('supplierName', ''), "contactPerson": primary.get('contactPerson', ''), "contactNumber": primary.get('contactNumber', ''),
+            "leadTime": r[9] or 0, "minOrder": r[10] or 0, "reorderPoint": r[11] or 0,
             "suppliers": suppliers_list,
         })
     except Exception as e:
@@ -306,16 +306,13 @@ def update_inventory_item(id):
         if not uom_res: return jsonify({"error": "UOM not found"}), 400
         uom_id = uom_res[0]
 
-        import json as _json
         # Resolve all suppliers from supplier table
         suppliers = data.get('suppliers', [])
         if not suppliers and data.get('supplierName'):
             suppliers = [{'supplierName': data['supplierName'], 'leadTime': data.get('leadTime', 0), 'minOrder': data.get('minOrder', 0), 'isPrimary': True}]
 
-        supplier_id = None
-        supplier_ids_json = _json.dumps([])
+        resolved = []
         if suppliers:
-            resolved = []
             for sup in suppliers:
                 sname = sup.get('supplierName')
                 if not sname: continue
@@ -328,20 +325,24 @@ def update_inventory_item(id):
                     "minOrder": int(sup.get('minOrder') or 0),
                     "isPrimary": sup.get('isPrimary', False),
                 })
-            if resolved:
-                supplier_id = resolved[0]['supplier_id']
-                supplier_ids_json = _json.dumps(resolved)
 
         # Update inventory table
         cur.execute("""
             UPDATE public.inventory SET
-                supplier_id = %s, item_name = %s, item_description = %s, brand = %s,
-                unit_of_measure = %s, item_quantity = %s, item_unit_price = %s, item_selling_price = %s,
-                supplier_ids = %s
+                item_name = %s, item_description = %s, brand = %s,
+                unit_of_measure = %s, item_quantity = %s, item_unit_price = %s, item_selling_price = %s
             WHERE inventory_id = %s
-        """, (supplier_id, data.get('itemName'), data.get('itemDescription'), data.get('brand'),
+        """, (data.get('itemName'), data.get('itemDescription'), data.get('brand'),
               uom_id, int(data.get('qty') or 0), float(data.get('unitPrice') or 0), float(data.get('sellingPrice') or 0),
-              supplier_ids_json, id))
+              id))
+
+        # Re-sync inventory_supplier junction table
+        cur.execute("DELETE FROM public.inventory_supplier WHERE inventory_id = %s", (id,))
+        for sup in resolved:
+            cur.execute("""
+                INSERT INTO public.inventory_supplier (inventory_id, supplier_id)
+                VALUES (%s, %s)
+            """, (id, sup['supplier_id']))
 
         primary = suppliers[0] if suppliers else {}
         lead_time = int(primary.get('leadTime') or data.get('leadTime') or 0)

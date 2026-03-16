@@ -8,11 +8,13 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const PREF_TYPE_MAP: Record<string, string[]> = {
   lowStock:   ['low_stock'],
   outOfStock: ['out_of_stock'],
+  itemAdded:  ['item_added'],
 };
 
 const TYPE_NAV_MAP: Record<string, string> = {
   out_of_stock: 'Inventory',
   low_stock:    'Inventory',
+  item_added:   'Inventory',
   pending:      'Orders',
   preparing:    'Orders',
   cancelled:    'Orders',
@@ -20,7 +22,7 @@ const TYPE_NAV_MAP: Record<string, string> = {
   paid:         'Sales',
 };
 
-type NotifType = 'out_of_stock' | 'low_stock' | 'paid' | 'pending' | 'preparing' | 'cancelled' | 'received';
+type NotifType = 'out_of_stock' | 'low_stock' | 'item_added' | 'paid' | 'pending' | 'preparing' | 'cancelled' | 'received';
 
 interface Notification {
   id: number;
@@ -38,6 +40,7 @@ interface Notification {
 const TYPE_COLORS: Record<string, string> = {
   out_of_stock: '#e53e3e',
   low_stock:    '#dd6b20',
+  item_added:   '#6b46c1',
   paid:         '#38a169',
   pending:      '#d69e2e',
   preparing:    '#3182ce',
@@ -99,11 +102,16 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
-  // All visible = non-dismissed + pref-enabled
+  // All visible = non-dismissed + pref-enabled (always read latest from localStorage)
   const visibleNotifications = notifications.filter((n) => {
     if (dismissedKeys.has(n.key)) return false;
+    let prefs = notifPrefs;
+    try {
+      const saved = localStorage.getItem('notifPreferences');
+      if (saved) prefs = JSON.parse(saved);
+    } catch { /* ignore */ }
     for (const [prefKey, types] of Object.entries(PREF_TYPE_MAP)) {
-      if (types.includes(n.type) && notifPrefs[prefKey] === false) return false;
+      if (types.includes(n.type) && prefs[prefKey] === false) return false;
     }
     return true;
   });
@@ -168,7 +176,7 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
                           {notif.label}
                         </span>
                         <span className={styles.notifRef}>
-                          {['out_of_stock', 'low_stock'].includes(notif.type)
+                          {['out_of_stock', 'low_stock', 'item_added'].includes(notif.type)
                             ? `Item ID: ${notif.reference}`
                             : notif.type === 'paid' && notif.sales_id
                               ? `Sales ID: ${notif.sales_id}`

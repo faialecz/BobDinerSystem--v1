@@ -67,7 +67,11 @@ export default function AppPreferences({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('notifPreferences');
-      if (saved) setNotifs(JSON.parse(saved));
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setNotifs(parsed);
+        savedState.current = { ...savedState.current, notifs: parsed };
+      }
     } catch { /* ignore */ }
   }, []);
 
