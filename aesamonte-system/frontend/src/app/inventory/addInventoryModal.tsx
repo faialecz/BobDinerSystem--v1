@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from "@/css/inventory.module.css";
+import confirmStyles from "@/css/inventory.module.css";
 import { LuPlus, LuTrash2 } from "react-icons/lu";
 
 interface Supplier {
@@ -64,10 +65,13 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
   existingProducts = [], defaultSupplierName = ''
 }) => {
   const s = styles as Record<string, string>;
+  const cs = confirmStyles as Record<string, string>;
+
   const [supplierEntries, setSupplierEntries] = useState<SupplierEntry[]>([{ ...INITIAL_SUPPLIER }]);
   const [items, setItems] = useState<any[]>([{ ...INITIAL_ITEM }]);
   const [dupError, setDupError] = useState('');
   const [supplierError, setSupplierError] = useState('');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // ── DRAG RESIZER STATE ──
   const [supplierHeight, setSupplierHeight] = useState<number | 'auto'>('auto');
@@ -126,9 +130,44 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
       setItems([{ ...INITIAL_ITEM }]);
       setDupError('');
       setSupplierError('');
-      setSupplierHeight('auto'); // reset to auto on open — no extra space
+      setShowCancelConfirm(false);
+      setSupplierHeight('auto');
     }
   }, [isOpen, defaultSupplierName]);
+
+  // ── Check if form has any user-entered data ──
+  const isFormDirty = (): boolean => {
+    const hasItemData = items.some(item =>
+      item.itemName?.trim() ||
+      item.brand?.trim() ||
+      item.itemDescription?.trim() ||
+      item.qty?.toString().trim() ||
+      item.unitPrice?.toString().trim() ||
+      item.sellingPrice?.toString().trim() ||
+      item.reorderPoint?.toString().trim() ||
+      (item.uom && item.uom !== 'Select')
+    );
+    const hasSupplierData = supplierEntries.some(e =>
+      e.supplierName?.trim() ||
+      e.leadTime?.trim() ||
+      e.minOrder?.trim()
+    );
+    return hasItemData || hasSupplierData;
+  };
+
+  // ── Handle Cancel click ──
+  const handleCancelClick = () => {
+    if (isFormDirty()) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleConfirmCancel = () => {
+    setShowCancelConfirm(false);
+    onClose();
+  };
 
   const handleSupplierChange = (idx: number, field: keyof SupplierEntry, value: string) => {
     setSupplierError('');
@@ -198,13 +237,11 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     const normalize = (str: string) => (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
     const validSuppliers = supplierEntries.filter(e => e.supplierName);
 
-    // Check 1: At least one item must be filled
     if (!items.some((i: any) => i.itemName?.trim())) {
       setDupError('Please fill in at least one item name before saving.');
       return;
     }
 
-    // Check 2: Duplicate item names within the form itself (name-only)
     const formNames = items
       .filter((i: any) => i.itemName?.trim())
       .map((i: any) => normalize(i.itemName));
@@ -214,7 +251,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
       return;
     }
 
-    // Check 3: Item name already exists in inventory (name-only)
     const conflict = items.find((item: any) => {
       if (!item.itemName?.trim()) return false;
       const normalizedName = normalize(item.itemName);
@@ -228,7 +264,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
       return;
     }
 
-    // All clear — save
     const mergedItems = items.map(item => ({
       ...item,
       supplierName: validSuppliers[0]?.supplierName || '',
@@ -263,18 +298,14 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
 
         <form ref={formRef} onSubmit={handleSubmit} style={{
           display: 'flex', flexDirection: 'column', flex: 1,
-          overflow: 'auto',
-          backgroundColor: '#f9fafb', minHeight: 0
+          overflow: 'auto', backgroundColor: '#f9fafb', minHeight: 0
         }}>
 
-          {/* --- SUPPLIER SECTION (resizable height) --- */}
+          {/* --- SUPPLIER SECTION --- */}
           <div ref={supplierSectionRef} style={{
             height: supplierHeight === 'auto' ? 'auto' : `${supplierHeight}px`,
-            minHeight: '120px',
-            flexShrink: 0,
-            padding: '20px 24px',
-            backgroundColor: '#fff',
-            borderBottom: '1px solid #eaeaea',
+            minHeight: '120px', flexShrink: 0, padding: '20px 24px',
+            backgroundColor: '#fff', borderBottom: '1px solid #eaeaea',
             boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
@@ -294,13 +325,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
             </div>
 
             {supplierError && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                background: '#fee2e2', border: '1px solid #fca5a5',
-                color: '#dc2626', borderRadius: '8px',
-                padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
-                marginBottom: '12px',
-              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
                 <span style={{ fontSize: '1rem' }}>⚠</span>
                 {supplierError}
               </div>
@@ -319,7 +344,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                     </button>
                   )}
                 </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Supplier Name</label>
@@ -348,7 +372,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                     <input type="number" style={{ ...FIELD_STYLE }} value={entry.minOrder} placeholder="e.g. 50" onChange={(e) => handleSupplierChange(idx, 'minOrder', e.target.value)} />
                   </div>
                 </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Contact Person</label>
@@ -366,16 +389,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
           {/* ── DRAG HANDLE ── */}
           <div
             onMouseDown={handleMouseDown}
-            style={{
-              height: '10px',
-              flexShrink: 0,
-              backgroundColor: '#e2e8f0',
-              cursor: 'row-resize',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background-color 0.15s',
-            }}
+            style={{ height: '10px', flexShrink: 0, backgroundColor: '#e2e8f0', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#94a3b8')}
             onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#e2e8f0')}
             title="Drag to resize"
@@ -388,7 +402,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
           </div>
 
           {/* --- ITEM LIST --- */}
-          <div style={{ flex: 1}}>
+          <div style={{ flex: 1 }}>
             {items.map((item, index) => (
               <div key={index} style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px', marginBottom: '20px', position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
@@ -402,7 +416,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                     </button>
                   )}
                 </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px', marginBottom: '15px' }}>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Item Name</label>
@@ -417,14 +430,12 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                     <input style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', backgroundColor: '#f3f4f6', color: '#6b7280', fontSize: '0.95rem', outline: 'none' }} value={item.internalSku} readOnly />
                   </div>
                 </div>
-
                 <div style={{ marginBottom: '15px' }}>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Description</label>
                     <input style={{ ...FIELD_STYLE }} value={item.itemDescription} onChange={(e) => handleItemChange(index, 'itemDescription', e.target.value)} placeholder="Brief details..." />
                   </div>
                 </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '15px' }}>
                   <div className={s.formGroup}>
                     <label className={s.miniLabel}>Quantity</label>
@@ -442,7 +453,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                     <input type="number" style={{ ...FIELD_STYLE, border: '1px solid #fcd34d' }} value={item.reorderPoint} onChange={(e) => handleItemChange(index, 'reorderPoint', e.target.value)} />
                   </div>
                 </div>
-
                 <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                   <h5 style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#1e40af', fontWeight: 600 }}>Pricing</h5>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -473,23 +483,47 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
           {/* --- FOOTER --- */}
           <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 0, flexShrink: 0 }}>
             {dupError && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                background: '#fee2e2', border: '1px solid #fca5a5',
-                color: '#dc2626', borderRadius: '8px',
-                padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500,
-              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500 }}>
                 <span style={{ fontSize: '1rem' }}>⚠</span>
                 {dupError}
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" onClick={onClose} className={s.cancelBtn}>Cancel</button>
+              <button type="button" onClick={handleCancelClick} className={s.cancelBtn}>Cancel</button>
               <button type="submit" className={s.saveBtn}>Save All Items</button>
             </div>
           </div>
         </form>
       </div>
+
+      {/* ── Cancel Confirmation Dialog ── */}
+      {showCancelConfirm && (
+        <div className={cs.confirmOverlay} onClick={() => setShowCancelConfirm(false)}>
+          <div className={cs.confirmBox} onClick={e => e.stopPropagation()}>
+
+            <div className={cs.confirmIconWrap}>
+              <div className={cs.confirmIcon}>⚠️</div>
+            </div>
+
+            <div className={cs.confirmTextWrap}>
+              <p className={cs.confirmTitle}>Discard Changes?</p>
+              <p className={cs.confirmSubtext}>
+                You have unsaved data in this form. If you cancel now, all entered information will be lost.
+              </p>
+            </div>
+
+            <div className={cs.confirmButtons}>
+              <button className={cs.keepEditingBtn} onClick={() => setShowCancelConfirm(false)}>
+                Keep Editing
+              </button>
+              <button className={cs.discardBtn} onClick={handleConfirmCancel}>
+                Yes, Discard
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };

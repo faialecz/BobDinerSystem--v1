@@ -96,7 +96,8 @@
 }
 
 .addButton:hover {
-  background: #25557a;
+  background-color: #8fa6b8;
+  cursor: pointer;
 }
 
 .archiveIconBtn {
