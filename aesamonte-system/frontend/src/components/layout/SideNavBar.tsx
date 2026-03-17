@@ -9,7 +9,7 @@ import {
 } from "react-icons/ai";
 import { GoHome } from "react-icons/go";
 import { GrLineChart } from "react-icons/gr";
-import { MdOutlineInventory2 } from "react-icons/md";
+import { MdOutlineInventory } from "react-icons/md";
 import { PiShoppingBag } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
 import { RiBarChart2Line, RiLogoutBoxRLine } from "react-icons/ri";
@@ -44,7 +44,7 @@ export default function Sidebar({
   const allMenuItems = [
     { name: "Dashboard",  icon: <GoHome />,             show: true },
     { name: "Sales",      icon: <GrLineChart />,         show: permissions.sales },
-    { name: "Inventory",  icon: <MdOutlineInventory2 />, show: permissions.inventory },
+    { name: "Inventory",  icon: <MdOutlineInventory />, show: permissions.inventory },
     { name: "Orders",     icon: <PiShoppingBag />,       show: permissions.orders },
     { name: "Suppliers",  icon: <BsPeople />,            show: permissions.suppliers },
     { name: "Reports",    icon: <RiBarChart2Line />,     show: permissions.reports },
