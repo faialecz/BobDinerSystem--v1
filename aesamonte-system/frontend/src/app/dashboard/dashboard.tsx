@@ -18,6 +18,21 @@ import {
   OrderReceipt,
 } from "./types";
 
+interface LowStockItem {
+  inventory_id: number;
+  item_name: string;
+  sku: string;
+  current_qty: number;
+  uom: string;
+  reorder_qty: number;
+  brand?: string;
+  description?: string;
+  unit_price?: number;
+  selling_price?: number;
+  status?: string;
+  supplier_name?: string;
+}
+
 interface DashboardProps {
   role?: string;
   onLogout: () => void;
@@ -31,6 +46,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [charts, setCharts] = useState<ChartsData | null>(null);
   const [insights, setInsights] = useState<InsightsData | null>(null);
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
@@ -38,19 +54,16 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
   useEffect(() => {
     fetch(`${API}/api/dashboard/all`, { credentials: "include" })
       .then((r) => r.json())
-      .then(({ metrics: m, recentOrders: ro, charts: ch, insights: ins }) => {
+      .then(({ metrics: m, recentOrders: ro, charts: ch, insights: ins, lowStockItems: ls }) => {
         if (m && !m.error) setMetrics(m);
         if (Array.isArray(ro)) setRecentOrders(ro);
         if (ch && !ch.error) setCharts(ch);
         if (ins && !ins.error) setInsights(ins);
+        if (Array.isArray(ls)) setLowStockItems(ls);
       })
       .catch((e) => console.error("Dashboard fetch error:", e))
       .finally(() => setLoading(false));
   }, []);
-
-  const handleReceiptStatusUpdate = (orderId: number, status: string) => {
-    setReceipt((prev) => (prev ? { ...prev, status } : prev));
-  };
 
   const handleOrderClick = async (orderId: number) => {
     setReceiptLoading(true);
@@ -83,7 +96,13 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
       <TopHeader role={role} onLogout={onLogout} />
       <div className={styles.mainContent}>
 
-        <StatsGrid metrics={metrics} loading={loading} onNavigate={onNavigate} />
+        <StatsGrid
+          metrics={metrics}
+          loading={loading}
+          onNavigate={onNavigate}
+          insights={insights}
+          lowStockItems={lowStockItems}
+        />
 
         <div className={styles.panelsGrid}>
 
@@ -116,7 +135,11 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
           receiptLoading={receiptLoading}
           onClose={() => setReceipt(null)}
           onOrdersUpdate={setRecentOrders}
-          onReceiptStatusUpdate={handleReceiptStatusUpdate}
+          onReceiptStatusUpdate={(orderId, status) =>
+            setReceipt((prev) => (prev ? { ...prev, status } : prev))
+
+            
+          }
         />
       )}
     </div>

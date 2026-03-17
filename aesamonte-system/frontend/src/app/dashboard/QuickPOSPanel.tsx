@@ -61,10 +61,15 @@ export default function QuickPOSPanel({
                   </p>
                   <span
                     className={`${styles.posBadge} ${
-                      isPaid ? styles.posBadgePaid : styles.posBadgePending
+                      o.status === "PAID" || o.status === "RECEIVED" ? styles.posBadgePaid :
+                      o.status === "PREPARING" ? styles.posBadgePreparing :
+                      o.status === "TO SHIP" ? styles.posBadgeToShip :   
+                      o.status === "CANCELLED" ? styles.posBadgeCancelled :
+                      o.status === "PENDING" ? styles.posBadgePending :
+                      styles.posBadgePending
                     }`}
                   >
-                    {isPaid ? "Paid" : o.status}
+                    {o.status}
                   </span>
                 </div>
                 <p className={styles.posOrderId}>No. {o.orderId}</p>

@@ -479,15 +479,74 @@ def get_dashboard_insights():
         cur.close()
         conn.close()
 
+# ──  FOR LOW STOCK ITEMS TABLE IN DASHBOARD ───────────────────────────────
+def get_low_stock_items_data():
+    cached = _get("low_stock_items")
+    if cached:
+        return cached
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT DISTINCT ON (i.inventory_id)
+                i.inventory_id,
+                i.item_name,
+                i.item_sku AS sku,
+                i.item_quantity AS current_qty,
+                COALESCE(u.uom_code, '') AS uom,
+                COALESCE(ia.reorder_qty, 10) AS reorder_qty,
+                COALESCE(i.brand, '') AS brand,
+                COALESCE(i.item_description, '') AS description,
+                COALESCE(i.item_unit_price, 0) AS unit_price,
+                COALESCE(i.item_selling_price, 0) AS selling_price,
+                ss.status_code AS status,
+                COALESCE(s.supplier_name, '') AS supplier_name
+            FROM inventory i
+            LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
+            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
+            LEFT JOIN static_status ss ON i.item_status_id = ss.status_id
+            LEFT JOIN inventory_supplier ins ON ins.inventory_id = i.inventory_id
+            LEFT JOIN supplier s ON s.supplier_id = ins.supplier_id
+            WHERE ss.status_code != 'INACTIVE'
+            AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
+            ORDER BY i.inventory_id, i.item_quantity ASC
+        """)
+        rows = cur.fetchall()
+        result = [
+            {
+                "inventory_id": r[0],
+                "item_name": r[1],
+                "sku": r[2] or f"SKU{r[0]:06d}",
+                "current_qty": int(r[3]),
+                "uom": r[4],
+                "reorder_qty": int(r[5]),
+                "brand": r[6],
+                "description": r[7],
+                "unit_price": float(r[8]),
+                "selling_price": float(r[9]),
+                "status": r[10],
+                "supplier_name": r[11],
+            }
+            for r in rows
+        ]
+        _set("low_stock_items", result, ttl=120)
+        return result
+    except Exception as e:
+        print("Low stock items error:", str(e))
+        return []
+    finally:
+        cur.close()
+        conn.close()
 
 # ── 5. ALL-IN-ONE DASHBOARD ──────────────────────────────────────────────────
 @dashboard_bp.route("/api/dashboard/all", methods=["GET"])
 def get_dashboard_all():
-    """Single endpoint returning metrics + recent-orders + charts + insights."""
-    metrics_data  = _get("metrics")
-    orders_data   = _get("recent_orders")
-    charts_data   = _get("charts")
-    insights_data = _get("insights")
+    metrics_data    = _get("metrics")
+    orders_data     = _get("recent_orders")
+    charts_data     = _get("charts")
+    insights_data   = _get("insights")
+    low_stock_data  = _get("low_stock_items")  # ← add this
 
     if metrics_data is None:
         metrics_data = get_dashboard_metrics()[0].get_json()
@@ -497,12 +556,15 @@ def get_dashboard_all():
         charts_data = get_dashboard_charts()[0].get_json()
     if insights_data is None:
         insights_data = get_dashboard_insights()[0].get_json()
+    if low_stock_data is None:
+        low_stock_data = get_low_stock_items_data()  # ← add this
 
     return jsonify({
-        "metrics":      metrics_data,
-        "recentOrders": orders_data,
-        "charts":       charts_data,
-        "insights":     insights_data,
+        "metrics":       metrics_data,
+        "recentOrders":  orders_data,
+        "charts":        charts_data,
+        "insights":      insights_data,
+        "lowStockItems": low_stock_data,  # ← add this
     }), 200
 
 
@@ -516,7 +578,7 @@ def update_order_status(order_id: str):
     try:
         data = request.get_json(silent=True) or {}
         target_status = data.get("status", "RECEIVED").upper()
-        if target_status not in ("PREPARING", "RECEIVED"):
+        if target_status not in ("PREPARING", "TO SHIP", "RECEIVED"):
             return jsonify({"error": "Invalid target status"}), 400
         cur.execute("""
             SELECT ss.status_code
@@ -528,7 +590,11 @@ def update_order_status(order_id: str):
         if not row:
             return jsonify({"error": "Order not found"}), 404
         current_status = row[0]
-        allowed = {"PREPARING": ("PENDING",), "RECEIVED": ("PENDING", "PREPARING")}
+        allowed = {
+            "PREPARING": ("PREPARING",),
+            "TO SHIP":   ("PREPARING",),
+            "RECEIVED":  ("PREPARING", "TO SHIP"),
+        }
         if current_status not in allowed[target_status]:
             return jsonify({"error": f"Cannot move from {current_status} to {target_status}"}), 400
         cur.execute("""

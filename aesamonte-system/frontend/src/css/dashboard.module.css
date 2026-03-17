@@ -192,6 +192,137 @@
   color: #dc2626;
 }
 
+/* ===== Low Stock Popup===== */
+.lowStockPopup {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  width: 100%;
+  max-width: 420px;
+  animation: popupFadeIn 0.15s ease;
+}
+
+@keyframes popupFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.lowStockPopupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.lowStockPopupTitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #164163;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.lowStockPopupCount {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.lowStockPopupList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.lowStockPopupList::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lowStockPopupList::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 999px;
+}
+
+.lowStockPopupRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 10px;
+  background: #f9fafb;
+  border-radius: 10px;
+  gap: 0.5rem;
+  transition: background 0.12s;
+}
+
+.lowStockPopupRow:hover {
+  background: #f0f7ff;
+}
+
+.lowStockPopupLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lowStockPopupName {
+  font-size: 0.82rem;
+  color: #111827;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lowStockPopupSku {
+  font-size: 0.68rem;
+  color: #9ca3af;
+}
+
+.lowStockPopupQty {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #dc2626;
+  white-space: nowrap;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 999px;
+  padding: 2px 9px;
+  flex-shrink: 0;
+}
+
+.lowStockPopupFooter {
+  display: block;
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 8px;
+  background: none;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #164163;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.lowStockPopupFooter:hover {
+  background: #f0f7ff;
+  border-color: #164163;
+}
+
 /* ===== Panels Grid ===== */
 .panelsGrid {
   display: grid;
@@ -492,6 +623,7 @@
   gap: 5px;
   box-shadow: 0 4px 8px rgba(78, 78, 78, 0.07);
   transition: box-shadow 0.15s, transform 0.15s;
+  cursor: pointer;
 }
 
 .posCard:hover {
@@ -526,13 +658,32 @@
 }
 
 .posBadgePaid {
-  background-color: #dcfce7;
+  background: #dcfce7;
   color: #16a34a;
 }
 
+.posBadgePreparing {
+  border: 1.5px solid #3b82f6;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.posBadgeToShip {
+  border: 1.5px solid #f97316;
+  color: #ea580c;
+  background: #fff7ed;
+}
+
 .posBadgePending {
-  background-color: #fef9c3;
-  color: #92400e;
+  border: 1.5px solid #f59e0b;
+  color: #d97706;
+  background: #fffbeb;
+}
+
+.posBadgeCancelled {
+  border: 1.5px solid #ef4444;
+  color: #dc2626;
+  background: #fef2f2;
 }
 
 .posOrderId {
@@ -822,7 +973,7 @@
   white-space: nowrap;
 }
 
-/* ===== Stock-Out Prediction (redesign) ===== */
+/* ===== Stock-Out Prediction ===== */
 .lowStockBadge {
   display: inline-block;
   font-size: 0.72rem;
@@ -1234,7 +1385,9 @@
   border-color: #bbf7d0;
 }
 
-.receiptStatusBtnGreen:hover { background: #dcfce7; }
+.receiptStatusBtnGreen:hover { 
+  background: #dcfce7; 
+}
 
 .receiptStatusDone {
   flex: 1;
@@ -1265,6 +1418,16 @@
   background: #1e5a8a;
 }
 
+.receiptStatusBtnAmber {
+ border: 1.5px solid #f97316;
+  color: #ea580c;
+  background: #f6e1c9;
+}
+
+.receiptStatusBtnAmber:hover{ 
+  background: #f1cb9f; 
+}
+
 .receiptLoading {
   text-align: center;
   color: #9ca3af;
@@ -1279,7 +1442,9 @@
 
 .posBadgeClickable:hover {
   opacity: 0.75;
+  cursor: pointer;
 }
+
 
 @media print {
   body > * {

@@ -27,32 +27,54 @@ export default function ReceiptModal({
   onOrdersUpdate,
   onReceiptStatusUpdate,
 }: ReceiptModalProps) {
-  const [confirmAction, setConfirmAction] = useState<"PREPARING" | "RECEIVED" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"PREPARING" | "TO SHIP" | "RECEIVED" | null>(null);
 
-  const handleStatusAdvance = async (targetStatus: "PREPARING" | "RECEIVED") => {
-    try {
-      const res = await fetch(
-        `${API}/api/dashboard/order-status/${receipt.orderId}`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: targetStatus }),
-        }
-      );
-      const data = await res.json();
-      if (data.status) {
-        onReceiptStatusUpdate(receipt.orderId, data.status);
-        onOrdersUpdate((prev) =>
-          prev.map((o) =>
-            o.orderId === receipt.orderId ? { ...o, status: data.status } : o
-          )
-        );
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+const showToast = (message: string, type: "success" | "error") => {
+  setToast({ message, type });
+  setTimeout(() => setToast(null), 3000);
+};
+  const handleStatusAdvance = async (targetStatus: "PREPARING" | "TO SHIP" | "RECEIVED") => {
+  try {
+    const res = await fetch(
+      `${API}/api/dashboard/order-status/${receipt.orderId}`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus }),
       }
-    } catch (err) {
-      console.error("Status advance error:", err);
+    );
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Surface the backend error message
+      showToast(data.error ?? "Failed to update status.", "error");
+      return;
     }
-  };
+
+    if (data.status) {
+      onReceiptStatusUpdate(receipt.orderId, data.status);
+      onOrdersUpdate((prev) =>
+        prev.map((o) =>
+          o.orderId === receipt.orderId ? { ...o, status: data.status } : o
+        )
+      );
+      showToast(
+        targetStatus === "RECEIVED"
+          ? "Order marked as Received ✓"
+          : targetStatus === "TO SHIP"
+          ? "Order moved to To Ship ✓"
+          : "Order moved to Preparing ✓",
+        "success"
+      );
+    }
+  } catch (err) {
+    console.error("Status advance error:", err);
+    showToast("Network error — could not update order.", "error");
+  }
+};
 
   const handlePrint = () => {
     const pw = window.open("", "_blank");
@@ -194,18 +216,17 @@ export default function ReceiptModal({
             </div>
             <div className={styles.confirmBody}>
               <p className={styles.confirmTitle}>
-                {confirmAction === "RECEIVED" ? "Mark as Received?" : "Mark as Preparing?"}
+                {confirmAction === "RECEIVED" ? "Mark as Received?" 
+                : confirmAction === "TO SHIP" ? "Mark as To Ship?"
+                : "Mark as Preparing?"}
               </p>
               <p className={styles.confirmMessage}>
                 {confirmAction === "RECEIVED" ? (
-                  <>
-                    <strong>Received</strong> status means the customer has collected their order.
-                    This cannot be undone.
-                  </>
+                  <><strong>Received</strong> status means the customer has collected their order. This cannot be undone.</>
+                ) : confirmAction === "TO SHIP" ? (
+                  <>This will move the order to <strong>To Ship</strong> status.</>
                 ) : (
-                  <>
-                    This will move the order to <strong>Preparing</strong> status.
-                  </>
+                  <>This will move the order to <strong>Preparing</strong> status.</>
                 )}
               </p>
               <div className={styles.confirmActions}>
@@ -223,6 +244,8 @@ export default function ReceiptModal({
                 >
                   {confirmAction === "RECEIVED"
                     ? "Yes, Mark as Received"
+                    : confirmAction === "TO SHIP"
+                    ? "Yes, Mark as To Ship"
                     : "Yes, Mark as Preparing"}
                 </button>
               </div>
@@ -284,15 +307,15 @@ export default function ReceiptModal({
                 <span>{fmt(receipt.totalAmount)}</span>
               </div>
               <div className={styles.receiptStatusActions}>
-                {receipt.status === "PENDING" && (
+                {receipt.status === "PREPARING" && (
                   <button
-                    className={styles.receiptStatusBtn}
-                    onClick={() => setConfirmAction("PREPARING")}
+                    className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnAmber}`}
+                    onClick={() => setConfirmAction("TO SHIP")}
                   >
-                    Mark as Preparing
+                    Mark as To Ship
                   </button>
                 )}
-                {(receipt.status === "PENDING" || receipt.status === "PREPARING") && (
+                {receipt.status === "TO SHIP" && (
                   <button
                     className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnGreen}`}
                     onClick={() => setConfirmAction("RECEIVED")}
