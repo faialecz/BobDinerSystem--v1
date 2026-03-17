@@ -15,8 +15,7 @@ import {
   LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX, LuPrinter
 } from 'react-icons/lu';
 
-const STATUS_PRIORITY: Record<string, number> = { 'TO SHIP': 1, 'RECEIVED': 2, 'CANCELLED': 3 };
-const STATUS_ORDER: string[] = ['TO SHIP', 'RECEIVED', 'CANCELLED'];
+const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'TO SHIP': 2, 'RECEIVED': 3, 'CANCELLED': 4 };
 const ITEM_STATUS_MAP: Record<number, string> = { 1: 'AVAILABLE', 2: 'PARTIALLY_AVAILABLE', 3: 'OUT_OF_STOCK' };
 const ROWS_PER_PAGE = 10;
 
@@ -299,8 +298,9 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSearchTerm(e.target.value); setCurrentPage(1); };
 
   const handleSort = (key: Exclude<SortKey, null>) => {
-    if (key === 'status') { setStatusCycleIndex(prev => (prev + 1) % STATUS_ORDER.length); setSortConfig({ key: 'status', direction: 'asc' }); }
-    else setSortConfig(prev => prev.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+    setSortConfig(prev => prev.key === key 
+      ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } 
+      : { key, direction: 'asc' });
   };
 
   const filtered = useMemo(() => {
@@ -322,43 +322,58 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
   const sorted = useMemo(() => {
     const arr = [...filtered];
     const getSafeId = (id: any) => Number(String(id).replace(/\D/g, '')) || 0;
-    if (sortConfig.key === 'status') {
-      const activeStatus = STATUS_ORDER[statusCycleIndex];
-      return arr.sort((a, b) => {
-        if (a.status === activeStatus && b.status !== activeStatus) return -1;
-        if (b.status === activeStatus && a.status !== activeStatus) return 1;
-        return (STATUS_PRIORITY[a.status.toUpperCase()] || 0) - (STATUS_PRIORITY[b.status.toUpperCase()] || 0) || getSafeId(a.id) - getSafeId(b.id);
-      });
-    }
+    
+    // Default fallback
     if (!sortConfig.key || !sortConfig.direction) {
-      return arr.sort((a, b) => (STATUS_PRIORITY[a.status.toUpperCase()] || 0) - (STATUS_PRIORITY[b.status.toUpperCase()] || 0) || getSafeId(a.id) - getSafeId(b.id));
+      return arr.sort((a, b) => (STATUS_PRIORITY[a.status?.toUpperCase()] || 99) - (STATUS_PRIORITY[b.status?.toUpperCase()] || 99) || getSafeId(a.id) - getSafeId(b.id));
     }
+    
     const { key, direction } = sortConfig;
     return arr.sort((a, b) => {
       const A = a[key as keyof Order];
       const B = b[key as keyof Order];
+      
+      // Handle Dates
       if (key === 'date') {
         return direction === 'asc' 
           ? new Date(A as string).getTime() - new Date(B as string).getTime() 
           : new Date(B as string).getTime() - new Date(A as string).getTime();
       }
+
+      // Handle ID safely
       if (key === 'id') {
         const numA = getSafeId(A);
         const numB = getSafeId(B);
         return direction === 'asc' ? numA - numB : numB - numA;
       }
+
+      // Handle Quantities and Amounts
       if (key === 'totalQty' || key === 'totalAmount') {
         const numA = Number(A) || 0;
         const numB = Number(B) || 0;
         return direction === 'asc' ? numA - numB : numB - numA;
       }
+
+      // FIX: Standardized Status Priority Sorting
+      if (key === 'status') {
+        const valA = STATUS_PRIORITY[String(A ?? '').toUpperCase()] || 999;
+        const valB = STATUS_PRIORITY[String(B ?? '').toUpperCase()] || 999;
+        
+        if (valA !== valB) {
+          return direction === 'asc' ? valA - valB : valB - valA;
+        }
+        // If statuses are identical, tie-break by ID
+        return direction === 'asc' ? getSafeId(a.id) - getSafeId(b.id) : getSafeId(b.id) - getSafeId(a.id);
+      }
+      
+      // Handle Strings (Names, Addresses, Payment Methods)
       const sA = String(A ?? '').toLowerCase();
       const sB = String(B ?? '').toLowerCase();
       if (sA < sB) return direction === 'asc' ? -1 : 1;
       if (sA > sB) return direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [filtered, sortConfig, statusCycleIndex]);
+  }, [filtered, sortConfig]);
 
   const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE) || 1;
   const paginated = sorted.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
