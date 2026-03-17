@@ -52,17 +52,80 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
   const [receiptLoading, setReceiptLoading] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/api/dashboard/all`, { credentials: "include" })
-      .then((r) => r.json())
-      .then(({ metrics: m, recentOrders: ro, charts: ch, insights: ins, lowStockItems: ls }) => {
-        if (m && !m.error) setMetrics(m);
-        if (Array.isArray(ro)) setRecentOrders(ro);
-        if (ch && !ch.error) setCharts(ch);
-        if (ins && !ins.error) setInsights(ins);
-        if (Array.isArray(ls)) setLowStockItems(ls);
-      })
-      .catch((e) => console.error("Dashboard fetch error:", e))
-      .finally(() => setLoading(false));
+    const fetchData = () => {
+      Promise.all([
+        fetch(`${API}/api/dashboard/all`, { credentials: "include" }).then((r) => r.json()),
+        fetch(`/api/inventory`, { headers: { "Cache-Control": "no-cache" } }).then((r) => r.json()),
+      ])
+        .then(([dashData, inventoryData]) => {
+          const { metrics: m, recentOrders: ro, charts: ch, insights: ins, lowStockItems: dashLowStock } = dashData;
+
+          if (ch && !ch.error) setCharts(ch);
+          if (ins && !ins.error) setInsights(ins);
+          if (Array.isArray(ro)) setRecentOrders(ro);
+
+          // Build lookup maps using String keys to avoid NaN issues
+          // dashLowStock has supplier_name because Flask joins the supplier table
+          const supplierMap = new Map<string, string>();
+          const unitPriceMap = new Map<string, number>();
+          const sellingPriceMap = new Map<string, number>();
+          const reorderMap = new Map<string, number>();
+
+          if (Array.isArray(dashLowStock)) {
+            for (const item of dashLowStock) {
+              const key = String(item.inventory_id);
+              if (item.supplier_name) supplierMap.set(key, item.supplier_name);
+              if (item.unit_price)    unitPriceMap.set(key, item.unit_price);
+              if (item.selling_price) sellingPriceMap.set(key, item.selling_price);
+              if (item.reorder_qty)   reorderMap.set(key, item.reorder_qty);
+            }
+          }
+
+          // Build stock alerts from full inventory list (for correct count)
+          let stockAlerts: LowStockItem[] = [];
+          if (Array.isArray(inventoryData)) {
+            const activeProducts = inventoryData.filter((p: any) => !p.is_archived);
+
+            stockAlerts = activeProducts
+              .filter((p: any) =>
+                p.qty === 0 ||
+                p.status?.toLowerCase().includes("out of stock") ||
+                p.status?.toLowerCase().includes("low stock")
+              )
+              .map((p: any) => {
+                const key = String(p.id); // use String to avoid NaN
+                return {
+                  inventory_id: p.id,     // keep original value — no Number() conversion
+                  item_name:    p.item_name,
+                  sku:          p.sku,
+                  current_qty:  p.qty,
+                  uom:          p.uom,
+                  status:       p.status,
+                  brand:        p.brand,
+                  description:  p.item_description,
+                  supplier_name:  supplierMap.get(key) || "",
+                  unit_price:     unitPriceMap.get(key)    ?? p.unitPrice  ?? 0,
+                  selling_price:  sellingPriceMap.get(key) ?? p.price      ?? 0,
+                  reorder_qty:    reorderMap.get(key)      ?? p.reorderPoint ?? 0,
+                };
+              });
+
+            setLowStockItems(stockAlerts);
+          }
+
+          // Override metrics.lowStock with the real count so badge matches popup
+          if (m && !m.error) {
+            setMetrics({ ...m, lowStock: stockAlerts.length });
+          }
+        })
+        .catch((e) => console.error("Dashboard fetch error:", e))
+        .finally(() => setLoading(false));
+    };
+
+    fetchData(); // run on mount
+
+    const interval = setInterval(fetchData, 30_000); // re-fetch every 30s
+    return () => clearInterval(interval);
   }, []);
 
   const handleOrderClick = async (orderId: number) => {
@@ -137,8 +200,6 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
           onOrdersUpdate={setRecentOrders}
           onReceiptStatusUpdate={(orderId, status) =>
             setReceipt((prev) => (prev ? { ...prev, status } : prev))
-
-            
           }
         />
       )}
