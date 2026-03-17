@@ -43,16 +43,16 @@ export default function ForecastRevenuePanel({ charts, metrics, loading }: Forec
           <div className={styles.revenueSummary}>
             <p className={styles.revenueTotal}>{fmt(charts.forecastTotal)}</p>
             <span
-              className={`${styles.statBadge} ${
-                metrics && metrics.salesChange >= 0 ? styles.badgeGreen : styles.badgeRed
-              }`}
-            >
-              {metrics ? `${metrics.salesChange >= 0 ? "+" : ""}${metrics.salesChange}%` : ""}{" "}
-              {metrics && metrics.salesChange >= 0 ? (
-                <AiOutlineRise size={13} />
-              ) : (
-                <AiOutlineFall size={13} />
-              )}
+                className={`${styles.statBadge} ${
+                  metrics && metrics.salesChange >= 0 ? styles.badgeGreen : styles.badgeRed
+                }`}
+                >
+                {metrics ? (
+                  <>
+                    {metrics.salesChange >= 0 ? "↗ " : "↘ "}
+                    {Math.abs(metrics.salesChange)}%
+                  </>
+                ) : ""}
             </span>
             <p className={styles.panelSub}>From last year</p>
           </div>

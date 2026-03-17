@@ -163,9 +163,9 @@
 }
 
 .badgeGreen {
-  background-color: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
+  background-color: #cbefd6f2;
+  color: #749e71;
+  border: 2px solid #7eb190;
 }
 
 .badgeRed {
@@ -659,8 +659,10 @@
 }
 
 .posBadgePaid {
-  background: #dcfce7;
-  color: #16a34a;
+  background-color: #dcfce7; 
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  text-align: center; 
 }
 
 .posBadgePreparing {
@@ -670,16 +672,11 @@
 }
 
 .posBadgeToShip {
-  border: 1.5px solid #f97316;
-  color: #ea580c;
-  background: #fff7ed;
-}
+  background-color: #fff9c2; 
+  color: #a16207;       
+  border: 1px solid #facc15; 
+  text-align: center;}
 
-.posBadgePending {
-  border: 1.5px solid #f59e0b;
-  color: #d97706;
-  background: #fffbeb;
-}
 
 .posBadgeCancelled {
   border: 1.5px solid #ef4444;

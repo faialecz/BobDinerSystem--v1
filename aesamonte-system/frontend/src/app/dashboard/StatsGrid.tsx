@@ -66,14 +66,39 @@ export default function StatsGrid({ metrics, loading, onNavigate, insights, lowS
         description: s.description,
       }));
 
-  const statCards = metrics && metrics.salesToday != null ? [
-    { title: "Sales Today", value: fmt(metrics.salesToday), change: `${metrics.salesChange >= 0 ? "+" : ""}${metrics.salesChange}%`, positive: metrics.salesChange >= 0, sub: "Sales up from yesterday.", icon: <GrLineChart size={20} />, tab: "Sales" },
-    { title: "Orders", value: String(metrics.pendingOrders), change: `${metrics.ordersChange >= 0 ? "+" : ""}${metrics.ordersChange}%`, positive: metrics.ordersChange >= 0, sub: "Orders awaiting processing.", icon: <PiShoppingBag size={20} />, tab: "Orders" },
-    { title: "Low Stock", value: `${metrics.lowStock} SKUs`, change: "", positive: false, hideBadge: true, sub: "Immediate restock needed.", icon: <MdOutlineInventory2 size={20} />, tab: "Inventory" },
-  ] : [];
-
-  return (
-    <>
+          const statCards = metrics && metrics.salesToday != null ? [
+          { 
+            title: "Sales Today", 
+            value: fmt(metrics.salesToday), 
+            change: `${metrics.salesChange >= 0 ? "↗ " : "↘ "}${Math.abs(metrics.salesChange)}%`, 
+            positive: metrics.salesChange >= 0, 
+            sub: "Sales up from yesterday.", 
+            icon: <GrLineChart size={20} />, 
+            tab: "Sales" 
+          },
+          { 
+            title: "Orders", 
+            value: String(metrics.pendingOrders), 
+            change: `${metrics.ordersChange >= 0 ? "↗ " : "↘ "}${Math.abs(metrics.ordersChange)}%`, 
+            positive: metrics.ordersChange >= 0, 
+            sub: "Orders awaiting processing.", 
+            icon: <PiShoppingBag size={20} />, 
+            tab: "Orders" 
+          },
+          { 
+            title: "Low Stock", 
+            value: `${metrics.lowStock} SKUs`, 
+            change: "", 
+            positive: false, 
+            hideBadge: true, 
+            sub: "Immediate restock needed.", 
+            icon: <MdOutlineInventory2 size={20} />, 
+            tab: "Inventory" 
+          },
+        ] : [];
+          
+          return (
+            <>
       <div className={styles.statsGrid}>
         {loading || statCards.length === 0
           ? [1, 2, 3].map((i) => <div key={i} className={`${styles.statCard} ${styles.skeleton}`} />)
@@ -95,22 +120,22 @@ export default function StatsGrid({ metrics, loading, onNavigate, insights, lowS
                     </button>
                   </div>
                   <h2 className={styles.statValue}>
-  {item.title === "Low Stock" ? (
-    <>
-      <span style={{ color: "#dc2626" }}>{metrics?.lowStock}</span>
-      <span style={{ fontSize: "2rem", fontWeight: 500, color: "#dc2626", marginLeft: "4px" }}>SKUs</span>
-    </>
-  ) : (
-    item.value
-  )}
-</h2>
+                    {item.title === "Low Stock" ? (
+                      <>
+                        <span style={{ color: "#dc2626" }}>{metrics?.lowStock}</span>
+                        <span style={{ fontSize: "2rem", fontWeight: 500, color: "#dc2626", marginLeft: "4px" }}>SKUs</span>
+                      </>
+                    ) : (
+                      item.value
+                    )}
+                  </h2>
                   <div className={styles.statFooter}>
                     <span className={styles.statSub}>{item.sub}</span>
-                    {!item.hideBadge && (
-                      <span className={`${styles.statBadge} ${item.positive ? styles.badgeGreen : styles.badgeRed}`}>
-                        {item.change} {item.positive ? <AiOutlineRise size={13} /> : <AiOutlineFall size={13} />}
-                      </span>
-                    )}
+                      {!item.hideBadge && (
+                        <span className={`${styles.statBadge} ${item.positive ? styles.badgeGreen : styles.badgeRed}`}>
+                          {item.change}
+                        </span>
+                      )}
                   </div>
                 </div>
               );
