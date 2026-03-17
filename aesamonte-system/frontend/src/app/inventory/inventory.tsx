@@ -57,6 +57,7 @@ export interface Product {
   price: number;
   status: string;
   is_archived?: boolean;
+  supplier_name?: string; 
 }
 
 interface InventorySummary {
@@ -67,6 +68,7 @@ interface InventorySummary {
   yearlyInventory: number;
   outOfStockCount: number;
   outOfStockItems: Product[];
+  lowStockItems: Product[];
 }
 
 const ROWS_PER_PAGE = 10;
@@ -89,6 +91,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     yearlyInventory: 0,
     outOfStockCount: 0,
     outOfStockItems: [], 
+    lowStockItems: [],
   });
   
   const [searchTerm, setSearchTerm] = useState(initialSearch ?? '');
@@ -128,32 +131,42 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     setShowToast(true);
   };
 
-  const fetchInventory = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/inventory?t=${new Date().getTime()}`, {
-        method: "GET",
-        headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
-        cache: "no-store" 
-      });
-      if (!res.ok) throw new Error("Failed to fetch");
-      const productData: Product[] = await res.json();
-      setProducts(productData);
-      const activeProducts = productData.filter(p => !p.is_archived);
-      const outOfStock = activeProducts.filter(p => p.qty === 0);
-      setData(prev => ({
-        ...prev,
-        totalProducts: activeProducts.length,
-        totalProductsChange: 2.8,
-        outOfStockCount: outOfStock.length,
-        outOfStockItems: outOfStock,
-      }));
-    } catch (err) {
-      console.error("Failed to fetch Inventory", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+ const fetchInventory = async () => {
+  setIsLoading(true);
+  try {
+    const res = await fetch(`/api/inventory?t=${new Date().getTime()}`, {
+      method: "GET",
+      headers: { "Cache-Control": "no-cache" },
+    });
+    if (!res.ok) throw new Error("Failed to fetch");
+    
+    const productData: Product[] = await res.json();
+    setProducts(productData);
+
+    const activeProducts = productData.filter(p => !p.is_archived);
+
+    // FIX 1: Ensure we catch items with 0 qty regardless of the 'status' text
+    const outOfStock = activeProducts.filter(p => 
+      p.qty === 0 || p.status?.toLowerCase().includes("out of stock")
+    );
+    const lowStock = activeProducts.filter(p => 
+      (p.status?.toLowerCase().includes("low stock")) && p.qty > 0
+    );
+
+    setData(prev => ({
+      ...prev,
+      totalProducts: activeProducts.length, 
+      outOfStockCount: outOfStock.length,   
+      outOfStockItems: outOfStock,
+      lowStockItems: lowStock,              
+      totalAlerts: outOfStock.length + lowStock.length 
+    }));
+  } catch (err) {
+    console.error("Failed to fetch Inventory", err);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const fetchInventorySummary = async () => {
     try {
@@ -492,13 +505,54 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
             </div>
           </section>
 
-          <section className={s.statCard}>
-            <p className={s.cardTitle}>Out of Stock</p>
-            <h2 className={s.bigNumber}>{data.outOfStockCount}</h2>
-            <div className={s.cardFooter}>
-              <span className={s.subText}>Products currently unavailable</span>
-            </div>
-          </section>
+         <section className={s.statCard}>
+  <div style={{ 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    marginBottom: '15px' 
+  }}>
+    <p className={s.cardTitle} style={{ margin: 0 }}>Stock Alerts</p>
+    
+    {/* Dynamic Total Count (41) */}
+    <span style={{ 
+      fontSize: '0.9rem', 
+      fontWeight: 700, 
+      color: '#64748b',
+      backgroundColor: '#f1f5f9',
+      padding: '2px 8px',
+      borderRadius: '6px'
+    }}>
+      { (data.outOfStockItems?.length || 0) + (data.lowStockItems?.length || 0) } Total
+    </span>
+  </div>
+  
+  {/* Increased height to 220px to fit more of the 41 items */}
+  <div className={s.scrollContainer} style={{ height: '100px', overflowY: 'auto' }}>
+    
+    {/* OUT OF STOCK SECTION */}
+    {data.outOfStockItems?.map((item) => (
+      <div key={`out-${item.id}`} className={s.pillRed} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+        {/* Brand distinction added here */}
+        <span>{item.item_name} {item.brand ? `(${item.brand})` : ''}</span>
+        <span style={{ fontWeight: 800 }}>
+          {item.qty} {(item.uom || 'PCS').toUpperCase()}
+        </span>
+      </div>
+    ))}
+
+    {/* LOW STOCK SECTION */}
+    {data.lowStockItems?.map((item) => (
+      <div key={`low-${item.id}`} className={s.pillYellow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+        {/* Brand distinction added here */}
+        <span>{item.item_name} {item.brand ? `(${item.brand})` : ''}</span>
+        <span style={{ fontWeight: 800 }}>
+          {item.qty} {(item.uom || 'PCS').toUpperCase()}
+        </span>
+      </div>
+    ))}
+  </div>
+</section>
         </div>
 
         {isArchiveView ? (
@@ -514,6 +568,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
               <div className={s.controls}>
                 <button 
                   className={s.archiveIconBtn} 
+                  style={{ border: '1px solid #ddd', background: '#fff', cursor: 'pointer', color: '#64748b', padding: '8px', borderRadius: '8px', display: 'flex', transition: 'all 0.2s' 
+                  }} 
                   onClick={() => setIsArchiveView(true)} 
                   title="View Archives"
                 >

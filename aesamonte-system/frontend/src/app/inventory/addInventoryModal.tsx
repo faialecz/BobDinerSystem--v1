@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/purity */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from "@/css/inventory.module.css";
 import { LuPlus, LuTrash2 } from "react-icons/lu";
 
@@ -27,7 +27,7 @@ interface AddInventoryModalProps {
   onOpenSupplierModal: () => void;
   suppliers: Supplier[];
   uoms: { id: number; code: string; name: string }[];
-  existingProducts?: { item_name: string }[];
+  existingProducts?: { item_name: string; brand?: string; supplier_name?: string }[];
   defaultSupplierName?: string;
 }
 
@@ -69,6 +69,46 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
   const [dupError, setDupError] = useState('');
   const [supplierError, setSupplierError] = useState('');
 
+  // ── DRAG RESIZER STATE ──
+  const [supplierHeight, setSupplierHeight] = useState<number | 'auto'>('auto');
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
+  const supplierSectionRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = supplierSectionRef.current?.offsetHeight ?? 400;
+    setSupplierHeight(dragStartHeight.current);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = e.clientY - dragStartY.current;
+      const newHeight = Math.min(Math.max(dragStartHeight.current + delta, 120), 520);
+      setSupplierHeight(newHeight);
+    };
+    const handleMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       if (defaultSupplierName) {
@@ -86,18 +126,18 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
       setItems([{ ...INITIAL_ITEM }]);
       setDupError('');
       setSupplierError('');
+      setSupplierHeight('auto'); // reset to auto on open — no extra space
     }
   }, [isOpen, defaultSupplierName]);
 
   const handleSupplierChange = (idx: number, field: keyof SupplierEntry, value: string) => {
     setSupplierError('');
     setSupplierEntries(prev => {
-      // ── DUPLICATE SUPPLIER CHECK ──
       if (field === 'supplierName' && value) {
         const alreadyUsed = prev.some((e, i) => i !== idx && e.supplierName === value);
         if (alreadyUsed) {
           setSupplierError(`"${value}" is already added. Please select a different supplier.`);
-          return prev; // reject the change
+          return prev;
         }
       }
       const updated = [...prev];
@@ -155,33 +195,40 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     setDupError('');
     setSupplierError('');
 
-    const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
-    const newNames = items
-      .map((i: any) => normalize(i.itemName || ''))
-      .filter(Boolean);
+    const normalize = (str: string) => (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const validSuppliers = supplierEntries.filter(e => e.supplierName);
 
-    // Check 1: duplicates within the form itself
-    if (newNames.length !== new Set(newNames).size) {
-      setDupError('You have duplicate item names in your list. Please make each item name unique.');
-      return;
-    }
-
-    // Check 2: conflicts with existing inventory
-    const existingNames = existingProducts.map((p: any) => normalize(p.item_name || ''));
-    const conflict = newNames.find((name: string) => existingNames.includes(name));
-    if (conflict) {
-      setDupError(`"${conflict}" already exists in inventory. Please use a different item name.`);
-      return;
-    }
-
-    // Check 3: at least one item must be filled
+    // Check 1: At least one item must be filled
     if (!items.some((i: any) => i.itemName?.trim())) {
       setDupError('Please fill in at least one item name before saving.');
       return;
     }
 
+    // Check 2: Duplicate item names within the form itself (name-only)
+    const formNames = items
+      .filter((i: any) => i.itemName?.trim())
+      .map((i: any) => normalize(i.itemName));
+
+    if (formNames.length !== new Set(formNames).size) {
+      setDupError('You have duplicate item names in your list. Each item must have a unique name.');
+      return;
+    }
+
+    // Check 3: Item name already exists in inventory (name-only)
+    const conflict = items.find((item: any) => {
+      if (!item.itemName?.trim()) return false;
+      const normalizedName = normalize(item.itemName);
+      return existingProducts.some((p: any) =>
+        normalize(p.item_name || '') === normalizedName
+      );
+    });
+
+    if (conflict) {
+      setDupError(`"${conflict.itemName}" already exists in inventory. Each item must have a unique name.`);
+      return;
+    }
+
     // All clear — save
-    const validSuppliers = supplierEntries.filter(e => e.supplierName);
     const mergedItems = items.map(item => ({
       ...item,
       supplierName: validSuppliers[0]?.supplierName || '',
@@ -201,20 +248,35 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
 
   return (
     <div className={s.modalOverlay} style={{ zIndex: 1000 }}>
-      <div className={s.modalContent} style={{ maxHeight: '95vh', width: '900px', display: 'flex', flexDirection: 'column', padding: 0, borderRadius: '12px', overflow: 'hidden' }}>
+      <div className={s.modalContent} style={{
+        maxHeight: '95vh', width: '900px', display: 'flex',
+        flexDirection: 'column', padding: 0, borderRadius: '12px', overflow: 'hidden'
+      }}>
 
         {/* --- HEADER --- */}
-        <div className={s.modalHeader} style={{ padding: '20px 24px', backgroundColor: '#fff', borderBottom: '1px solid #eaeaea' }}>
+        <div className={s.modalHeader} style={{ padding: '20px 24px', backgroundColor: '#fff', borderBottom: '1px solid #eaeaea', flexShrink: 0 }}>
           <div className={s.modalTitleGroup}>
             <h2 className={s.title} style={{ fontSize: '1.25rem', marginBottom: '4px' }}>Add Inventory Items</h2>
             <p className={s.subText}>Suppliers entered here will apply to all items below.</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', backgroundColor: '#f9fafb' }}>
+        <form ref={formRef} onSubmit={handleSubmit} style={{
+          display: 'flex', flexDirection: 'column', flex: 1,
+          overflow: 'auto',
+          backgroundColor: '#f9fafb', minHeight: 0
+        }}>
 
-          {/* --- SHARED SUPPLIER SECTION --- */}
-          <div style={{ padding: '20px 24px', backgroundColor: '#fff', borderBottom: '1px solid #eaeaea', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', zIndex: 10 }}>
+          {/* --- SUPPLIER SECTION (resizable height) --- */}
+          <div ref={supplierSectionRef} style={{
+            height: supplierHeight === 'auto' ? 'auto' : `${supplierHeight}px`,
+            minHeight: '120px',
+            flexShrink: 0,
+            padding: '20px 24px',
+            backgroundColor: '#fff',
+            borderBottom: '1px solid #eaeaea',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+          }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>Supplier Details</h4>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -231,7 +293,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
               </div>
             </div>
 
-            {/* ── SUPPLIER DUPLICATE ERROR ── */}
             {supplierError && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
@@ -263,25 +324,16 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Supplier Name</label>
                     <select
-                      style={{
-                        ...FIELD_STYLE,
-                        borderColor: supplierError && entry.supplierName === '' ? '#fca5a5' : '#9ca3af'
-                      }}
+                      style={{ ...FIELD_STYLE, borderColor: supplierError && entry.supplierName === '' ? '#fca5a5' : '#9ca3af' }}
                       value={entry.supplierName}
                       onChange={(e) => handleSupplierChange(idx, 'supplierName', e.target.value)}
                     >
                       <option value="">Select Supplier</option>
                       {suppliers.map((sup, i) => {
-                        // ── grey out already-selected suppliers in other entries ──
                         const usedElsewhere = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
                         return (
-                          <option
-                            key={sup.id || i}
-                            value={sup.supplierName}
-                            disabled={usedElsewhere}
-                            style={{ color: usedElsewhere ? '#9ca3af' : '#374151' }}
-                          >
-                            {sup.supplierName}{usedElsewhere ?  '' : ''}
+                          <option key={sup.id || i} value={sup.supplierName} disabled={usedElsewhere} style={{ color: usedElsewhere ? '#9ca3af' : '#374151' }}>
+                            {sup.supplierName}
                           </option>
                         );
                       })}
@@ -311,8 +363,32 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
             ))}
           </div>
 
-          {/* --- SCROLLABLE ITEM LIST --- */}
-          <div style={{ overflowY: 'auto', flex: 1, padding: '24px' }}>
+          {/* ── DRAG HANDLE ── */}
+          <div
+            onMouseDown={handleMouseDown}
+            style={{
+              height: '10px',
+              flexShrink: 0,
+              backgroundColor: '#e2e8f0',
+              cursor: 'row-resize',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background-color 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#94a3b8')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#e2e8f0')}
+            title="Drag to resize"
+          >
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
+              ))}
+            </div>
+          </div>
+
+          {/* --- ITEM LIST --- */}
+          <div style={{ flex: 1}}>
             {items.map((item, index) => (
               <div key={index} style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px', marginBottom: '20px', position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
@@ -395,8 +471,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
           </div>
 
           {/* --- FOOTER --- */}
-          <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 0 }}>
-
+          <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 0, flexShrink: 0 }}>
             {dupError && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
@@ -408,7 +483,6 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 {dupError}
               </div>
             )}
-
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button type="button" onClick={onClose} className={s.cancelBtn}>Cancel</button>
               <button type="submit" className={s.saveBtn}>Save All Items</button>

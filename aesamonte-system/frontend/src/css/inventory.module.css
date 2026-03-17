@@ -157,12 +157,16 @@
 }
 
 .addButton {
-  background: #1a4263 !important;
+  background: #1a4263;
   color: white !important;
   border: none;
   padding: 10px 25px;
   border-radius: 8px;
   font-weight: 700;
+  cursor: pointer;
+}
+.addButton:hover{
+  background-color: #8fa6b8;
   cursor: pointer;
 }
 
@@ -555,7 +559,7 @@
   color: white; 
   border: none; 
   padding: 5px 14px; 
-  border-radius: 20px; 
+  border-radius: 8px; 
   cursor: pointer; 
   font-weight: 600;
   font-size: 0.75rem;
@@ -853,6 +857,10 @@
   background-color: #d1fae5;
 }
 
+.archiveIconBtn:hover {
+  background-color: #3e73b1;
+  color: #fff;
+}
 .actionWrapper {
   display: flex;
   justify-content: center;
@@ -1130,22 +1138,21 @@
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.08);
   margin-bottom: 1.5rem;
-  max-width: 100%; /* ADD THIS: Prevents the container from breaking past its parent */
-  box-sizing: border-box; /* ADD THIS: Keeps padding inside the max-width */
+  max-width: 100%; 
+  box-sizing: border-box; 
 }
 
-/* ADD THIS NEW CLASS */
 .tableResponsive {
   width: 100%;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS devices */
-  margin-bottom: 1rem; /* Optional: Adds breathing room before the footer */
+  -webkit-overflow-scrolling: touch; 
+  margin-bottom: 1rem; 
 }
 
 /* ===== TABLE BODY ===== */
 .table {
   width: 100%;
-  min-width: 900px; /* ADD THIS: Forces the table to stay wide enough, triggering the scrollbar on smaller screens */
+  min-width: 900px; 
   border-collapse: collapse;
 }
 
@@ -1170,4 +1177,51 @@
     max-width: 100%; 
     order: 3; 
   }
+}
+/* ===== SCROLL CONTAINER FOR STOCK ALERTS ===== */
+.scrollContainer {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.scrollContainer::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollContainer::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+/* ===== DRAG HANDLE FOR ADD INVENTORY MODAL ===== */
+.dragHandle {
+  height: 10px;
+  flex-shrink: 0;
+  background-color: #e2e8f0;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s;
+}
+
+.dragHandle:hover {
+  background-color: #94a3b8;
+}
+
+.dragDots {
+  display: flex;
+  gap: 4px;
+}
+
+.dragDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #94a3b8;
 }
