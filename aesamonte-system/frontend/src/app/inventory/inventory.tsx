@@ -438,7 +438,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
       <div className={s.mainContent}>
 
         {/* ── HEADER ROW: Title + Export ── */}
-        <div className={s.headerActions} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div className={s.headerActions} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>INVENTORY</h1>
             <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '2px 0 0' }}>

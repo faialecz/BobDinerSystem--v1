@@ -441,7 +441,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
       <div className={s.mainContent}>
 
         {/* ── HEADER ROW: Title + Export ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%', margin: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', margin: 0 }}>
           <div>
             <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>ORDERS</h1>
             <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '2px 0 0' }}>
