@@ -6,3 +6,4 @@ gunicorn
 PyJWT
 bcrypt
 supabase
+requests

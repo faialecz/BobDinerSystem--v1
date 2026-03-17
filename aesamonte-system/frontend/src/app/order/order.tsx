@@ -82,7 +82,9 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
   const fetchOrders = async () => {
     try {
       const res = await fetch('/api/orders/list');
+      if (!res.ok) { console.error('Failed to fetch orders:', res.status); return; }
       const data: Order[] = await res.json();
+      if (!Array.isArray(data)) { console.error('Unexpected orders response:', data); return; }
       setOrders(data.map(order => ({
         ...order,
         items: order.items?.map(item => ({
@@ -95,7 +97,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
 
   useEffect(() => {
     fetchOrders();
-    fetch('/api/orders/summary').then(r => r.json()).then(setSummary);
+    fetch('/api/orders/summary').then(r => r.ok ? r.json() : null).then(d => { if (d && d.shippedToday) setSummary(d); });
     const fetchDropdowns = async () => {
       try {
         const [sR, pR, iR] = await Promise.all([

@@ -5,20 +5,29 @@ import TopHeader from "@/components/layout/TopHeader";
 import UserManagement from "./user-management";
 import styles from "@/css/settings.module.css";
 import { AiOutlineUser } from "react-icons/ai";
-import { LuShieldCheck, LuLayoutTemplate, LuDatabaseBackup } from "react-icons/lu";
+import { LuShieldCheck, LuLayoutTemplate, LuDatabaseBackup, LuKeyRound } from "react-icons/lu";
 import { LuClipboardList } from "react-icons/lu";
 import AccessControl from "./access-control";
 import AppPreferences from "./app-preferences";
 import BackupRestore from "./backup-restore";
 import AuditLog from "./audit-log";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 interface SettingsPageProps {
   role?: string;
+  employeeId?: number;
   onLogout: () => void;
 }
 
-export default function SettingsPage({ role = "Admin", onLogout }: SettingsPageProps) {
+export default function SettingsPage({ role = "Admin", employeeId, onLogout }: SettingsPageProps) {
   const [activeView, setActiveView] = useState<"main" | "users" | "access" | "appPreferences" | "backupRestore" | "auditlog">("main");
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info" } | null>(null);
+
+  const showToast = (message: string, type: "error" | "success" | "info") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const isAdmin = role === "Admin";
   const isManagerOrHead = role === "Manager" || role === "Head";
@@ -53,6 +62,12 @@ export default function SettingsPage({ role = "Admin", onLogout }: SettingsPageP
       icon: <LuClipboardList />,
       action: () => setActiveView("auditlog"),
       show: isAdmin,
+    },
+    {
+      title: "Change Password",
+      icon: <LuKeyRound />,
+      action: () => setShowChangePassword(true),
+      show: true,
     },
   ];
 

@@ -11,51 +11,55 @@ def orders_summary():
     conn = get_connection()
     cur = conn.cursor()
 
-    today = date.today()
-    yesterday = today - timedelta(days=1)
+    try:
+        today = date.today()
+        yesterday = today - timedelta(days=1)
 
-    def count_orders(status_code, for_date=None):
-        query = """
-            SELECT COUNT(*)
-            FROM order_transaction ot
-            JOIN static_status sl ON ot.order_status_id = sl.status_id
-            WHERE sl.status_scope = 'ORDER_STATUS'
-              AND sl.status_code ILIKE %s
-        """
-        params = [status_code]
-        if for_date:
-            query += " AND ot.order_date = %s"
-            params.append(for_date)
-        cur.execute(query, params)
-        return cur.fetchone()[0]
+        def count_orders(status_code, for_date=None):
+            query = """
+                SELECT COUNT(*)
+                FROM order_transaction ot
+                JOIN static_status sl ON ot.order_status_id = sl.status_id
+                WHERE sl.status_scope = 'ORDER_STATUS'
+                  AND sl.status_code ILIKE %s
+            """
+            params = [status_code]
+            if for_date:
+                query += " AND ot.order_date = %s"
+                params.append(for_date)
+            cur.execute(query, params)
+            return cur.fetchone()[0]
 
-    shipped_today = count_orders("RECEIVED", today)
-    shipped_yesterday = count_orders("RECEIVED", yesterday)
-    total_shipped = count_orders("RECEIVED")
-    cancelled_today = count_orders("CANCELLED", today)
-    cancelled_yesterday = count_orders("CANCELLED", yesterday)
+        shipped_today = count_orders("RECEIVED", today)
+        shipped_yesterday = count_orders("RECEIVED", yesterday)
+        total_shipped = count_orders("RECEIVED")
+        cancelled_today = count_orders("CANCELLED", today)
+        cancelled_yesterday = count_orders("CANCELLED", yesterday)
 
-    cur.execute("SELECT COUNT(*) FROM order_transaction")
-    total_orders = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM order_transaction")
+        total_orders = cur.fetchone()[0]
 
-    cur.close()
-    conn.close()
-
-    return jsonify({
-        "shippedToday": {
-            "current": shipped_today,
-            "total": total_shipped,
-            "yesterday": shipped_yesterday
-        },
-        "cancelled": {
-            "current": cancelled_today,
-            "yesterday": cancelled_yesterday
-        },
-        "totalOrders": {
-            "count": total_orders,
-            "growth": 3.1  
-        }
-    })
+        return jsonify({
+            "shippedToday": {
+                "current": shipped_today,
+                "total": total_shipped,
+                "yesterday": shipped_yesterday
+            },
+            "cancelled": {
+                "current": cancelled_today,
+                "yesterday": cancelled_yesterday
+            },
+            "totalOrders": {
+                "count": total_orders,
+                "growth": 3.1
+            }
+        })
+    except Exception as e:
+        print("Error fetching summary:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 # ===================== LIST =====================
 @orders_bp.route("/list", methods=["GET"])
