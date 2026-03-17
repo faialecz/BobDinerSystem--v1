@@ -18,6 +18,7 @@
   min-height: 0;
 }
 
+/* Pushes the Export button to the top-right */
 .headerActions {
   display: flex;
   justify-content: flex-end;
@@ -71,11 +72,11 @@
 
 .pill {
   font-size: 0.75rem;
-  background-color: #cbefd6f2;
-  color: #749e71;
-  border: 2px solid #7eb190;
+  background: #dcfce7;
+  color: #15803d;
   padding: 2px 8px;
   border-radius: 20px;
+  border: 1px solid #bbf7d0;
   font-weight: 600;
 }
 
@@ -180,13 +181,14 @@
 }
 
 .table th {
-  text-align: center;
+  text-align: left;
   padding: 15px;
   font-size: 0.85rem;
   font-weight: 700;
-  color: #64748b;
   border-bottom: 2px solid #f1f3f4;
   text-transform: uppercase;
+  /* Center the header text */
+  text-align: center;
   /* Prevent header text from dropping to a new line */
   white-space: nowrap;
 }
@@ -198,6 +200,7 @@
   vertical-align: middle;
   /* Center the header text */
   text-align: center;
+  /* Prevent header text from dropping to a new line */
   white-space: nowrap;
 }
 
@@ -212,6 +215,7 @@
   user-select: none;
   display: flex !important;
   align-items: center;
+  /* Push the header text and arrows to the center */
   justify-content: center; 
   gap: 6px;
 }
@@ -225,7 +229,7 @@
 
 /* Base state for the arrows (light gray with smooth transition) */
 .sortIconsStack svg {
-  color: #cbd5e1;
+  color: #64748b;
   transition: all 0.2s;
 }
 

@@ -114,7 +114,7 @@
 
 .sortIconsStack svg { 
   display: block; /* Required for smooth scaling without moving text */
-  color: #cbd5e1; 
+  color: #64748b; 
   transition: all 0.2s; 
 }
 
