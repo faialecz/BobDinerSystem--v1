@@ -24,6 +24,10 @@
   box-shadow: 0 25px 50px rgba(0, 0, 0, 0.08);
 }
 
+.userManagementCard {
+  max-width: 1120px;
+}
+
 .pageTitle {
   font-size: 1.5rem;
   font-weight: 700;
@@ -366,19 +370,19 @@
   padding-bottom: 1rem;
 }
 
-/* User Management Grid: Prevents columns from shrinking below readable widths */
+/* User Management Grid: wider ID column, more centered actions, and centered content */
 .listHeader, .userPlaceholderRow {
   display: grid;
-  /* Use minmax to ensure columns have a 'bottom out' point before they shrink too much */
-  grid-template-columns: 
-    minmax(120px, 1.5fr) 
-    minmax(100px, 1fr) 
-    minmax(150px, 2fr) 
-    minmax(100px, 1fr) 
-    minmax(120px, 1fr);
+  grid-template-columns:
+    minmax(125px, 1fr)
+    minmax(150px, 1.4fr)
+    minmax(110px, 0.95fr)
+    minmax(210px, 1.8fr)
+    minmax(100px, 0.9fr)
+    minmax(95px, 0.8fr);
   align-items: center;
-  gap: 1rem;
-  min-width: 700px; /* Forces the grid to maintain this width */
+  gap: 0.75rem;
+  min-width: 900px;
 }
 
 /* Specific to Access Control Grid */
@@ -395,11 +399,20 @@
   min-width: 750px;
 }
 
+.listHeader span,
+.userPlaceholderRow span {
+  text-align: center;
+}
+
 /* Ensure individual spans don't wrap and stay on one line */
 .userPlaceholderRow span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis; /* Adds '...' if text is still too long */
+}
+
+.userPlaceholderRow .actionGroup {
+  justify-content: center;
 }
 
 .flexHeader {

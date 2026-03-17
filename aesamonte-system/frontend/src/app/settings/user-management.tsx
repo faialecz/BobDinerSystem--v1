@@ -81,7 +81,7 @@ export default function UserManagement({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className={styles.settingsCard}>
+    <div className={`${styles.settingsCard} ${styles.userManagementCard}`}>
       <div className={styles.settingsHeaderWrapper}>
         <button className={styles.backButton} onClick={onBack}>
           <LuChevronLeft /> Back
@@ -94,7 +94,7 @@ export default function UserManagement({ onBack }: { onBack: () => void }) {
 
       <div className={styles.placeholderContainer}>
         <div className={styles.listHeader}>
-          <span>Name</span><span>Role</span><span>Email</span><span>Status</span><span style={{ textAlign: 'center' }}>Actions</span>
+          <span>Employee ID</span><span>Name</span><span>Role</span><span>Email</span><span>Status</span><span style={{ textAlign: 'center' }}>Actions</span>
         </div>
 
         {loading ? (
@@ -102,6 +102,7 @@ export default function UserManagement({ onBack }: { onBack: () => void }) {
         ) : (
           users.map((user) => (
             <div key={user.id} className={styles.userPlaceholderRow}>
+              <span className={styles.userId}>{user.id}</span>
               <span className={styles.userName}>{user.name}</span>
               <span>{user.role}</span>
               <span>{user.email}</span>
