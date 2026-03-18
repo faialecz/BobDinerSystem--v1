@@ -20,24 +20,101 @@ const EMPTY_FORM = {
   paymentTerms: 'Cash on Delivery',
 };
 
-export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingSuppliers = [] }: AddSupplierModalProps) {
+const REQUIRED_FIELDS: (keyof typeof EMPTY_FORM)[] = [
+  'supplierName',
+  'address',
+  'contactPerson',
+  'contact',
+];
+
+const FIELD_LABELS: Record<string, string> = {
+  supplierName: 'Supplier Name',
+  address: 'Address',
+  contactPerson: 'Contact Person',
+  contact: 'Contact No.',
+};
+
+export default function AddSupplierModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  existingSuppliers = [],
+}: AddSupplierModalProps) {
   const s = styles as Record<string, string>;
   const [form, setForm] = useState(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dupError, setDupError] = useState('');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  // ── CHANGED: replaced fieldErrors with single banner + empty set for red borders ──
+  const [formError, setFormError] = useState('');
+  const [emptyFields, setEmptyFields] = useState<Set<string>>(new Set());
 
   if (!isOpen) return null;
+
+  const isFormDirty = (): boolean => {
+    return !!(
+      form.supplierName.trim() ||
+      form.address.trim() ||
+      form.contactPerson.trim() ||
+      form.contact.trim() ||
+      form.email.trim()
+    );
+  };
 
   const handleClose = () => {
     setForm(EMPTY_FORM);
     setDupError('');
+    setFormError('');
+    setEmptyFields(new Set());
+    setShowCancelConfirm(false);
     onClose();
   };
 
-  const handleSubmit = async () => {
-    if (!form.supplierName.trim()) return;
+  const handleCancelClick = () => {
+    if (isFormDirty()) {
+      setShowCancelConfirm(true);
+    } else {
+      handleClose();
+    }
+  };
 
-    // ── DUPLICATE NAME CHECK ──
+  const handleConfirmCancel = () => {
+    setShowCancelConfirm(false);
+    handleClose();
+  };
+
+  // ── Clears a field's red border when user starts typing ──
+  const clearEmpty = (field: string) => {
+    setEmptyFields(prev => { const next = new Set(prev); next.delete(field); return next; });
+    if (formError) setFormError('');
+  };
+
+  // ── CHANGED: single banner validation ──
+  const validate = (): boolean => {
+    const missing: string[] = [];
+    const empty = new Set<string>();
+
+    REQUIRED_FIELDS.forEach(field => {
+      if (!form[field].trim()) {
+        missing.push(FIELD_LABELS[field]);
+        empty.add(field);
+      }
+    });
+
+    setEmptyFields(empty);
+
+    if (missing.length > 0) {
+      setFormError(`Please fill in the following required fields: ${missing.join(', ')}.`);
+      return false;
+    }
+
+    setFormError('');
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validate()) return;
+
     const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
     const newName = normalize(form.supplierName);
     const isDuplicate = existingSuppliers.some(s => normalize(s.supplierName) === newName);
@@ -74,6 +151,8 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingS
     }
   };
 
+  const errorBorder = { borderColor: '#fca5a5', backgroundColor: '#fff5f5' };
+
   return (
     <div className={s.modalOverlay}>
       <div className={s.modalContent}>
@@ -82,23 +161,30 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingS
             <h2 className={s.title}>Register New Supplier</h2>
             <p className={s.subText}>Create a profile for a new supplier.</p>
           </div>
-          <LuX onClick={handleClose} className={s.closeIcon} />
+          <LuX onClick={handleCancelClick} className={s.closeIcon} />
         </div>
 
         <div className={`${s.modalForm} ${s.mt_20}`}>
           <h4 className={s.sectionTitle}>Company Information</h4>
+
           <div className={s.formRow}>
             <div className={s.formGroup}>
-              <label>Supplier Name</label>
+              <label>
+                Supplier Name <span style={{ color: '#ef4444' }}>*</span>
+              </label>
               <input
                 value={form.supplierName}
-                onChange={e => { setDupError(''); setForm({ ...form, supplierName: e.target.value }); }}
-                style={dupError && dupError.includes(form.supplierName.trim()) ? { borderColor: '#fca5a5' } : {}}
+                onChange={e => {
+                  setDupError('');
+                  clearEmpty('supplierName');
+                  setForm({ ...form, supplierName: e.target.value });
+                }}
+                style={emptyFields.has('supplierName') || dupError ? errorBorder : {}}
+                placeholder="e.g. Juan dela Cruz Trading"
               />
             </div>
           </div>
 
-          {/* ── DUPLICATE ERROR ── */}
           {dupError && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '10px',
@@ -112,35 +198,59 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingS
           )}
 
           <div className={s.formGroupFull}>
-            <label>Address</label>
+            <label>
+              Address <span style={{ color: '#ef4444' }}>*</span>
+            </label>
             <input
               value={form.address}
-              onChange={e => setForm({ ...form, address: e.target.value })}
+              onChange={e => {
+                clearEmpty('address');
+                setForm({ ...form, address: e.target.value });
+              }}
+              style={emptyFields.has('address') ? errorBorder : {}}
+              placeholder="Street, Barangay, City"
             />
           </div>
 
           <h4 className={s.sectionTitle}>Primary Contact</h4>
           <div className={s.formRow}>
             <div className={s.formGroup}>
-              <label>Contact Person</label>
+              <label>
+                Contact Person <span style={{ color: '#ef4444' }}>*</span>
+              </label>
               <input
                 value={form.contactPerson}
-                onChange={e => setForm({ ...form, contactPerson: e.target.value })}
+                onChange={e => {
+                  clearEmpty('contactPerson');
+                  setForm({ ...form, contactPerson: e.target.value });
+                }}
+                style={emptyFields.has('contactPerson') ? errorBorder : {}}
+                placeholder="Full name"
               />
             </div>
+
             <div className={s.formGroup}>
-              <label>Contact No.</label>
+              <label>
+                Contact No. <span style={{ color: '#ef4444' }}>*</span>
+              </label>
               <input
                 value={form.contact}
-                onChange={e => setForm({ ...form, contact: e.target.value.replace(/[^\d]/g, '') })}
+                onChange={e => {
+                  clearEmpty('contact');
+                  setForm({ ...form, contact: e.target.value.replace(/[^\d]/g, '') });
+                }}
+                style={emptyFields.has('contact') ? errorBorder : {}}
+                placeholder="09XXXXXXXXX"
               />
             </div>
           </div>
+
           <div className={s.formGroupFull}>
             <label>Email Address</label>
             <input
               value={form.email}
               onChange={e => setForm({ ...form, email: e.target.value })}
+              placeholder="supplier@email.com"
             />
           </div>
 
@@ -156,14 +266,27 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingS
             </select>
           </div>
 
+          {/* ── SINGLE BANNER above footer ── */}
+          {formError && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: '#fee2e2', border: '1px solid #fca5a5',
+              color: '#dc2626', borderRadius: '8px',
+              padding: '12px 16px', fontSize: '0.85rem', fontWeight: 500,
+              marginTop: '8px',
+            }}>
+              ⚠ {formError}
+            </div>
+          )}
+
           <div className={s.modalFooter}>
-            <button type="button" onClick={handleClose} className={s.cancelBtn}>
+            <button type="button" onClick={handleCancelClick} className={s.cancelBtn}>
               Cancel
             </button>
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || !form.supplierName.trim()}
+              disabled={isSubmitting}
               className={s.saveBtn}
             >
               {isSubmitting ? 'Creating…' : 'Create Supplier'}
@@ -171,6 +294,58 @@ export default function AddSupplierModal({ isOpen, onClose, onSuccess, existingS
           </div>
         </div>
       </div>
+
+      {/* ── Discard Changes confirm dialog ── */}
+      {showCancelConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1100,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setShowCancelConfirm(false)}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: '20px',
+              padding: '40px 36px', width: '380px', textAlign: 'center',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
+            <p style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px', color: '#111' }}>
+              Discard Changes?
+            </p>
+            <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '28px' }}>
+              All entered information will be lost.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '10px',
+                  border: '1.5px solid #ddd', background: '#fff',
+                  fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#333',
+                }}
+              >
+                Keep Editing
+              </button>
+              <button
+                onClick={handleConfirmCancel}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '10px',
+                  border: 'none', background: '#ef4444',
+                  fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#fff',
+                }}
+              >
+                Yes, Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

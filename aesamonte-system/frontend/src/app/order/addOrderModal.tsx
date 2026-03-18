@@ -462,7 +462,7 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
             <div className={s.confirmTextWrap}>
               <p className={s.confirmTitle}>Discard Changes?</p>
               <p className={s.confirmSubtext}>
-                You have unsaved data in this form. If you cancel now, all entered information will be lost.
+                 All entered information will be lost.
               </p>
             </div>
             <div className={s.confirmButtons}>

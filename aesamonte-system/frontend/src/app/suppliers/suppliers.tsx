@@ -44,8 +44,24 @@ const getViewStatusClass = (isArchived: boolean | undefined, s: Record<string, s
   return isArchived ? s.viewStatusArchived : s.viewStatusActive;
 };
 
-// ── ADDED: normalize helper for duplicate checks ──
 const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
+
+// ── ADDED: required fields for create modal validation ──
+const CREATE_REQUIRED: { field: keyof typeof EMPTY_CREATE_FORM; label: string }[] = [
+  { field: 'supplierName', label: 'Supplier Name' },
+  { field: 'address',      label: 'Address' },
+  { field: 'contactPerson', label: 'Contact Person' },
+  { field: 'contact',      label: 'Contact No.' },
+];
+
+const EMPTY_CREATE_FORM = {
+  supplierName: '',
+  address: '',
+  contactPerson: '',
+  contact: '',
+  email: '',
+  paymentTerms: 'Cash on Delivery'
+};
 
 /* ================= COMPONENT ================= */
 
@@ -76,20 +92,18 @@ export default function Suppliers({
 
   // --- CREATE MODAL STATE ---
   const [showModal, setShowModal] = useState(false);
-  const [supplierFormData, setSupplierFormData] = useState({
-    supplierName: '',
-    address: '',
-    contactPerson: '',
-    contact: '',
-    email: '',
-    paymentTerms: 'Cash on Delivery'
-  });
-  const [createDupError, setCreateDupError] = useState(''); // ── ADDED ──
+  const [supplierFormData, setSupplierFormData] = useState({ ...EMPTY_CREATE_FORM });
+  const [createDupError, setCreateDupError] = useState('');
+  // ── ADDED: single banner + empty fields for red borders ──
+  const [createFormError, setCreateFormError] = useState('');
+  const [createEmptyFields, setCreateEmptyFields] = useState<Set<string>>(new Set());
+  // ── ADDED: discard confirm for create modal ──
+  const [showCreateCancelConfirm, setShowCreateCancelConfirm] = useState(false);
 
   // --- EDIT MODAL STATE ---
   const [editModal, setEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Supplier | null>(null);
-  const [editDupError, setEditDupError] = useState(''); // ── ADDED ──
+  const [editDupError, setEditDupError] = useState('');
 
   const [sortConfig, setSortConfig] = useState<{
     key: SortKey | null;
@@ -115,10 +129,74 @@ export default function Suppliers({
 
   useEffect(() => { fetchSuppliers(); }, []);
 
+  /* ================= CREATE MODAL HELPERS ================= */
+
+  // ── ADDED: check if create form has any user input ──
+  const isCreateFormDirty = (): boolean => {
+    return !!(
+      supplierFormData.supplierName.trim() ||
+      supplierFormData.address.trim() ||
+      supplierFormData.contactPerson.trim() ||
+      supplierFormData.contact.trim() ||
+      supplierFormData.email.trim()
+    );
+  };
+
+  // ── ADDED: clear a field's red border as user types ──
+  const clearCreateEmpty = (field: string) => {
+    setCreateEmptyFields(prev => { const next = new Set(prev); next.delete(field); return next; });
+    if (createFormError) setCreateFormError('');
+  };
+
+  // ── ADDED: validate required fields, show single banner ──
+  const validateCreate = (): boolean => {
+    const missing: string[] = [];
+    const empty = new Set<string>();
+
+    CREATE_REQUIRED.forEach(({ field, label }) => {
+      if (!supplierFormData[field].trim()) {
+        missing.push(label);
+        empty.add(field);
+      }
+    });
+
+    setCreateEmptyFields(empty);
+
+    if (missing.length > 0) {
+      setCreateFormError(`Please fill in the following required fields: ${missing.join(', ')}.`);
+      return false;
+    }
+
+    setCreateFormError('');
+    return true;
+  };
+
+  // ── ADDED: close + reset create modal fully ──
+  const handleCloseCreateModal = () => {
+    setShowModal(false);
+    setSupplierFormData({ ...EMPTY_CREATE_FORM });
+    setCreateDupError('');
+    setCreateFormError('');
+    setCreateEmptyFields(new Set());
+    setShowCreateCancelConfirm(false);
+  };
+
+  // ── ADDED: intercept cancel to show confirm if dirty ──
+  const handleCreateCancelClick = () => {
+    if (isCreateFormDirty()) {
+      setShowCreateCancelConfirm(true);
+    } else {
+      handleCloseCreateModal();
+    }
+  };
+
   /* ================= HANDLERS ================= */
 
   const handleCreateSupplier = async () => {
-    // ── ADDED: duplicate name check before API call ──
+    // ── ADDED: required field validation first ──
+    if (!validateCreate()) return;
+
+    // ── duplicate name check ──
     const newName = normalize(supplierFormData.supplierName);
     const isDuplicate = suppliers.some(sup => normalize(sup.supplierName) === newName);
     if (isDuplicate) {
@@ -142,12 +220,7 @@ export default function Suppliers({
       const data = await response.json();
       if (response.ok) {
         await fetchSuppliers();
-        setShowModal(false);
-        setCreateDupError(''); // ── ADDED ──
-        setSupplierFormData({
-          supplierName: '', address: '', contactPerson: '',
-          contact: '', email: '', paymentTerms: 'Cash on Delivery'
-        });
+        handleCloseCreateModal();
         setToastMessage(data.message || 'Supplier created successfully!');
         setIsError(false);
         setShowToast(true);
@@ -166,7 +239,6 @@ export default function Suppliers({
   const handleEditSupplier = async () => {
     if (!editFormData) return;
 
-    // ── ADDED: duplicate name check before API call (exclude self) ──
     const newName = normalize(editFormData.supplierName);
     const conflict = suppliers.find(
       sup => normalize(sup.supplierName) === newName && sup.id !== editFormData.id
@@ -193,7 +265,7 @@ export default function Suppliers({
         await fetchSuppliers();
         setEditModal(false);
         setEditFormData(null);
-        setEditDupError(''); // ── ADDED ──
+        setEditDupError('');
         setToastMessage(data.message || 'Supplier updated successfully!');
         setIsError(false);
         setShowToast(true);
@@ -252,7 +324,6 @@ export default function Suppliers({
     });
   };
 
-  // ===== OPEN / CLOSE VIEW MODAL =====
   const handleOpenView = (supplier: Supplier) => {
     setSelectedSupplierForView(supplier);
     setShowViewModal(true);
@@ -263,7 +334,6 @@ export default function Suppliers({
     setSelectedSupplierForView(null);
   };
 
-  // ===== HANDLE PRINT — SUPPLIER PROFILE FORMAT =====
   const handlePrint = () => {
     if (!selectedSupplierForView) return;
     const pw = window.open('', '_blank');
@@ -279,31 +349,23 @@ export default function Suppliers({
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 24px 28px; }
-
     .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 12px; }
     .company h1 { font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
     .company p  { font-size: 10px; line-height: 1.65; }
-
     .receipt-block { text-align: right; }
     .receipt-title { font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
     .receipt-no    { font-size: 24px; font-weight: 900; color: #1a4263; letter-spacing: 2px; }
     .receipt-no span { font-size: 13px; font-weight: 700; color: #000; }
-
     .section { margin-bottom: 16px; }
     .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 10px; color: #1a4263; }
-
     .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .info-item label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #666; display: block; margin-bottom: 2px; }
     .info-item span  { font-size: 11px; color: #000; }
-
     .info-full { margin-bottom: 10px; }
     .info-full label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #666; display: block; margin-bottom: 2px; }
     .info-full span  { font-size: 11px; color: #000; }
-
     .status-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-
     .print-footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px; font-size: 9px; color: #666; display: flex; justify-content: space-between; }
-
     @media print { body { padding: 10px 14px; } @page { margin: 0.4in; size: letter; } }
   </style>
 </head>
@@ -323,7 +385,6 @@ export default function Suppliers({
       <div style="margin-top:4px;"><span class="status-badge">${selectedSupplierForView.is_archived ? 'ARCHIVED' : 'ACTIVE'}</span></div>
     </div>
   </div>
-
   <div class="section">
     <div class="section-title">Company Information</div>
     <div class="info-full">
@@ -335,7 +396,6 @@ export default function Suppliers({
       <span>${selectedSupplierForView.address}</span>
     </div>
   </div>
-
   <div class="section">
     <div class="section-title">Contact Information</div>
     <div class="info-grid">
@@ -353,7 +413,6 @@ export default function Suppliers({
       <span>${selectedSupplierForView.email}</span>
     </div>
   </div>
-
   ${selectedSupplierForView.paymentTerms ? `
   <div class="section">
     <div class="section-title">Payment Terms</div>
@@ -363,7 +422,6 @@ export default function Suppliers({
     </div>
   </div>
   ` : ''}
-
   <div class="print-footer">
     <div>AE Samonte Merchandise — Supplier Management System</div>
     <div>Document generated on ${new Date().toLocaleString('en-PH')}</div>
@@ -375,7 +433,6 @@ export default function Suppliers({
     pw.focus();
     pw.print();
   };
-  // ===== END HANDLE PRINT =====
 
   /* ================= DATA PROCESSING ================= */
 
@@ -396,8 +453,7 @@ export default function Suppliers({
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
-    
-    // 1. Safe default fallback (extracts digits just in case)
+
     if (!sortConfig.key || !sortConfig.direction) {
       return arr.sort((a, b) => {
         const numA = Number(String(a.id).replace(/\D/g, '')) || 0;
@@ -411,17 +467,15 @@ export default function Suppliers({
       const A = a[key!];
       const B = b[key!];
 
-      // 2. Strip letters/dashes, extract ONLY the numbers from "SUP-0000011"
       if (key === 'id') {
         const numA = Number(String(A).replace(/\D/g, '')) || 0;
         const numB = Number(String(B).replace(/\D/g, '')) || 0;
         return direction === 'asc' ? numA - numB : numB - numA;
       }
 
-      // 3. Handle Strings (Names, Contacts, Emails, Address)
       const strA = String(A ?? '').toLowerCase();
       const strB = String(B ?? '').toLowerCase();
-      
+
       if (strA < strB) return direction === 'asc' ? -1 : 1;
       if (strA > strB) return direction === 'asc' ? 1 : -1;
       return 0;
@@ -472,6 +526,9 @@ export default function Suppliers({
     { label: 'ADDRESS', key: 'address' }
   ];
 
+  // ── shared error border style ──
+  const errStyle = { borderColor: '#fca5a5', backgroundColor: '#fff5f5' };
+
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
@@ -510,9 +567,9 @@ export default function Suppliers({
             <div className={s.header}>
               <h2 className={s.title}>Suppliers</h2>
               <div className={s.controls}>
-                <button 
-                  className={s.archiveIconBtn} 
-                  onClick={() => setIsArchiveView(true)} 
+                <button
+                  className={s.archiveIconBtn}
+                  onClick={() => setIsArchiveView(true)}
                   title="View Archives"
                 >
                   <LuArchive size={20} />
@@ -535,9 +592,7 @@ export default function Suppliers({
                 <thead>
                   <tr>
                     {columns.map(col => (
-                      // Removed className from the <th> so it remains a standard table cell
                       <th key={col.key!} onClick={() => handleSort(col.key)} style={{ cursor: 'pointer' }}>
-                                            
                         <div className={s.sortableHeader}>
                           <span>{col.label}</span>
                           <div className={s.sortIconsStack}>
@@ -545,7 +600,6 @@ export default function Suppliers({
                             <LuChevronDown size={12} className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
                           </div>
                         </div>
-                        
                       </th>
                     ))}
                     <th className={s.actionHeader}>ACTION</th>
@@ -605,16 +659,14 @@ export default function Suppliers({
               </div>
               {totalPages > 1 && (
                 <div className={s.pagination}>
-                <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
-                  <LuChevronLeft />
-                </button>
-                
-                {renderPageNumbers()}
-                
-                <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
-                  <LuChevronRight />
-                </button>
-              </div>
+                  <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                    <LuChevronLeft />
+                  </button>
+                  {renderPageNumbers()}
+                  <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
+                    <LuChevronRight />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -630,24 +682,30 @@ export default function Suppliers({
                 <h2 className={s.title}>Register New Supplier</h2>
                 <p className={s.subText}>Create a profile for a new supplier.</p>
               </div>
-              <LuX onClick={() => { setShowModal(false); setCreateDupError(''); }} className={s.closeIcon} />
+              {/* ── CHANGED: X now uses handleCreateCancelClick ── */}
+              <LuX onClick={handleCreateCancelClick} className={s.closeIcon} />
             </div>
 
             <div className={`${s.modalForm} ${s.mt_20}`}>
               <h4 className={s.sectionTitle}>Company Information</h4>
               <div className={s.formRow}>
                 <div className={s.formGroup}>
-                  <label>Supplier Name</label>
+                  <label>Supplier Name <span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     name="supplierName"
                     value={supplierFormData.supplierName}
-                    onChange={(e) => { setCreateDupError(''); setSupplierFormData({ ...supplierFormData, supplierName: e.target.value }); }}
-                    style={createDupError ? { borderColor: '#fca5a5' } : {}}
+                    onChange={e => {
+                      setCreateDupError('');
+                      clearCreateEmpty('supplierName');
+                      setSupplierFormData({ ...supplierFormData, supplierName: e.target.value });
+                    }}
+                    style={createEmptyFields.has('supplierName') || createDupError ? errStyle : {}}
+                    placeholder="e.g. Juan dela Cruz Trading"
                   />
                 </div>
               </div>
 
-              {/* ── ADDED: duplicate error banner ── */}
+              {/* ── duplicate error banner ── */}
               {createDupError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
                   <span>⚠</span> {createDupError}
@@ -655,30 +713,45 @@ export default function Suppliers({
               )}
 
               <div className={s.formGroupFull}>
-                <label>Address</label>
+                <label>Address <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   name="address"
                   value={supplierFormData.address}
-                  onChange={(e) => setSupplierFormData({ ...supplierFormData, address: e.target.value })}
+                  onChange={e => {
+                    clearCreateEmpty('address');
+                    setSupplierFormData({ ...supplierFormData, address: e.target.value });
+                  }}
+                  style={createEmptyFields.has('address') ? errStyle : {}}
+                  placeholder="Street, Barangay, City"
                 />
               </div>
 
               <h4 className={s.sectionTitle}>Primary Contact</h4>
               <div className={s.formRow}>
                 <div className={s.formGroup}>
-                  <label>Contact Person</label>
+                  <label>Contact Person <span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     name="contactPerson"
                     value={supplierFormData.contactPerson}
-                    onChange={(e) => setSupplierFormData({ ...supplierFormData, contactPerson: e.target.value })}
+                    onChange={e => {
+                      clearCreateEmpty('contactPerson');
+                      setSupplierFormData({ ...supplierFormData, contactPerson: e.target.value });
+                    }}
+                    style={createEmptyFields.has('contactPerson') ? errStyle : {}}
+                    placeholder="Full name"
                   />
                 </div>
                 <div className={s.formGroup}>
-                  <label>Contact No.</label>
+                  <label>Contact No. <span style={{ color: '#ef4444' }}>*</span></label>
                   <input
                     name="contact"
                     value={supplierFormData.contact}
-                    onChange={handleNumericInputChange}
+                    onChange={e => {
+                      clearCreateEmpty('contact');
+                      setSupplierFormData({ ...supplierFormData, contact: e.target.value.replace(/[^\d]/g, '') });
+                    }}
+                    style={createEmptyFields.has('contact') ? errStyle : {}}
+                    placeholder="09XXXXXXXXX"
                   />
                 </div>
               </div>
@@ -688,7 +761,8 @@ export default function Suppliers({
                 <input
                   name="email"
                   value={supplierFormData.email}
-                  onChange={(e) => setSupplierFormData({ ...supplierFormData, email: e.target.value })}
+                  onChange={e => setSupplierFormData({ ...supplierFormData, email: e.target.value })}
+                  placeholder="supplier@email.com"
                 />
               </div>
 
@@ -698,21 +772,86 @@ export default function Suppliers({
                 <select
                   name="paymentTerms"
                   value={supplierFormData.paymentTerms}
-                  onChange={(e) => setSupplierFormData({ ...supplierFormData, paymentTerms: e.target.value })}
+                  onChange={e => setSupplierFormData({ ...supplierFormData, paymentTerms: e.target.value })}
                 >
                   <option>Cash on Delivery</option>
                   <option>Card</option>
                 </select>
               </div>
 
+              {/* ── ADDED: single banner error ── */}
+              {createFormError && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  background: '#fee2e2', border: '1px solid #fca5a5',
+                  color: '#dc2626', borderRadius: '8px',
+                  padding: '12px 16px', fontSize: '0.85rem', fontWeight: 500,
+                  marginTop: '8px',
+                }}>
+                  ⚠ {createFormError}
+                </div>
+              )}
+
               <div className={s.modalFooter}>
-                <button type="button" onClick={() => { setShowModal(false); setCreateDupError(''); }} className={s.cancelBtn}>Cancel</button>
+                {/* ── CHANGED: Cancel now uses handleCreateCancelClick ── */}
+                <button type="button" onClick={handleCreateCancelClick} className={s.cancelBtn}>Cancel</button>
                 <button type="button" onClick={handleCreateSupplier} className={s.saveBtn}>
                   Create Supplier
                 </button>
               </div>
             </div>
           </div>
+
+          {/* ── ADDED: Discard Changes confirm dialog ── */}
+          {showCreateCancelConfirm && (
+            <div
+              style={{
+                position: 'fixed', inset: 0, zIndex: 1100,
+                background: 'rgba(0,0,0,0.45)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              onClick={() => setShowCreateCancelConfirm(false)}
+            >
+              <div
+                style={{
+                  background: '#fff', borderRadius: '20px',
+                  padding: '40px 36px', width: '380px', textAlign: 'center',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
+                <p style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px', color: '#111' }}>
+                  Discard Changes?
+                </p>
+                <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '28px' }}>
+                  All entered information will be lost.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => setShowCreateCancelConfirm(false)}
+                    style={{
+                      flex: 1, padding: '12px', borderRadius: '10px',
+                      border: '1.5px solid #ddd', background: '#fff',
+                      fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#333',
+                    }}
+                  >
+                    Keep Editing
+                  </button>
+                  <button
+                    onClick={handleCloseCreateModal}
+                    style={{
+                      flex: 1, padding: '12px', borderRadius: '10px',
+                      border: 'none', background: '#ef4444',
+                      fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#fff',
+                    }}
+                  >
+                    Yes, Discard
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -735,13 +874,12 @@ export default function Suppliers({
                   <label>Supplier Name</label>
                   <input
                     value={editFormData.supplierName}
-                    onChange={(e) => { setEditDupError(''); setEditFormData({ ...editFormData, supplierName: e.target.value }); }}
+                    onChange={e => { setEditDupError(''); setEditFormData({ ...editFormData, supplierName: e.target.value }); }}
                     style={editDupError ? { borderColor: '#fca5a5' } : {}}
                   />
                 </div>
               </div>
 
-              {/* ── ADDED: duplicate error banner ── */}
               {editDupError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
                   <span>⚠</span> {editDupError}
@@ -752,7 +890,7 @@ export default function Suppliers({
                 <label>Address</label>
                 <input
                   value={editFormData.address}
-                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  onChange={e => setEditFormData({ ...editFormData, address: e.target.value })}
                 />
               </div>
 
@@ -762,14 +900,14 @@ export default function Suppliers({
                   <label>Contact Person</label>
                   <input
                     value={editFormData.contactPerson}
-                    onChange={(e) => setEditFormData({ ...editFormData, contactPerson: e.target.value })}
+                    onChange={e => setEditFormData({ ...editFormData, contactPerson: e.target.value })}
                   />
                 </div>
                 <div className={s.formGroup}>
                   <label>Contact No.</label>
                   <input
                     value={editFormData.contactNumber}
-                    onChange={(e) => setEditFormData({ ...editFormData, contactNumber: e.target.value.replace(/[^\d]/g, '') })}
+                    onChange={e => setEditFormData({ ...editFormData, contactNumber: e.target.value.replace(/[^\d]/g, '') })}
                   />
                 </div>
               </div>
@@ -778,7 +916,7 @@ export default function Suppliers({
                 <label>Email Address</label>
                 <input
                   value={editFormData.email}
-                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  onChange={e => setEditFormData({ ...editFormData, email: e.target.value })}
                 />
               </div>
 
@@ -798,7 +936,6 @@ export default function Suppliers({
         <div className={s.viewBackdrop} onClick={closeViewModal}>
           <div className={s.viewModal} onClick={e => e.stopPropagation()}>
 
-            {/* Modal Header */}
             <div className={s.viewModalHeader}>
               <div>
                 <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
@@ -809,7 +946,6 @@ export default function Suppliers({
               </div>
             </div>
 
-            {/* Supplier Name Banner */}
             <div className={s.viewSupplierBanner}>
               <div>
                 <p className={s.viewSupplierLabel}>Supplier Name</p>
@@ -818,10 +954,7 @@ export default function Suppliers({
               </div>
             </div>
 
-            {/* Details Body */}
             <div className={s.viewPrintBody}>
-
-              {/* Contact Info Section */}
               <div className={s.viewCustomerSection}>
                 <p className={s.viewSectionTitle}>Contact Information</p>
                 <div className={s.viewSupplierDetailsGrid}>
@@ -849,7 +982,6 @@ export default function Suppliers({
                 </div>
               </div>
 
-              {/* Payment Terms */}
               {selectedSupplierForView.paymentTerms && (
                 <div className={s.viewCustomerSection}>
                   <p className={s.viewSectionTitle}>Terms</p>
@@ -865,7 +997,6 @@ export default function Suppliers({
               )}
             </div>
 
-            {/* Footer Buttons */}
             <div className={s.viewModalFooter}>
               <button className={s.viewBtnPrint} onClick={handlePrint}><LuPrinter size={14} /> Print </button>
             </div>
