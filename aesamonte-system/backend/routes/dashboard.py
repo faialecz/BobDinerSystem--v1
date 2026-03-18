@@ -94,7 +94,7 @@ def get_dashboard_metrics():
             LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
             JOIN static_status ss ON i.item_status_id = ss.status_id
             WHERE ss.status_code != 'INACTIVE'
-              AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
+              AND i.total_quantity <= COALESCE(ia.reorder_qty, 10)
         """)
         low_stock = int(cur.fetchone()[0] or 0)
 
@@ -387,19 +387,21 @@ def get_dashboard_insights():
 
         # --- Smart Reorder: low-stock items ---
         cur.execute(sales_cte + """
-            SELECT i.inventory_id, i.item_name, i.item_sku, i.brand,
-                   i.item_quantity, COALESCE(ia.reorder_qty, 10) AS reorder_qty,
+            SELECT i.inventory_id, i.item_name,
+                   COALESCE((SELECT ib2.item_sku FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS sku,
+                   COALESCE((SELECT b2.brand_name FROM inventory_brands ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
+                   i.total_quantity AS item_quantity,
+                   COALESCE(ia.reorder_qty, 10) AS reorder_qty,
                    COALESCE(s.units_sold, 0) AS units_sold_30d,
-                   COALESCE(u.uom_code, '') AS uom,
-                   i.item_description
+                   COALESCE((SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom,
+                   COALESCE((SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_description
             FROM inventory i
             LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
             LEFT JOIN sales_30d s ON s.inventory_id = i.inventory_id
-            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
             JOIN static_status ss ON i.item_status_id = ss.status_id
             WHERE ss.status_code != 'INACTIVE'
-              AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
-            ORDER BY i.item_quantity ASC
+              AND i.total_quantity <= COALESCE(ia.reorder_qty, 10)
+            ORDER BY item_quantity ASC
             LIMIT 5
         """, (thirty_days_ago,))
 
@@ -427,20 +429,22 @@ def get_dashboard_insights():
 
         # --- Stockout Predictions: items with stock that will run out ---
         cur.execute(sales_cte + """
-            SELECT i.inventory_id, i.item_name, i.item_sku, i.brand,
-                   i.item_quantity, COALESCE(s.units_sold, 0) AS units_sold_30d,
+            SELECT i.inventory_id, i.item_name,
+                   COALESCE((SELECT ib2.item_sku FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS sku,
+                   COALESCE((SELECT b2.brand_name FROM inventory_brands ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
+                   i.total_quantity AS item_quantity,
+                   COALESCE(s.units_sold, 0) AS units_sold_30d,
                    COALESCE(ia.reorder_qty, 10) AS reorder_qty,
-                   COALESCE(u.uom_code, '') AS uom,
-                   i.item_description
+                   COALESCE((SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom,
+                   COALESCE((SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_description
             FROM inventory i
             LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
             LEFT JOIN sales_30d s ON s.inventory_id = i.inventory_id
-            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
             JOIN static_status ss ON i.item_status_id = ss.status_id
             WHERE ss.status_code != 'INACTIVE'
-              AND i.item_quantity > 0
+              AND i.total_quantity > 0
               AND COALESCE(s.units_sold, 0) > 0
-            ORDER BY (i.item_quantity::float / (COALESCE(s.units_sold, 1)::float / 30)) ASC
+            ORDER BY (i.total_quantity::float / (COALESCE(s.units_sold, 1)::float / 30)) ASC
             LIMIT 5
         """, (thirty_days_ago,))
 
@@ -492,25 +496,24 @@ def get_low_stock_items_data():
             SELECT DISTINCT ON (i.inventory_id)
                 i.inventory_id,
                 i.item_name,
-                i.item_sku AS sku,
-                i.item_quantity AS current_qty,
-                COALESCE(u.uom_code, '') AS uom,
+                COALESCE((SELECT ib2.item_sku FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS sku,
+                i.total_quantity AS current_qty,
+                COALESCE((SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom,
                 COALESCE(ia.reorder_qty, 10) AS reorder_qty,
-                COALESCE(i.brand, '') AS brand,
-                COALESCE(i.item_description, '') AS description,
-                COALESCE(i.item_unit_price, 0) AS unit_price,
-                COALESCE(i.item_selling_price, 0) AS selling_price,
+                COALESCE((SELECT b2.brand_name FROM inventory_brands ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
+                COALESCE((SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS description,
+                COALESCE((SELECT ib2.item_unit_price FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS unit_price,
+                COALESCE((SELECT ib2.item_selling_price FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS selling_price,
                 ss.status_code AS status,
                 COALESCE(s.supplier_name, '') AS supplier_name
             FROM inventory i
             LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
-            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
             LEFT JOIN static_status ss ON i.item_status_id = ss.status_id
             LEFT JOIN inventory_supplier ins ON ins.inventory_id = i.inventory_id
             LEFT JOIN supplier s ON s.supplier_id = ins.supplier_id
             WHERE ss.status_code != 'INACTIVE'
-            AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
-            ORDER BY i.inventory_id, i.item_quantity ASC
+            AND i.total_quantity <= COALESCE(ia.reorder_qty, 10)
+            ORDER BY i.inventory_id, current_qty ASC
         """)
         rows = cur.fetchall()
         result = [
@@ -643,7 +646,11 @@ def get_order_receipt(order_id: str):
                    CASE WHEN od.order_quantity > 0 THEN od.order_total / od.order_quantity ELSE 0 END AS unit_price
             FROM order_details od
             JOIN inventory i ON i.inventory_id = od.inventory_id
-            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
+            LEFT JOIN LATERAL (
+                SELECT u2.uom_code FROM inventory_brands ib
+                JOIN unit_of_measure u2 ON ib.unit_of_measure = u2.uom_id
+                WHERE ib.inventory_id = i.inventory_id LIMIT 1
+            ) u ON true
             WHERE od.order_id = %s
         """, (order_id,))
         items = [

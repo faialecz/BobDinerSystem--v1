@@ -1,8 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable prefer-const */
+    /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import s from "@/css/inventory.module.css";
+import styles from "@/css/inventory.module.css";
 import TopHeader from '@/components/layout/TopHeader';
 import ExportButton from '@/components/features/ExportButton';
 import ExportRequestModal from '@/components/features/ExportRequestModal';
@@ -11,9 +12,18 @@ import EditInventoryModal from './editInventoryModal';
 import ExportModal from './exportModal';
 import ArchiveTable from './archiveInvModal';
 import AddSupplierModal from '@/app/suppliers/addSupplierModal';
+import UomModal from './UomModal';
 import {
-  LuSearch, LuEllipsisVertical, LuChevronUp, LuChevronDown,
-  LuArchive, LuChevronLeft, LuChevronRight, LuPencil, LuX,
+  LuSearch,
+  LuEllipsisVertical,
+  LuChevronUp,
+  LuChevronDown,
+  LuArchive,
+  LuChevronLeft,
+  LuChevronRight,
+  LuPencil,
+  LuX,
+  LuPackage,
 } from "react-icons/lu";
 
 /* ================= TYPES ================= */
@@ -33,25 +43,42 @@ interface Supplier {
   contactNumber?: string;
 }
 
+interface Brand {
+  id: number;
+  code: string;
+  name: string;
+}
+
 interface UOM {
   id: number;
   code: string;
   name: string;
 }
 
+interface BrandVariant {
+  brand_id: number;
+  brand_name: string;
+  sku: string;
+  unit_price: number;
+  selling_price: number;
+  qty: number;
+}
+
+interface SupplierInfo {
+  supplier_id: number;
+  supplier_name: string;
+}
+
 export interface Product {
   id: string;
   item_name: string;
   item_description: string;
-  sku: string;
-  brand: string;
   qty: number;
   uom: string;
-  unitPrice: number;
-  price: number;
   status: string;
   is_archived?: boolean;
-  supplier_name?: string;
+  brands: BrandVariant[];
+  suppliers: SupplierInfo[];
 }
 
 interface InventorySummary {
@@ -67,36 +94,42 @@ interface InventorySummary {
 
 const ROWS_PER_PAGE = 10;
 
-const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initialSearch }) => {
+const displayBrandName = (name: string) => name === 'No Brand' ? '—' : name;
 
-  // ── Permission Logic ──
-  const isInventoryHead   = role === 'Inventory Head';
-  const isSalesHead       = role === 'Sales Head';
-  const canModify         = ['Admin', 'Manager', 'Staff'].includes(role) || isInventoryHead;
-  const canExport         = ['Admin', 'Manager', 'Inventory Head'].includes(role);
-  const mustRequestExport = role === 'Staff' || isSalesHead;
+const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0, onLogout, initialSearch }) => {
+  const s = styles as Record<string, string>;
 
-  // ── State ──
+  const isInventoryHead = role === 'Head' && department === 'Inventory';
+  const isSalesHead     = role === 'Head' && department === 'Sales';
+  const canModify       = ['Admin', 'Manager', 'Staff'].includes(role) || isInventoryHead;
+  const canExport       = ['Admin', 'Manager'].includes(role) || isInventoryHead;
+  const mustRequestExport = isSalesHead;
+
   const [products, setProducts] = useState<Product[]>([]);
   const [data, setData] = useState<InventorySummary>({
     totalProducts: 0, totalProductsChange: 0,
     weeklyInventory: 0, monthlyInventory: 0, yearlyInventory: 0,
     outOfStockCount: 0, outOfStockItems: [], lowStockItems: [],
   });
+
   const [searchTerm, setSearchTerm] = useState(initialSearch ?? '');
+  useEffect(() => { if (initialSearch) setSearchTerm(initialSearch); }, [initialSearch]);
+
   const [sortConfig, setSortConfig] = useState<{ key: keyof Product | ''; direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isArchiveView, setIsArchiveView] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [uoms, setUoms] = useState<UOM[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [defaultSupplierName, setDefaultSupplierName] = useState<string>('');
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showExportRequestModal, setShowExportRequestModal] = useState(false);
+  const [showUomModal, setShowUomModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
   const [showToast, setShowToast] = useState(false);
@@ -105,11 +138,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (initialSearch) setSearchTerm(initialSearch);
-  }, [initialSearch]);
-
-  // ── Helpers ──
   const handleExportSuccess = (msg: string, type: 'success' | 'error' = 'success') => {
     setToastMessage(msg);
     setIsError(type === 'error');
@@ -125,9 +153,11 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
       if (!res.ok) throw new Error("Failed to fetch");
       const productData: Product[] = await res.json();
       setProducts(productData);
+
       const activeProducts = productData.filter(p => !p.is_archived);
       const outOfStock = activeProducts.filter(p => p.qty === 0 || p.status?.toLowerCase().includes("out of stock"));
-      const lowStock = activeProducts.filter(p => p.status?.toLowerCase().includes("low stock") && p.qty > 0);
+      const lowStock   = activeProducts.filter(p => p.status?.toLowerCase().includes("low stock") && p.qty > 0);
+
       setData(prev => ({
         ...prev,
         totalProducts: activeProducts.length,
@@ -164,17 +194,27 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
     const fetchSuppliers = async () => {
       try {
         const res = await fetch("/api/suppliers");
-        if (res.ok) { const data = await res.json(); setSuppliers(data); }
+        if (res.ok) { const d = await res.json(); setSuppliers(d); }
       } catch (err) { console.error("Failed to fetch suppliers", err); }
     };
     fetchSuppliers();
   }, []);
 
   useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        const res = await fetch("/api/brands");
+        if (res.ok) { const d = await res.json(); setBrands(d); }
+      } catch (err) { console.error("Failed to fetch brands", err); }
+    };
+    fetchBrands();
+  }, []);
+
+  useEffect(() => {
     const fetchUOMs = async () => {
       try {
         const res = await fetch("/api/uom");
-        if (res.ok) { const data = await res.json(); setUoms(data); }
+        if (res.ok) { const d = await res.json(); setUoms(d); }
       } catch (err) { console.error("Failed to fetch UOMs", err); }
     };
     fetchUOMs();
@@ -226,27 +266,11 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
         const fullData = await res.json();
         setSelectedProduct(fullData);
       } else {
-        setSelectedProduct({
-          id: product.id, sku: product.sku || '', itemName: product.item_name || '',
-          brand: product.brand || '', itemDescription: product.item_description || '',
-          qty: product.qty ?? 0, uom: product.uom || 'Select',
-          reorderPoint: (product as any).reorderPoint ?? '', unitPrice: product.unitPrice ?? '',
-          sellingPrice: product.price ?? '', suppliers: (product as any).suppliers || [],
-          supplierName: (product as any).supplierName || '', contactPerson: (product as any).contactPerson || '',
-          contactNumber: (product as any).contactNumber || '', leadTime: (product as any).leadTime ?? '',
-          minOrder: (product as any).minOrder ?? '',
-        } as any);
+        setSelectedProduct({ id: product.id, itemName: product.item_name, itemDescription: product.item_description, uom: product.uom, brands: product.brands || [], suppliers: [] });
       }
       setShowEditModal(true);
-    } catch (err) {
-      console.error("Error fetching item details:", err);
-      setSelectedProduct({
-        id: product.id, sku: product.sku || '', itemName: product.item_name || '',
-        brand: product.brand || '', itemDescription: product.item_description || '',
-        qty: product.qty ?? 0, uom: product.uom || 'Select',
-        reorderPoint: '', unitPrice: '', sellingPrice: '',
-        suppliers: [], supplierName: '', contactPerson: '', contactNumber: '', leadTime: '', minOrder: '',
-      } as any);
+    } catch {
+      setSelectedProduct({ id: product.id, itemName: product.item_name, itemDescription: product.item_description, uom: product.uom, brands: product.brands || [], suppliers: [] });
       setShowEditModal(true);
     }
   };
@@ -254,50 +278,53 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
   const handleUpdate = async (updatedItem: any) => {
     try {
       const res = await fetch(`/api/inventory/update/${updatedItem.id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedItem),
       });
       if (res.ok) {
         setShowEditModal(false);
         handleExportSuccess("Item updated successfully!");
-        await fetchInventory(); await fetchInventorySummary();
+        await fetchInventory();
+        await fetchInventorySummary();
       } else {
         const err = await res.json();
         handleExportSuccess(`Error updating: ${err.error}`, 'error');
       }
-    } catch (err) { console.error("Update error:", err); }
+    } catch (err) {
+      console.error("Update error:", err);
+    }
   };
 
   const handleSave = async (items: any[]) => {
     try {
-      const formattedItems = items.map(item => ({
-        itemName: item.itemName, brand: item.brand, internalSku: item.internalSku,
-        itemDescription: item.itemDescription, qty: Number(item.qty), uom: item.uom,
-        unitPrice: Number(item.unitPrice), sellingPrice: Number(item.sellingPrice),
-        reorderPoint: Number(item.reorderPoint) || 0, supplierName: item.supplierName || '',
-        leadTime: Number(item.leadTime) || 0, minOrder: Number(item.minOrder) || 0,
-      }));
       const res = await fetch("/api/inventory/add", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formattedItems),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(items),
       });
       if (res.ok) {
         const result = await res.json();
         handleExportSuccess(result.message);
         setShowModal(false);
-        await fetchInventory(); await fetchInventorySummary();
+        await fetchInventory();
+        await fetchInventorySummary();
       } else {
         const err = await res.json();
         handleExportSuccess(`Error: ${err.error}`, 'error');
       }
-    } catch (err) { console.error("Submission error:", err); }
+    } catch (err) {
+      console.error("Submission error:", err);
+    }
   };
 
-  // ── Derived Data ──
   const filteredProducts = products.filter(p => {
     const matchesArchiveView = isArchiveView ? Boolean(p.is_archived) : !p.is_archived;
-    const searchStr = `${p.id} ${p.item_name} ${p.brand} ${p.sku}`.toLowerCase();
-    return matchesArchiveView && searchStr.includes(searchTerm.toLowerCase());
+    const brandNames = (p.brands || []).map(b => b.brand_name).join(' ');
+    const supplierNames = (p.suppliers || []).map(s => s.supplier_name).join(' ');
+    const searchStr = `${p.id} ${p.item_name} ${brandNames} ${supplierNames}`.toLowerCase();
+    const matchesSearch = searchStr.includes(searchTerm.toLowerCase());
+    return matchesArchiveView && matchesSearch;
   });
 
   const sortedProducts = useMemo(() => {
@@ -316,22 +343,19 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
 
   const totalPages = Math.ceil(sortedProducts.length / ROWS_PER_PAGE);
   const paginatedProducts = sortedProducts.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
-
   useEffect(() => { setCurrentPage(1); }, [searchTerm]);
 
   const changePage = (page: number) => { if (page >= 1 && page <= totalPages) setCurrentPage(page); };
 
   const renderPageNumbers = () => {
-    const maxVisiblePages = 5;
+    const maxVisible = 5;
     let startPage = Math.max(1, currentPage - 2);
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-    if (endPage - startPage + 1 < maxVisiblePages) startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    if (endPage - startPage + 1 < maxVisible) startPage = Math.max(1, endPage - maxVisible + 1);
     const pages = [];
     for (let i = startPage; i <= endPage; i++) {
       pages.push(
-        <div key={i} className={`${s.pageCircle} ${currentPage === i ? s.pageCircleActive : ''}`} onClick={() => changePage(i)}>
-          {i}
-        </div>
+        <div key={i} className={`${s.pageCircle} ${currentPage === i ? s.pageCircleActive : ''}`} onClick={() => changePage(i)}>{i}</div>
       );
     }
     return pages;
@@ -353,9 +377,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
         <div className={s.toastOverlay}>
           <div className={s.alertBox}>
             <div className={`${s.alertHeader} ${isError ? s.alertHeaderError : ''}`}>
-              <div className={`${s.checkCircle} ${isError ? s.checkCircleError : ''}`}>
-                {isError ? '!' : '✓'}
-              </div>
+              <div className={`${s.checkCircle} ${isError ? s.checkCircleError : ''}`}>{isError ? '!' : '✓'}</div>
             </div>
             <div className={s.alertBody}>
               <h2 className={s.alertTitle}>{isError ? 'Oops!' : 'Success!'}</h2>
@@ -368,7 +390,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
 
       <div className={s.mainContent}>
 
-        {/* ── Header ── */}
+        {/* HEADER ROW */}
         <div className={s.headerActions} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>INVENTORY</h1>
@@ -377,27 +399,16 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {canExport && (
-              <div onClick={() => setShowExportModal(true)}>
-                <ExportButton />
-              </div>
-            )}
+            {canExport && <div onClick={() => setShowExportModal(true)}><ExportButton /></div>}
             {mustRequestExport && (
-              <button
-                onClick={() => setShowExportRequestModal(true)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  backgroundColor: '#475569', color: 'white', padding: '8px 18px',
-                  borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.9rem',
-                }}
-              >
+              <button onClick={() => setShowExportRequestModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#475569', color: 'white', padding: '8px 18px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.9rem' }}>
                 Request Export
               </button>
             )}
           </div>
         </div>
 
-        {/* ── Stat Cards ── */}
+        {/* STAT CARDS */}
         <div className={s.topGrid}>
           <section className={s.statCard}>
             <p className={s.cardTitle}>Total Products</p>
@@ -427,13 +438,13 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
             <div className={s.scrollContainer} style={{ height: '100px', overflowY: 'auto' }}>
               {data.outOfStockItems?.map(item => (
                 <div key={`out-${item.id}`} className={s.pillRed} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span>{item.item_name} {item.brand ? `(${item.brand})` : ''}</span>
+                  <span>{item.item_name}</span>
                   <span style={{ fontWeight: 800 }}>{item.qty} {(item.uom || 'PCS').toUpperCase()}</span>
                 </div>
               ))}
               {data.lowStockItems?.map(item => (
                 <div key={`low-${item.id}`} className={s.pillYellow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span>{item.item_name} {item.brand ? `(${item.brand})` : ''}</span>
+                  <span>{item.item_name}</span>
                   <span style={{ fontWeight: 800 }}>{item.qty} {(item.uom || 'PCS').toUpperCase()}</span>
                 </div>
               ))}
@@ -441,6 +452,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
           </section>
         </div>
 
+        {/* TABLE / ARCHIVE */}
         {isArchiveView ? (
           <ArchiveTable products={products} onRestore={handleToggleArchive} onBack={() => setIsArchiveView(false)} />
         ) : (
@@ -448,9 +460,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
             <div className={s.header}>
               <h1 className={s.title}>Product List</h1>
               <div className={s.controls}>
-                <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives">
-                  <LuArchive size={20} />
-                </button>
+                <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives"><LuArchive size={20} /></button>
                 <div className={s.searchWrapper}>
                   <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   <LuSearch size={18} />
@@ -466,11 +476,12 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
                 <thead>
                   <tr>
                     {[
-                      { label: 'ID', key: 'id' }, { label: 'ITEM', key: 'item_name' },
-                      { label: 'DESCRIPTION', key: 'item_description' }, { label: 'SKU', key: 'sku' },
-                      { label: 'BRAND', key: 'brand' }, { label: 'QTY', key: 'qty' },
-                      { label: 'UOM', key: 'uom' }, { label: 'UNIT PRICE', key: 'unitPrice' },
-                      { label: 'PRICE', key: 'price' }, { label: 'STATUS', key: 'status' },
+                      { label: 'ID', key: 'id' },
+                      { label: 'ITEM', key: 'item_name' },
+                      { label: 'DESCRIPTION', key: 'item_description' },
+                      { label: 'TOTAL QTY', key: 'qty' },
+                      { label: 'UOM', key: 'uom' },
+                      { label: 'STATUS', key: 'status' },
                     ].map(col => (
                       <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
                         <div className={s.sortableHeader}>
@@ -482,29 +493,40 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
                         </div>
                       </th>
                     ))}
+                    <th>SKU</th>
+                    <th>UNIT PRICE</th>
+                    <th>PRICE</th>
                     <th className={s.actionHeader}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedProducts.map(p => (
+                  {paginatedProducts.map(p => {
+                    const firstBrand = (p.brands || [])[0];
+                    return (
                     <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer' }}>
                       <td>{p.id}</td>
                       <td>{p.item_name}</td>
                       <td>{p.item_description}</td>
-                      <td>{p.sku}</td>
-                      <td>{p.brand}</td>
                       <td>{p.qty}</td>
                       <td>{p.uom || '—'}</td>
-                      <td>₱ {p.unitPrice?.toLocaleString()}</td>
-                      <td>₱ {p.price?.toLocaleString()}</td>
                       <td>
                         <span className={
                           p.status.includes("Available") ? s.pillGreen
                           : p.status.includes("Low Stock") ? s.pillYellow
-                          : p.status.includes("Out of Stock") ? s.pillRed : ""
+                          : p.status.includes("Out of Stock") ? s.pillRed
+                          : ""
                         }>
                           {p.status}
                         </span>
+                      </td>
+                      <td style={{ fontSize: '0.82rem', fontFamily: 'monospace', color: '#64748b' }}>
+                        {firstBrand?.sku && firstBrand.sku !== '—' ? firstBrand.sku : '—'}
+                      </td>
+                      <td style={{ fontSize: '0.85rem', color: '#374151' }}>
+                        {firstBrand ? `₱${Number(firstBrand.unit_price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—'}
+                      </td>
+                      <td style={{ fontSize: '0.85rem', color: '#374151' }}>
+                        {firstBrand ? `₱${Number(firstBrand.selling_price).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '—'}
                       </td>
                       <td className={s.actionCell} onClick={e => e.stopPropagation()}>
                         <LuEllipsisVertical className={s.moreIcon} onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)} />
@@ -522,7 +544,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -545,15 +568,15 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
         )}
       </div>
 
+      {/* MODALS */}
       <ExportModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} onSuccess={handleExportSuccess} data={products.filter(p => !p.is_archived)} summary={data} />
 
-      {/* ✅ FIX: pass type through so errors show red toast */}
       <ExportRequestModal
         isOpen={showExportRequestModal}
         onClose={() => setShowExportRequestModal(false)}
         targetModule="Inventory"
         requesterId={employeeId}
-        onSuccess={(msg, type) => handleExportSuccess(msg, type)}
+        onSuccess={msg => handleExportSuccess(msg, 'success')}
       />
 
       <AddInventoryModal
@@ -561,13 +584,24 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
         onClose={() => { setShowModal(false); setDefaultSupplierName(''); }}
         onSave={handleSave}
         onOpenSupplierModal={() => setShowSupplierModal(true)}
-        suppliers={suppliers} uoms={uoms} existingProducts={products} defaultSupplierName={defaultSupplierName}
+        onOpenUomModal={() => setShowUomModal(true)}
+        suppliers={suppliers}
+        brands={brands}
+        uoms={uoms}
+        existingProducts={products}
+        defaultSupplierName={defaultSupplierName}
       />
 
       <EditInventoryModal
-        isOpen={showEditModal} onClose={() => setShowEditModal(false)}
-        itemData={selectedProduct} onSave={handleUpdate}
-        suppliers={suppliers} uoms={uoms} existingProducts={products}
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        itemData={selectedProduct}
+        onSave={handleUpdate}
+        onOpenUomModal={() => setShowUomModal(true)}
+        suppliers={suppliers}
+        brands={brands}
+        uoms={uoms}
+        existingProducts={products}
       />
 
       <AddSupplierModal
@@ -577,48 +611,87 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId, onLogout, initi
         existingSuppliers={suppliers}
       />
 
+      <UomModal
+        isOpen={showUomModal}
+        onClose={() => setShowUomModal(false)}
+        onUomAdded={newUom => setUoms(prev => [...prev, newUom].sort((a, b) => a.name.localeCompare(b.name)))}
+      />
+
+      {/* VIEW MODAL */}
       {showViewModal && viewProduct && (
         <div className={s.viewBackdrop} onClick={() => setShowViewModal(false)}>
-          <div className={s.viewModal} onClick={e => e.stopPropagation()}>
+          <div className={s.viewModal} onClick={e => e.stopPropagation()} style={{ maxWidth: '780px', width: '95vw' }}>
             <div className={s.viewModalHeader}>
               <div className={s.viewModalHeaderLeft}>
                 <h2 className={s.viewItemName}>{viewProduct.item_name}</h2>
-                <p className={s.viewItemSubtitle}>{viewProduct.id}&nbsp;•&nbsp;SKU: {viewProduct.sku || '—'}</p>
+                <p className={s.viewItemSubtitle}>{viewProduct.id} • {viewProduct.uom || '—'}</p>
               </div>
               <div className={s.viewModalHeaderRight}>
                 <span className={getStatusClass(viewProduct.status)}>{viewProduct.status}</span>
                 <button className={s.viewCloseBtn} onClick={() => setShowViewModal(false)}><LuX size={20} /></button>
               </div>
             </div>
+
             <div className={s.viewBody}>
-              <div className={s.viewSection}>
-                <p className={s.viewSectionTitle}>PRODUCT DETAILS</p>
-                <div className={s.viewSectionGrid}>
-                  <div><p className={s.viewFieldLabel}>Brand</p><p className={s.viewFieldValue}>{viewProduct.brand || '—'}</p></div>
-                  <div><p className={s.viewFieldLabel}>SKU</p><p className={s.viewFieldValueMono}>{viewProduct.sku || '—'}</p></div>
-                  <div><p className={s.viewFieldLabel}>Unit (UOM)</p><p className={s.viewFieldValue}>{viewProduct.uom || '—'}</p></div>
+              {/* Description */}
+              {viewProduct.item_description && (
+                <div className={s.viewSection} style={{ marginBottom: '16px' }}>
+                  <p className={s.viewFieldLabel}>Description</p>
+                  <p className={s.viewFieldValue}>{viewProduct.item_description}</p>
                 </div>
-                {viewProduct.item_description && (
-                  <div className={s.viewDescriptionRow}>
-                    <p className={s.viewFieldLabel}>Description</p>
-                    <p className={s.viewFieldValue}>{viewProduct.item_description}</p>
-                  </div>
+              )}
+
+              {/* Suppliers */}
+              {(viewProduct.suppliers || []).length > 0 && (
+                <div className={s.viewSection} style={{ marginBottom: '16px' }}>
+                  <p className={s.viewSectionTitle}>SUPPLIERS</p>
+                  <p className={s.viewFieldValue}>
+                    {viewProduct.suppliers.map(s => s.supplier_name).join(' • ')}
+                  </p>
+                </div>
+              )}
+
+              {/* Brand Variants Table */}
+              <div className={s.viewSection}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <p className={s.viewSectionTitle} style={{ margin: 0 }}>BRAND VARIANTS</p>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '999px' }}>
+                    Total Qty: {viewProduct.qty}
+                  </span>
+                </div>
+
+                {(viewProduct.brands || []).length === 0 ? (
+                  <p style={{ color: '#9ca3af', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>No brand variants recorded.</p>
+                ) : (
+                  <table className={s.viewItemsTable}>
+                    <thead>
+                      <tr>
+                        <th>BRAND</th>
+                        <th>SKU</th>
+                        <th>QTY</th>
+                        <th>COST PRICE</th>
+                        <th>SELLING PRICE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {viewProduct.brands.map((bv, i) => (
+                        <tr key={i}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <LuPackage size={13} style={{ color: '#94a3b8' }} />
+                              <span className={s.viewItemRowName}>{displayBrandName(bv.brand_name)}</span>
+                            </div>
+                          </td>
+                          <td><span style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#64748b' }}>{bv.sku || '—'}</span></td>
+                          <td>{bv.qty}</td>
+                          <td>₱ {bv.unit_price?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
+                          <td>₱ {bv.selling_price?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
-              <table className={s.viewItemsTable}>
-                <thead><tr><th>ITEM</th><th>QTY</th><th>UNIT COST</th><th>SELLING PRICE</th></tr></thead>
-                <tbody>
-                  <tr>
-                    <td>
-                      <p className={s.viewItemRowName}>{viewProduct.item_name}</p>
-                      {viewProduct.uom && <p className={s.viewItemRowUnit}>{viewProduct.uom}</p>}
-                    </td>
-                    <td>{viewProduct.qty}</td>
-                    <td>₱ {viewProduct.unitPrice?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
-                    <td>₱ {viewProduct.price?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
         </div>

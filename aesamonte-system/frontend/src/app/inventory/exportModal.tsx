@@ -5,8 +5,10 @@ import styles from "@/css/inventory.module.css";
 import { exportPDF, exportExcel, exportCSV } from '@/utils/exportUtils';
 
 interface Product {
-  id: string; item_name: string; item_description: string; sku: string;
-  brand: string; qty: number; uom: string; unitPrice: number; price: number; status: string;
+  id: string; item_name: string; item_description: string;
+  qty: number; uom: string; status: string;
+  brands?: { brand_name: string; sku: string; unit_price: number; selling_price: number; qty: number }[];
+  suppliers?: { supplier_name: string }[];
 }
 interface InventorySummary {
   totalProducts: number; totalProductsChange: number;
@@ -22,16 +24,14 @@ interface ExportModalProps {
 }
 
 const COLUMNS = [
-  { header: 'ID',            key: 'id' },
-  { header: 'Item Name',     key: 'item_name' },
-  { header: 'Description',   key: 'item_description' },
-  { header: 'SKU',           key: 'sku' },
-  { header: 'Brand',         key: 'brand' },
-  { header: 'Qty',           key: 'qty' },
-  { header: 'UOM',           key: 'uom' },
-  { header: 'Unit Price',    key: 'unitPrice' },
-  { header: 'Selling Price', key: 'price' },
-  { header: 'Status',        key: 'status' },
+  { header: 'ID',          key: 'id' },
+  { header: 'Item Name',   key: 'item_name' },
+  { header: 'Description', key: 'item_description' },
+  { header: 'Total Qty',   key: 'qty' },
+  { header: 'UOM',         key: 'uom' },
+  { header: 'Brands',      key: 'brands_summary' },
+  { header: 'Suppliers',   key: 'suppliers_summary' },
+  { header: 'Status',      key: 'status' },
 ];
 
 const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onSuccess, data, summary }) => {
@@ -55,7 +55,11 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, onSuccess, d
         { label: 'Out of Stock',      value: summary.outOfStockCount.toLocaleString() },
       ];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = data.map(p => ({ ...p }) as Record<string, any>);
+      const rows = data.map(p => ({
+        ...p,
+        brands_summary: (p.brands || []).map(b => b.brand_name === 'No Brand' ? '—' : b.brand_name).join(', ') || '—',
+        suppliers_summary: (p.suppliers || []).map(s => s.supplier_name).join(', ') || '—',
+      }) as Record<string, any>);
 
       if (format === 'PDF')        await exportPDF('Inventory Report', summaryItems, COLUMNS, rows, 'AE_Samonte_Inventory');
       else if (format === 'Excel') await exportExcel('Inventory Report', summaryItems, COLUMNS, rows, 'AE_Samonte_Inventory');

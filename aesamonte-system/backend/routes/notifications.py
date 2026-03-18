@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from database.db_config import get_connection
 from datetime import datetime, timezone
+import psycopg2
 
 notifications_bp = Blueprint("notifications", __name__)
 
@@ -19,6 +20,7 @@ def get_notifications():
     conn = get_connection()
     cur = conn.cursor()
     notifications = []
+    db_ok = True
 
     try:
         # ── 1. PENDING / PREPARING / CANCELLED / RECEIVED orders ─────────────────
@@ -56,154 +58,163 @@ def get_notifications():
         except Exception as e:
             print("Notifications [orders active] error:", e)
             conn.rollback()
+            if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                db_ok = False
 
         # ── 2. PAID orders (from sales_transaction) ───────────────────────────────
-        try:
-            cur.execute("""
-                SELECT
-                    ot.order_id,
-                    'PAID',
-                    'Paid',
-                    st.sales_id,
-                    c.customer_name,
-                    COALESCE(
-                        (SELECT MAX(oal.order_audit_log_date)
-                         FROM order_audit_log oal
-                         WHERE oal.order_id = ot.order_id),
-                        st.sales_date::timestamp
-                    ) AS event_time
-                FROM sales_transaction st
-                JOIN order_transaction ot ON ot.order_id = st.order_id
-                JOIN static_status ss ON st.sales_status_id = ss.status_id
-                JOIN customer c ON ot.customer_id = c.customer_id
-                WHERE ss.status_code = 'PAID'
-                ORDER BY event_time DESC
-                LIMIT 10
-            """)
-            for row in cur.fetchall():
-                order_id, status_code, status_name, sales_id, customer_name, event_time = row
-                notifications.append({
-                    "category": "ORDER",
-                    "reference": str(order_id),
-                    "sales_id": str(sales_id),
-                    "customer_name": customer_name,
-                    "status_code": status_code,
-                    "status_name": status_name,
-                    "event_time": event_time,
-                })
-        except Exception as e:
-            print("Notifications [paid orders] error:", e)
-            conn.rollback()
+        if db_ok:
+            try:
+                cur.execute("""
+                    SELECT
+                        ot.order_id,
+                        'PAID',
+                        'Paid',
+                        st.sales_id,
+                        c.customer_name,
+                        COALESCE(
+                            (SELECT MAX(oal.order_audit_log_date)
+                             FROM order_audit_log oal
+                             WHERE oal.order_id = ot.order_id),
+                            st.sales_date::timestamp
+                        ) AS event_time
+                    FROM sales_transaction st
+                    JOIN order_transaction ot ON ot.order_id = st.order_id
+                    JOIN static_status ss ON st.sales_status_id = ss.status_id
+                    JOIN customer c ON ot.customer_id = c.customer_id
+                    WHERE ss.status_code = 'PAID'
+                    ORDER BY event_time DESC
+                    LIMIT 10
+                """)
+                for row in cur.fetchall():
+                    order_id, status_code, status_name, sales_id, customer_name, event_time = row
+                    notifications.append({
+                        "category": "ORDER",
+                        "reference": str(order_id),
+                        "sales_id": str(sales_id),
+                        "customer_name": customer_name,
+                        "status_code": status_code,
+                        "status_name": status_name,
+                        "event_time": event_time,
+                    })
+            except Exception as e:
+                print("Notifications [paid orders] error:", e)
+                conn.rollback()
+                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                    db_ok = False
 
         # ── 3. Newly added inventory items (last 30 days) ────────────────────────
-        try:
-            cur.execute("""
-                SELECT
-                    i.inventory_id,
-                    i.item_name,
-                    i.item_sku,
-                    'ITEM_ADDED',
-                    'New Item Added',
-                    MIN(ial.inventory_audit_log_date) AS event_time
-                FROM inventory i
-                JOIN inventory_audit_log ial ON ial.inventory_id = i.inventory_id
-                JOIN static_status ss ON i.item_status_id = ss.status_id
-                WHERE ss.status_code != 'INACTIVE'
-                  AND ial.inventory_audit_log_date >= NOW() - INTERVAL '30 days'
-                GROUP BY i.inventory_id, i.item_name, i.item_sku
-                ORDER BY event_time DESC
-                LIMIT 10
-            """)
-            for row in cur.fetchall():
-                inventory_id, item_name, item_sku, status_code, status_name, event_time = row
-                notifications.append({
-                    "category": "INVENTORY",
-                    "reference": str(inventory_id),
-                    "item_name": item_name,
-                    "item_sku": item_sku,
-                    "status_code": status_code,
-                    "status_name": status_name,
-                    "event_time": event_time,
-                })
-        except Exception as e:
-            print("Notifications [new items] error:", e)
-            conn.rollback()
+        if db_ok:
+            try:
+                cur.execute("""
+                    SELECT
+                        i.inventory_id,
+                        i.item_name,
+                        'ITEM_ADDED',
+                        'New Item Added',
+                        MIN(ial.inventory_audit_log_date) AS event_time
+                    FROM inventory i
+                    JOIN inventory_audit_log ial ON ial.inventory_id = i.inventory_id
+                    JOIN static_status ss ON i.item_status_id = ss.status_id
+                    WHERE ss.status_code != 'INACTIVE'
+                      AND ial.inventory_audit_log_date >= NOW() - INTERVAL '30 days'
+                    GROUP BY i.inventory_id, i.item_name
+                    ORDER BY event_time DESC
+                    LIMIT 10
+                """)
+                for row in cur.fetchall():
+                    inventory_id, item_name, status_code, status_name, event_time = row
+                    notifications.append({
+                        "category": "INVENTORY",
+                        "reference": str(inventory_id),
+                        "item_name": item_name,
+                        "item_sku": None,
+                        "status_code": status_code,
+                        "status_name": status_name,
+                        "event_time": event_time,
+                    })
+            except Exception as e:
+                print("Notifications [new items] error:", e)
+                conn.rollback()
+                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                    db_ok = False
 
         # ── 5. Out of stock items ─────────────────────────────────────────────────
-        try:
-            cur.execute("""
-                SELECT
-                    i.inventory_id,
-                    i.item_name,
-                    i.item_sku,
-                    'OUT_OF_STOCK',
-                    'Out of Stock',
-                    COALESCE(
-                        (SELECT MAX(ial.inventory_audit_log_date)
-                         FROM inventory_audit_log ial
-                         WHERE ial.inventory_id = i.inventory_id),
-                        NOW()
-                    ) AS event_time
-                FROM inventory i
-                JOIN static_status ss ON i.item_status_id = ss.status_id
-                WHERE ss.status_code != 'INACTIVE'
-                  AND i.item_quantity = 0
-                ORDER BY event_time DESC
-                LIMIT 10
-            """)
-            for row in cur.fetchall():
-                inventory_id, item_name, item_sku, status_code, status_name, event_time = row
-                notifications.append({
-                    "category": "INVENTORY",
-                    "reference": str(inventory_id),
-                    "item_name": item_name,
-                    "item_sku": item_sku,
-                    "status_code": status_code,
-                    "status_name": status_name,
-                    "event_time": event_time,
-                })
-        except Exception as e:
-            print("Notifications [out of stock] error:", e)
-            conn.rollback()
+        if db_ok:
+            try:
+                cur.execute("""
+                    SELECT
+                        i.inventory_id,
+                        i.item_name,
+                        'OUT_OF_STOCK',
+                        'Out of Stock',
+                        COALESCE(
+                            (SELECT MAX(ial.inventory_audit_log_date)
+                             FROM inventory_audit_log ial
+                             WHERE ial.inventory_id = i.inventory_id),
+                            NOW()
+                        ) AS event_time
+                    FROM inventory i
+                    JOIN static_status ss ON i.item_status_id = ss.status_id
+                    WHERE ss.status_code != 'INACTIVE'
+                      AND i.total_quantity = 0
+                    ORDER BY event_time DESC
+                    LIMIT 10
+                """)
+                for row in cur.fetchall():
+                    inventory_id, item_name, status_code, status_name, event_time = row
+                    notifications.append({
+                        "category": "INVENTORY",
+                        "reference": str(inventory_id),
+                        "item_name": item_name,
+                        "item_sku": None,
+                        "status_code": status_code,
+                        "status_name": status_name,
+                        "event_time": event_time,
+                    })
+            except Exception as e:
+                print("Notifications [out of stock] error:", e)
+                conn.rollback()
+                if isinstance(e, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                    db_ok = False
 
         # ── 6. Low stock items ────────────────────────────────────────────────────
-        try:
-            cur.execute("""
-                SELECT
-                    i.inventory_id,
-                    i.item_name,
-                    i.item_sku,
-                    'LOW_STOCK',
-                    'Low Stock',
-                    COALESCE(
-                        (SELECT MAX(ial.inventory_audit_log_date)
-                         FROM inventory_audit_log ial
-                         WHERE ial.inventory_id = i.inventory_id),
-                        NOW()
-                    ) AS event_time
-                FROM inventory i
-                LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
-                JOIN static_status ss ON i.item_status_id = ss.status_id
-                WHERE ss.status_code != 'INACTIVE'
-                  AND i.item_quantity > 0
-                  AND i.item_quantity <= COALESCE(ia.reorder_qty, 10)
-                ORDER BY event_time DESC
-                LIMIT 10
-            """)
-            for row in cur.fetchall():
-                inventory_id, item_name, item_sku, status_code, status_name, event_time = row
-                notifications.append({
-                    "category": "INVENTORY",
-                    "reference": str(inventory_id),
-                    "item_name": item_name,
-                    "item_sku": item_sku,
-                    "status_code": status_code,
-                    "status_name": status_name,
-                    "event_time": event_time,
-                })
-        except Exception as e:
-            print("Notifications [low stock] error:", e)
-            conn.rollback()
+        if db_ok:
+            try:
+                cur.execute("""
+                    SELECT
+                        i.inventory_id,
+                        i.item_name,
+                        'LOW_STOCK',
+                        'Low Stock',
+                        COALESCE(
+                            (SELECT MAX(ial.inventory_audit_log_date)
+                             FROM inventory_audit_log ial
+                             WHERE ial.inventory_id = i.inventory_id),
+                            NOW()
+                        ) AS event_time
+                    FROM inventory i
+                    LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
+                    JOIN static_status ss ON i.item_status_id = ss.status_id
+                    WHERE ss.status_code != 'INACTIVE'
+                      AND i.total_quantity > 0
+                      AND i.total_quantity <= COALESCE(ia.reorder_qty, 10)
+                    ORDER BY event_time DESC
+                    LIMIT 10
+                """)
+                for row in cur.fetchall():
+                    inventory_id, item_name, status_code, status_name, event_time = row
+                    notifications.append({
+                        "category": "INVENTORY",
+                        "reference": str(inventory_id),
+                        "item_name": item_name,
+                        "item_sku": None,
+                        "status_code": status_code,
+                        "status_name": status_name,
+                        "event_time": event_time,
+                    })
+            except Exception as e:
+                print("Notifications [low stock] error:", e)
+                conn.rollback()
 
     finally:
         cur.close()

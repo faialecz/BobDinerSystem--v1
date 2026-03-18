@@ -36,6 +36,7 @@ class _PooledConnection:
     def __init__(self, conn, pool: psycopg2.pool.ThreadedConnectionPool):
         self._conn = conn
         self._pool = pool
+        self._broken = False
 
     def cursor(self, *args, **kwargs):
         return self._conn.cursor(*args, **kwargs)
@@ -44,19 +45,26 @@ class _PooledConnection:
         self._conn.commit()
 
     def rollback(self):
-        self._conn.rollback()
+        try:
+            self._conn.rollback()
+        except (psycopg2.InterfaceError, psycopg2.OperationalError):
+            # Connection is already closed/broken — mark it so close() discards it
+            self._broken = True
 
     def close(self):
         # Return to pool instead of closing — no other file needs to change
         if self._conn is not None:
-            self._pool.putconn(self._conn)
+            try:
+                self._pool.putconn(self._conn, close=self._broken)
+            except Exception:
+                pass
             self._conn = None
 
     def __del__(self):
         # Safety net: return connection if caller forgot to call close()
         if getattr(self, "_conn", None) is not None:
             try:
-                self._pool.putconn(self._conn)
+                self._pool.putconn(self._conn, close=getattr(self, "_broken", False))
                 self._conn = None
             except Exception:
                 pass

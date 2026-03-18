@@ -1,10 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-/* eslint-disable react-hooks/purity */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from "@/css/inventory.module.css";
-import confirmStyles from "@/css/inventory.module.css";
-import { LuPlus, LuTrash2 } from "react-icons/lu";
+import { LuPlus, LuTrash2, LuSlidersHorizontal } from "react-icons/lu";
 
 interface Supplier {
   id: number;
@@ -21,27 +19,47 @@ interface SupplierEntry {
   minOrder: string;
 }
 
+interface BrandVariant {
+  brandName: string;
+  description: string;
+  qty: string;
+  uom: string;
+  reorderPoint: string;
+  unitCost: string;
+  sellingPrice: string;
+}
+
+interface ItemGroup {
+  itemName: string;
+  brands: BrandVariant[];
+}
+
 interface AddInventoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (items: any[]) => void;
   onOpenSupplierModal: () => void;
+  onOpenUomModal: () => void;
   suppliers: Supplier[];
+  brands: { id: number; code: string; name: string }[];
   uoms: { id: number; code: string; name: string }[];
-  existingProducts?: { item_name: string; brand?: string; supplier_name?: string }[];
+  existingProducts?: { item_name: string }[];
   defaultSupplierName?: string;
 }
 
-const INITIAL_ITEM = {
-  itemName: '',
-  brand: '',
-  internalSku: '',
-  itemDescription: '',
+const INITIAL_BRAND: BrandVariant = {
+  brandName: '',
+  description: '',
   qty: '',
   uom: 'Select',
-  reorderPoint: '',
-  unitPrice: '',
+  reorderPoint: '20',
+  unitCost: '',
   sellingPrice: '',
+};
+
+const INITIAL_ITEM: ItemGroup = {
+  itemName: '',
+  brands: [{ ...INITIAL_BRAND }],
 };
 
 const INITIAL_SUPPLIER: SupplierEntry = {
@@ -60,20 +78,37 @@ const READ_ONLY_STYLE: React.CSSProperties = {
   color: '#6b7280', fontSize: '0.9rem', display: 'flex', alignItems: 'center',
 };
 
+const DISABLED_STYLE: React.CSSProperties = {
+  ...FIELD_STYLE, backgroundColor: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed',
+};
+
+function computeSkuPreview(brandName: string, itemName: string): string {
+  const words = ((brandName || itemName || '').trim().toUpperCase()).split(/\s+/).filter(w => w.length > 0);
+  let prefix = '';
+  for (let i = 0; i < Math.min(3, words.length); i++) prefix += words[i][0];
+  if (prefix.length < 3) prefix = prefix.padEnd(3, 'X');
+  return `${prefix}-AUTO`;
+}
+
+const LABEL_STYLE: React.CSSProperties = {
+  display: 'block', fontSize: '0.72rem', fontWeight: 700,
+  textTransform: 'uppercase', letterSpacing: '0.5px',
+  color: '#6b7280', marginBottom: '4px',
+};
+
 const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
-  isOpen, onClose, onSave, onOpenSupplierModal, suppliers = [], uoms = [],
+  isOpen, onClose, onSave, onOpenSupplierModal, onOpenUomModal,
+  suppliers = [], uoms = [],
   existingProducts = [], defaultSupplierName = ''
 }) => {
   const s = styles as Record<string, string>;
-  const cs = confirmStyles as Record<string, string>;
 
   const [supplierEntries, setSupplierEntries] = useState<SupplierEntry[]>([{ ...INITIAL_SUPPLIER }]);
-  const [items, setItems] = useState<any[]>([{ ...INITIAL_ITEM }]);
+  const [itemGroups, setItemGroups] = useState<ItemGroup[]>([{ ...INITIAL_ITEM, brands: [{ ...INITIAL_BRAND }] }]);
   const [dupError, setDupError] = useState('');
   const [supplierError, setSupplierError] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
-  // ── DRAG RESIZER STATE ──
   const [supplierHeight, setSupplierHeight] = useState<number | 'auto'>('auto');
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
@@ -95,8 +130,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging.current) return;
       const delta = e.clientY - dragStartY.current;
-      const newHeight = Math.min(Math.max(dragStartHeight.current + delta, 120), 520);
-      setSupplierHeight(newHeight);
+      setSupplierHeight(Math.min(Math.max(dragStartHeight.current + delta, 120), 520));
     };
     const handleMouseUp = () => {
       if (isDragging.current) {
@@ -121,13 +155,12 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
           supplierName: defaultSupplierName,
           contactPerson: sup?.contactPerson || '',
           contactNumber: sup?.contactNumber || '',
-          leadTime: '',
-          minOrder: '',
+          leadTime: '', minOrder: '',
         }]);
       } else {
         setSupplierEntries([{ ...INITIAL_SUPPLIER }]);
       }
-      setItems([{ ...INITIAL_ITEM }]);
+      setItemGroups([{ ...INITIAL_ITEM, brands: [{ ...INITIAL_BRAND }] }]);
       setDupError('');
       setSupplierError('');
       setShowCancelConfirm(false);
@@ -135,40 +168,22 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     }
   }, [isOpen, defaultSupplierName]);
 
-  // ── Check if form has any user-entered data ──
   const isFormDirty = (): boolean => {
-    const hasItemData = items.some(item =>
-      item.itemName?.trim() ||
-      item.brand?.trim() ||
-      item.itemDescription?.trim() ||
-      item.qty?.toString().trim() ||
-      item.unitPrice?.toString().trim() ||
-      item.sellingPrice?.toString().trim() ||
-      item.reorderPoint?.toString().trim() ||
-      (item.uom && item.uom !== 'Select')
+    const hasItemData = itemGroups.some(ig =>
+      ig.itemName?.trim() || ig.brands.some(b =>
+        b.brandName || b.description || b.qty || b.unitCost || b.sellingPrice || b.uom !== 'Select'
+      )
     );
-    const hasSupplierData = supplierEntries.some(e =>
-      e.supplierName?.trim() ||
-      e.leadTime?.trim() ||
-      e.minOrder?.trim()
-    );
+    const hasSupplierData = supplierEntries.some(e => e.supplierName?.trim());
     return hasItemData || hasSupplierData;
   };
 
-  // ── Handle Cancel click ──
   const handleCancelClick = () => {
-    if (isFormDirty()) {
-      setShowCancelConfirm(true);
-    } else {
-      onClose();
-    }
+    if (isFormDirty()) setShowCancelConfirm(true);
+    else onClose();
   };
 
-  const handleConfirmCancel = () => {
-    setShowCancelConfirm(false);
-    onClose();
-  };
-
+  // ── SUPPLIER HANDLERS ──
   const handleSupplierChange = (idx: number, field: keyof SupplierEntry, value: string) => {
     setSupplierError('');
     setSupplierEntries(prev => {
@@ -197,35 +212,52 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     setSupplierEntries(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleAddItem = () => setItems([...items, { ...INITIAL_ITEM }]);
-  const handleRemoveItem = (index: number) => setItems(items.filter((_, i) => i !== index));
+  // ── ITEM GROUP HANDLERS ──
+  const handleAddItemGroup = () =>
+    setItemGroups(prev => [...prev, { itemName: '', brands: [{ ...INITIAL_BRAND }] }]);
 
-  const handleItemChange = (index: number, field: string, value: string) => {
+  const handleRemoveItemGroup = (index: number) =>
+    setItemGroups(prev => prev.filter((_, i) => i !== index));
+
+  const handleItemNameChange = (index: number, value: string) => {
     setDupError('');
-    setItems(prevItems => {
-      const newItems = [...prevItems];
-      const item = { ...newItems[index], [field]: value };
-      if (field === 'itemName') {
-        const name = (value || '').trim().toUpperCase();
-        if (name.length > 0) {
-          const words = name.split(/\s+/).filter((w: string) => w.length > 0);
-          let prefix = '';
-          for (let i = 0; i < Math.min(3, words.length); i++) prefix += words[i][0];
-          if (prefix.length < 3) prefix = prefix.padEnd(3, 'X');
-          if (!item.skuSuffix) {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let suffix = '';
-            for (let i = 0; i < 3; i++) suffix += chars.charAt(Math.floor(Math.random() * chars.length));
-            item.skuSuffix = suffix;
-          }
-          item.internalSku = `${prefix}-${item.skuSuffix}`;
-        } else {
-          item.internalSku = '';
-          item.skuSuffix = undefined;
-        }
-      }
-      newItems[index] = item;
-      return newItems;
+    setItemGroups(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], itemName: value };
+      return updated;
+    });
+  };
+
+  // ── BRAND VARIANT HANDLERS ──
+  const handleBrandChange = (itemIdx: number, brandIdx: number, field: keyof BrandVariant, value: string) => {
+    setItemGroups(prev => {
+      const updated = [...prev];
+      const brands = [...updated[itemIdx].brands];
+      brands[brandIdx] = { ...brands[brandIdx], [field]: value };
+      updated[itemIdx] = { ...updated[itemIdx], brands };
+      return updated;
+    });
+  };
+
+  const handleAddBrand = (itemIdx: number) => {
+    setItemGroups(prev => {
+      const updated = [...prev];
+      updated[itemIdx] = {
+        ...updated[itemIdx],
+        brands: [...updated[itemIdx].brands, { ...INITIAL_BRAND }],
+      };
+      return updated;
+    });
+  };
+
+  const handleRemoveBrand = (itemIdx: number, brandIdx: number) => {
+    setItemGroups(prev => {
+      const updated = [...prev];
+      updated[itemIdx] = {
+        ...updated[itemIdx],
+        brands: updated[itemIdx].brands.filter((_, i) => i !== brandIdx),
+      };
+      return updated;
     });
   };
 
@@ -235,48 +267,58 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
     setSupplierError('');
 
     const normalize = (str: string) => (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const validSuppliers = supplierEntries.filter(e => e.supplierName);
+    const validItems = itemGroups.filter(ig => ig.itemName?.trim());
 
-    if (!items.some((i: any) => i.itemName?.trim())) {
+    if (!validItems.length) {
       setDupError('Please fill in at least one item name before saving.');
       return;
     }
 
-    const formNames = items
-      .filter((i: any) => i.itemName?.trim())
-      .map((i: any) => normalize(i.itemName));
-
+    const formNames = validItems.map(ig => normalize(ig.itemName));
     if (formNames.length !== new Set(formNames).size) {
-      setDupError('You have duplicate item names in your list. Each item must have a unique name.');
+      setDupError('Duplicate item names in your list. Each item must have a unique name.');
       return;
     }
 
-    const conflict = items.find((item: any) => {
-      if (!item.itemName?.trim()) return false;
-      const normalizedName = normalize(item.itemName);
-      return existingProducts.some((p: any) =>
-        normalize(p.item_name || '') === normalizedName
-      );
-    });
-
+    const conflict = validItems.find(ig =>
+      existingProducts.some(p => normalize(p.item_name || '') === normalize(ig.itemName))
+    );
     if (conflict) {
-      setDupError(`"${conflict.itemName}" already exists in inventory. Each item must have a unique name.`);
+      setDupError(`"${conflict.itemName}" already exists in inventory.`);
       return;
     }
 
-    const mergedItems = items.map(item => ({
-      ...item,
-      supplierName: validSuppliers[0]?.supplierName || '',
-      leadTime: validSuppliers[0]?.leadTime || '',
-      minOrder: validSuppliers[0]?.minOrder || '',
-      suppliers: validSuppliers.map((e, i) => ({
-        supplierName: e.supplierName,
-        leadTime: e.leadTime,
-        minOrder: e.minOrder,
+    for (const ig of validItems) {
+      const brandsWithUom = ig.brands.filter(b => b.uom && b.uom !== 'Select');
+      if (!brandsWithUom.length) {
+        setDupError(`Please select a Unit of Measure for at least one brand under "${ig.itemName}".`);
+        return;
+      }
+    }
+
+    const validSuppliers = supplierEntries.filter(e => e.supplierName);
+
+    const payload = validItems.map(item => ({
+      itemName: item.itemName,
+      brands: item.brands.filter(b => b.uom && b.uom !== 'Select').map(b => ({
+        brand_name: b.brandName || 'No Brand',
+        sku: null,
+        uom: b.uom,
+        qty: Number(b.qty) || 0,
+        unit_price: Number(b.unitCost) || 0,
+        selling_price: Number(b.sellingPrice) || 0,
+        itemDescription: b.description,
+        reorderPoint: Number(b.reorderPoint) || 0,
+      })),
+      suppliers: validSuppliers.map((sup, i) => ({
+        supplierName: sup.supplierName,
+        leadTime: Number(sup.leadTime) || 0,
+        minOrder: Number(sup.minOrder) || 0,
         isPrimary: i === 0,
       })),
     }));
-    onSave(mergedItems);
+
+    onSave(payload);
   };
 
   if (!isOpen) return null;
@@ -284,29 +326,28 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
   return (
     <div className={s.modalOverlay} style={{ zIndex: 1000 }}>
       <div className={s.modalContent} style={{
-        maxHeight: '95vh', width: '900px', display: 'flex',
+        maxHeight: '95vh', width: '820px', display: 'flex',
         flexDirection: 'column', padding: 0, borderRadius: '12px', overflow: 'hidden'
       }}>
 
-        {/* --- HEADER --- */}
+        {/* HEADER */}
         <div className={s.modalHeader} style={{ padding: '20px 24px', backgroundColor: '#fff', borderBottom: '1px solid #eaeaea', flexShrink: 0 }}>
           <div className={s.modalTitleGroup}>
             <h2 className={s.title} style={{ fontSize: '1.25rem', marginBottom: '4px' }}>Add Inventory Items</h2>
-            <p className={s.subText}>Suppliers entered here will apply to all items below.</p>
+            <p className={s.subText}>Suppliers entered here will apply to all items and brands below.</p>
           </div>
         </div>
 
         <form ref={formRef} onSubmit={handleSubmit} style={{
-          display: 'flex', flexDirection: 'column', flex: 1,
-          overflow: 'auto', backgroundColor: '#f9fafb', minHeight: 0
+          display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', backgroundColor: '#f9fafb', minHeight: 0
         }}>
 
-          {/* --- SUPPLIER SECTION --- */}
+          {/* ── SUPPLIER SECTION ── */}
           <div ref={supplierSectionRef} style={{
             height: supplierHeight === 'auto' ? 'auto' : `${supplierHeight}px`,
             minHeight: '120px', flexShrink: 0, padding: '20px 24px',
             backgroundColor: '#fff', borderBottom: '1px solid #eaeaea',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+            overflowY: supplierHeight !== 'auto' ? 'auto' : undefined,
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>Supplier Details</h4>
@@ -314,11 +355,8 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 <span onClick={onOpenSupplierModal} style={{ cursor: 'pointer', fontSize: '0.82rem', color: '#007bff', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <LuPlus size={13} /> New Supplier
                 </span>
-                <button
-                  type="button"
-                  onClick={handleAddSupplier}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '6px', border: '1px solid #dbeafe', backgroundColor: '#eff6ff', color: '#1e40af', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
-                >
+                <button type="button" onClick={handleAddSupplier}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '6px', border: '1px solid #dbeafe', backgroundColor: '#eff6ff', color: '#1e40af', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
                   <LuPlus size={13} /> Add Supplier
                 </button>
               </div>
@@ -326,8 +364,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
 
             {supplierError && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
-                <span style={{ fontSize: '1rem' }}>⚠</span>
-                {supplierError}
+                <span>⚠</span> {supplierError}
               </div>
             )}
 
@@ -347,11 +384,7 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Supplier Name</label>
-                    <select
-                      style={{ ...FIELD_STYLE, borderColor: supplierError && entry.supplierName === '' ? '#fca5a5' : '#9ca3af' }}
-                      value={entry.supplierName}
-                      onChange={(e) => handleSupplierChange(idx, 'supplierName', e.target.value)}
-                    >
+                    <select style={{ ...FIELD_STYLE }} value={entry.supplierName} onChange={e => handleSupplierChange(idx, 'supplierName', e.target.value)}>
                       <option value="">Select Supplier</option>
                       {suppliers.map((sup, i) => {
                         const usedElsewhere = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
@@ -365,11 +398,11 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Lead Time (Days)</label>
-                    <input type="number" style={{ ...FIELD_STYLE }} value={entry.leadTime} placeholder="e.g. 7" onChange={(e) => handleSupplierChange(idx, 'leadTime', e.target.value)} />
+                    <input type="number" style={{ ...FIELD_STYLE }} value={entry.leadTime} placeholder="e.g. 7" onChange={e => handleSupplierChange(idx, 'leadTime', e.target.value)} />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, color: '#555', marginBottom: '4px' }}>Min Order (MOQ)</label>
-                    <input type="number" style={{ ...FIELD_STYLE }} value={entry.minOrder} placeholder="e.g. 50" onChange={(e) => handleSupplierChange(idx, 'minOrder', e.target.value)} />
+                    <input type="number" style={{ ...FIELD_STYLE }} value={entry.minOrder} placeholder="e.g. 50" onChange={e => handleSupplierChange(idx, 'minOrder', e.target.value)} />
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -386,141 +419,217 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
             ))}
           </div>
 
-          {/* ── DRAG HANDLE ── */}
-          <div
-            onMouseDown={handleMouseDown}
-            style={{ height: '10px', flexShrink: 0, backgroundColor: '#e2e8f0', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color 0.15s' }}
+          {/* DRAG HANDLE */}
+          <div onMouseDown={handleMouseDown}
+            style={{ height: '10px', flexShrink: 0, backgroundColor: '#e2e8f0', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#94a3b8')}
             onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#e2e8f0')}
-            title="Drag to resize"
-          >
+            title="Drag to resize">
             <div style={{ display: 'flex', gap: '4px' }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />
-              ))}
+              {[0, 1, 2].map(i => <div key={i} style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#94a3b8' }} />)}
             </div>
           </div>
 
-          {/* --- ITEM LIST --- */}
-          <div style={{ flex: 1 }}>
-            {items.map((item, index) => (
-              <div key={index} style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px', marginBottom: '20px', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
+          {/* ── ITEMS SECTION ── */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+
+            {itemGroups.map((item, itemIdx) => (
+              <div key={itemIdx} style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px', marginBottom: '20px' }}>
+
+                {/* Item Group header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#111827', fontWeight: 600, fontSize: '1rem' }}>
-                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>{index + 1}</div>
-                    Item Details
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>{itemIdx + 1}</div>
+                    Item Group
                   </div>
-                  {items.length > 1 && (
-                    <button type="button" onClick={() => handleRemoveItem(index)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '4px' }}>
+                  {itemGroups.length > 1 && (
+                    <button type="button" onClick={() => handleRemoveItemGroup(itemIdx)}
+                      style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <LuTrash2 size={14} /> Remove
                     </button>
                   )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>Item Name</label>
-                    <input style={{ ...FIELD_STYLE }} value={item.itemName} onChange={(e) => handleItemChange(index, 'itemName', e.target.value)} placeholder="e.g. Bond Paper A4" />
-                  </div>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>Brand</label>
-                    <input style={{ ...FIELD_STYLE }} value={item.brand} onChange={(e) => handleItemChange(index, 'brand', e.target.value)} />
-                  </div>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>SKU (Auto)</label>
-                    <input style={{ width: '100%', height: '38px', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', backgroundColor: '#f3f4f6', color: '#6b7280', fontSize: '0.95rem', outline: 'none' }} value={item.internalSku} readOnly />
-                  </div>
+
+                {/* ITEM NAME */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ ...LABEL_STYLE }}>Item Name <span style={{ color: '#ef4444' }}>*</span></label>
+                  <input
+                    style={{ ...FIELD_STYLE }}
+                    value={item.itemName}
+                    onChange={e => handleItemNameChange(itemIdx, e.target.value)}
+                    placeholder="e.g. Bond Paper A4"
+                  />
                 </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>Description</label>
-                    <input style={{ ...FIELD_STYLE }} value={item.itemDescription} onChange={(e) => handleItemChange(index, 'itemDescription', e.target.value)} placeholder="Brief details..." />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>Quantity</label>
-                    <input type="number" style={{ ...FIELD_STYLE }} value={item.qty} onChange={(e) => handleItemChange(index, 'qty', e.target.value)} />
-                  </div>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>Unit (UOM)</label>
-                    <select style={{ ...FIELD_STYLE }} value={item.uom} onChange={(e) => handleItemChange(index, 'uom', e.target.value)}>
-                      <option value="Select">Select</option>
-                      {uoms.map((u) => (<option key={u.id} value={u.code}>{u.name} ({u.code})</option>))}
-                    </select>
-                  </div>
-                  <div className={s.formGroup}>
-                    <label className={s.miniLabel}>Reorder Point</label>
-                    <input type="number" style={{ ...FIELD_STYLE, border: '1px solid #fcd34d' }} value={item.reorderPoint} onChange={(e) => handleItemChange(index, 'reorderPoint', e.target.value)} />
-                  </div>
-                </div>
-                <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                  <h5 style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#1e40af', fontWeight: 600 }}>Pricing</h5>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <div className={s.formGroup}>
-                      <label className={s.miniLabel}>Cost Price</label>
-                      <input type="number" style={{ ...FIELD_STYLE }} value={item.unitPrice} onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)} placeholder="0.00" />
+
+                {/* BRAND DETAIL sub-cards */}
+                {item.brands.map((brand, brandIdx) => (
+                  <div key={brandIdx} style={{ border: '2px dashed #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '12px', backgroundColor: '#fafafa' }}>
+
+                    {/* Brand header row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151' }}>
+                        {brandIdx + 1} Brand Detail
+                      </span>
+                      {item.brands.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveBrand(itemIdx, brandIdx)}
+                          style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}>
+                          <LuTrash2 size={13} />
+                        </button>
+                      )}
                     </div>
-                    <div className={s.formGroup}>
-                      <label className={s.miniLabel}>Selling Price</label>
-                      <input type="number" style={{ ...FIELD_STYLE }} value={item.sellingPrice} onChange={(e) => handleItemChange(index, 'sellingPrice', e.target.value)} placeholder="0.00" />
+
+                    {/* Row: BRAND NAME | SKU (AUTO) */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>Brand Name</label>
+                        <input
+                          style={{ ...FIELD_STYLE }}
+                          value={brand.brandName}
+                          onChange={e => handleBrandChange(itemIdx, brandIdx, 'brandName', e.target.value)}
+                          placeholder="e.g. 3M"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>SKU (Auto)</label>
+                        <input
+                          style={{ ...DISABLED_STYLE }}
+                          value={brand.brandName || item.itemName ? computeSkuPreview(brand.brandName, item.itemName) : ''}
+                          readOnly
+                          placeholder="Generated after save"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row: DESCRIPTION */}
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={{ ...LABEL_STYLE }}>Description</label>
+                      <input
+                        style={{ ...FIELD_STYLE }}
+                        value={brand.description}
+                        onChange={e => handleBrandChange(itemIdx, brandIdx, 'description', e.target.value)}
+                        placeholder="Specific brand details..."
+                      />
+                    </div>
+
+                    {/* Row: QUANTITY | UNIT (UOM) | REORDER POINT */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '10px' }}>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>Quantity</label>
+                        <input
+                          type="number" min="0"
+                          style={{ ...FIELD_STYLE }}
+                          value={brand.qty}
+                          onChange={e => handleBrandChange(itemIdx, brandIdx, 'qty', e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>Unit (UOM)</label>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <select
+                            style={{ ...FIELD_STYLE, flex: 1 }}
+                            value={brand.uom}
+                            onChange={e => handleBrandChange(itemIdx, brandIdx, 'uom', e.target.value)}
+                          >
+                            <option value="Select">Select</option>
+                            {uoms.map(u => <option key={u.id} value={u.code}>{u.name} ({u.code})</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={onOpenUomModal}
+                            title="Manage Units of Measure"
+                            style={{ flexShrink: 0, width: '34px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #d1d5db', borderRadius: '6px', backgroundColor: '#f9fafb', cursor: 'pointer', color: '#6b7280' }}>
+                            <LuSlidersHorizontal size={15} />
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>Reorder Point</label>
+                        <input
+                          type="number" min="0"
+                          style={{ ...FIELD_STYLE, border: '1px solid #fcd34d' }}
+                          value={brand.reorderPoint}
+                          onChange={e => handleBrandChange(itemIdx, brandIdx, 'reorderPoint', e.target.value)}
+                          placeholder="20"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row: UNIT COST | SELLING PRICE */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>Unit Cost</label>
+                        <input
+                          type="number" min="0" step="0.01"
+                          style={{ ...FIELD_STYLE }}
+                          value={brand.unitCost}
+                          onChange={e => handleBrandChange(itemIdx, brandIdx, 'unitCost', e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label style={{ ...LABEL_STYLE }}>Selling Price</label>
+                        <input
+                          type="number" min="0" step="0.01"
+                          style={{ ...FIELD_STYLE }}
+                          value={brand.sellingPrice}
+                          onChange={e => handleBrandChange(itemIdx, brandIdx, 'sellingPrice', e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
+
+                {/* + Add Another Brand */}
+                <button
+                  type="button"
+                  onClick={() => handleAddBrand(itemIdx)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <LuPlus size={14} /> Add Another Brand
+                </button>
               </div>
             ))}
 
-            <button
-              type="button"
-              onClick={handleAddItem}
+            {/* + Add New Item Category */}
+            <button type="button" onClick={handleAddItemGroup}
               style={{ width: '100%', padding: '12px', border: '2px dashed #e5e7eb', borderRadius: '8px', backgroundColor: '#fff', color: '#4b5563', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '2rem' }}
-              onMouseOver={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
-              onMouseOut={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-            >
-              <LuPlus /> Add Another Item
+              onMouseOver={e => e.currentTarget.style.borderColor = '#3b82f6'}
+              onMouseOut={e => e.currentTarget.style.borderColor = '#e5e7eb'}>
+              <LuPlus /> Add New Item Category
             </button>
           </div>
 
-          {/* --- FOOTER --- */}
-          <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 0, flexShrink: 0 }}>
+          {/* FOOTER */}
+          <div className={s.modalFooter} style={{ padding: '20px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
             {dupError && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500 }}>
-                <span style={{ fontSize: '1rem' }}>⚠</span>
-                {dupError}
+                <span>⚠</span> {dupError}
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button type="button" onClick={handleCancelClick} className={s.cancelBtn}>Cancel</button>
-              <button type="submit" className={s.saveBtn}>Save All Items</button>
+              <button type="submit" className={s.saveBtn} style={{ backgroundColor: '#111827', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer' }}>
+                Save All Items
+              </button>
             </div>
           </div>
         </form>
       </div>
 
-      {/* ── Cancel Confirmation Dialog ── */}
+      {/* Cancel Confirmation */}
       {showCancelConfirm && (
-        <div className={cs.confirmOverlay} onClick={() => setShowCancelConfirm(false)}>
-          <div className={cs.confirmBox} onClick={e => e.stopPropagation()}>
-
-            <div className={cs.confirmIconWrap}>
-              <div className={cs.confirmIcon}>⚠️</div>
+        <div className={s.confirmOverlay} onClick={() => setShowCancelConfirm(false)}>
+          <div className={s.confirmBox} onClick={e => e.stopPropagation()}>
+            <div className={s.confirmIconWrap}><div className={s.confirmIcon}>⚠️</div></div>
+            <div className={s.confirmTextWrap}>
+              <p className={s.confirmTitle}>Discard Changes?</p>
+              <p className={s.confirmSubtext}>All entered information will be lost.</p>
             </div>
-
-            <div className={cs.confirmTextWrap}>
-              <p className={cs.confirmTitle}>Discard Changes?</p>
-              <p className={cs.confirmSubtext}>
-                You have unsaved data in this form. If you cancel now, all entered information will be lost.
-              </p>
+            <div className={s.confirmButtons}>
+              <button className={s.keepEditingBtn} onClick={() => setShowCancelConfirm(false)}>Keep Editing</button>
+              <button className={s.discardBtn} onClick={() => { setShowCancelConfirm(false); onClose(); }}>Yes, Discard</button>
             </div>
-
-            <div className={cs.confirmButtons}>
-              <button className={cs.keepEditingBtn} onClick={() => setShowCancelConfirm(false)}>
-                Keep Editing
-              </button>
-              <button className={cs.discardBtn} onClick={handleConfirmCancel}>
-                Yes, Discard
-              </button>
-            </div>
-
           </div>
         </div>
       )}

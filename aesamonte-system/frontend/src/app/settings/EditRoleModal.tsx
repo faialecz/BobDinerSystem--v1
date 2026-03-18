@@ -93,7 +93,7 @@ export default function EditRoleModal({
 
         const init: Record<string, GranularPerm> = {};
         MODULES.forEach(m => {
-          init[m.key] = roleData.granular_permissions?.[m.key] ?? { ...DEFAULT_PERM };
+          init[m.key] = { ...DEFAULT_PERM, ...(roleData.granular_permissions?.[m.key] ?? {}) };
         });
         setPerms(init);
       } catch {
@@ -265,7 +265,7 @@ export default function EditRoleModal({
                             <input
                               type="checkbox"
                               className={styles.permCheck}
-                              checked={mp[a.key]}
+                              checked={mp[a.key] ?? false}
                               onChange={e => togglePerm(m.key, a.key, e.target.checked)}
                             />
                           </span>

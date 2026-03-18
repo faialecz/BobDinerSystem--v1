@@ -79,11 +79,11 @@ def orders_list():
                     json_build_object(
                         'inventory_id', od.inventory_id,
                         'order_quantity', od.order_quantity,
-                        'available_quantity', i.item_quantity,
+                        'available_quantity', COALESCE((SELECT SUM(ib.item_qty) FROM inventory_brands ib WHERE ib.inventory_id = i.inventory_id), 0),
                         'item_name', i.item_name,
-                        'description', i.item_description,
+                        'description', (SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
                         'amount', od.order_total,
-                        'uom', u.uom_code
+                        'uom', (SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1)
                     )
                 ) FILTER (WHERE od.order_id IS NOT NULL), '[]') AS items_json
             FROM order_transaction ot
@@ -92,7 +92,6 @@ def orders_list():
             LEFT JOIN static_status pm ON ot.payment_method_id = pm.status_id
             LEFT JOIN order_details od ON od.order_id = ot.order_id
             LEFT JOIN inventory i ON i.inventory_id = od.inventory_id
-            LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
             WHERE sl.status_scope = 'ORDER_STATUS'
             GROUP BY 
                 ot.order_id, 
@@ -293,27 +292,32 @@ def update_order(order_id):
             cur.execute("SELECT inventory_id, order_quantity FROM order_details WHERE order_id = %s", (order_id,))
             old_items = cur.fetchall()
             for old_inv_id, old_qty in old_items:
-                # Add the old quantity back into the inventory
+                # Add the old quantity back into the first brand variant
                 cur.execute("""
-                    UPDATE inventory 
-                    SET item_quantity = item_quantity + %s 
-                    WHERE inventory_id = %s
-                """, (old_qty, old_inv_id))
-                
-                # Automatically restore status to 'Available' if it had hit 0 previously
+                    UPDATE inventory_brands
+                    SET item_qty = item_qty + %s
+                    WHERE inventory_id = %s AND brand_id = (
+                        SELECT brand_id FROM inventory_brands
+                        WHERE inventory_id = %s ORDER BY brand_id LIMIT 1
+                    )
+                """, (old_qty, old_inv_id, old_inv_id))
+
+                # Automatically restore status to 'Available' if total > 0
                 cur.execute("""
                     UPDATE inventory
                     SET item_status_id = (
-                        SELECT status_id FROM static_status 
-                        WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'AVAILABLE' 
+                        SELECT status_id FROM static_status
+                        WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'AVAILABLE'
                         LIMIT 1
                     )
-                    WHERE inventory_id = %s AND item_quantity > 0 AND item_status_id = (
-                        SELECT status_id FROM static_status 
-                        WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK' 
+                    WHERE inventory_id = %s
+                      AND COALESCE((SELECT SUM(item_qty) FROM inventory_brands WHERE inventory_id = %s), 0) > 0
+                      AND item_status_id = (
+                        SELECT status_id FROM static_status
+                        WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK'
                         LIMIT 1
                     )
-                """, (old_inv_id,))
+                """, (old_inv_id, old_inv_id))
             # =======================================================
 
             # FIX STEP 2: DELETE OLD ITEMS
@@ -354,29 +358,31 @@ def update_order(order_id):
                         VALUES (%s, %s, %s, %s, %s)
                     """, (order_id, inv_id, qty, unit_price, amount))
 
-                    # Deduct the new quantities from the inventory table
+                    # Deduct the new quantities from the first brand variant
                     cur.execute("""
-                        UPDATE inventory
-                        SET item_quantity = item_quantity - %s
-                        WHERE inventory_id = %s
-                        RETURNING item_quantity
-                    """, (qty, inv_id))
-                    
-                    result = cur.fetchone()
-                    
-                    if result:
-                        new_qty = result[0]
-                        # Automatically set status to "Out of Stock" if it drops to 0
-                        if new_qty <= 0:
-                            cur.execute("""
-                                UPDATE inventory
-                                SET item_status_id = (
-                                    SELECT status_id FROM static_status 
-                                    WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK' 
-                                    LIMIT 1
-                                )
-                                WHERE inventory_id = %s
-                            """, (inv_id,))
+                        UPDATE inventory_brands
+                        SET item_qty = item_qty - %s
+                        WHERE inventory_id = %s AND brand_id = (
+                            SELECT brand_id FROM inventory_brands
+                            WHERE inventory_id = %s ORDER BY brand_id LIMIT 1
+                        )
+                    """, (qty, inv_id, inv_id))
+
+                    cur.execute("""
+                        SELECT COALESCE(SUM(item_qty), 0) FROM inventory_brands WHERE inventory_id = %s
+                    """, (inv_id,))
+                    new_qty = cur.fetchone()[0]
+                    # Automatically set status to "Out of Stock" if total drops to 0
+                    if new_qty <= 0:
+                        cur.execute("""
+                            UPDATE inventory
+                            SET item_status_id = (
+                                SELECT status_id FROM static_status
+                                WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK'
+                                LIMIT 1
+                            )
+                            WHERE inventory_id = %s
+                        """, (inv_id,))
 
         if new_status_id:
             cur.execute("UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s", (new_status_id, order_id))
@@ -531,30 +537,32 @@ def add_order():
                     VALUES (%s, %s, %s, %s, %s)
                 """, (order_id, inv_id, qty, unit_price, amount))
 
-                # Deduct from Inventory Table Automatically
+                # Deduct from the first brand variant automatically
                 cur.execute("""
-                    UPDATE inventory
-                    SET item_quantity = item_quantity - %s
-                    WHERE inventory_id = %s
-                    RETURNING item_quantity
-                """, (qty, inv_id))
-                
-                result = cur.fetchone()
-                
-                if result:
-                    new_qty = result[0]
-                    
-                    # Automatically set status to "Out of Stock" if it drops to 0
-                    if new_qty <= 0:
-                        cur.execute("""
-                            UPDATE inventory
-                            SET item_status_id = (
-                                SELECT status_id FROM static_status 
-                                WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK' 
-                                LIMIT 1
-                            )
-                            WHERE inventory_id = %s
-                        """, (inv_id,))
+                    UPDATE inventory_brands
+                    SET item_qty = item_qty - %s
+                    WHERE inventory_id = %s AND brand_id = (
+                        SELECT brand_id FROM inventory_brands
+                        WHERE inventory_id = %s ORDER BY brand_id LIMIT 1
+                    )
+                """, (qty, inv_id, inv_id))
+
+                cur.execute("""
+                    SELECT COALESCE(SUM(item_qty), 0) FROM inventory_brands WHERE inventory_id = %s
+                """, (inv_id,))
+                new_qty = cur.fetchone()[0]
+
+                # Automatically set status to "Out of Stock" if total drops to 0
+                if new_qty <= 0:
+                    cur.execute("""
+                        UPDATE inventory
+                        SET item_status_id = (
+                            SELECT status_id FROM static_status
+                            WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK'
+                            LIMIT 1
+                        )
+                        WHERE inventory_id = %s
+                    """, (inv_id,))
 
         conn.commit()
         return jsonify({"message": "Order added successfully!", "order_id": order_id}), 201

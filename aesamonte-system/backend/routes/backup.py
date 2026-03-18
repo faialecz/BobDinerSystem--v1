@@ -91,10 +91,16 @@ def _build_zip_bytes():
     try:
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
             cur.execute("""
-                SELECT i.inventory_id, i.item_name, i.item_description, i.item_sku, i.brand,
-                       i.item_quantity, u.uom_code, s.status_name, i.item_unit_price, i.item_selling_price
+                SELECT i.inventory_id, i.item_name,
+                       COALESCE((SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_description,
+                       COALESCE((SELECT ib2.item_sku FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_sku,
+                       COALESCE((SELECT b2.brand_name FROM inventory_brands ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
+                       i.total_quantity AS item_quantity,
+                       COALESCE((SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom_code,
+                       s.status_name,
+                       COALESCE((SELECT ib2.item_unit_price FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_unit_price,
+                       COALESCE((SELECT ib2.item_selling_price FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_selling_price
                 FROM inventory i
-                LEFT JOIN unit_of_measure u ON i.unit_of_measure = u.uom_id
                 JOIN static_status s ON i.item_status_id = s.status_id
                 ORDER BY i.inventory_id
             """)
@@ -314,26 +320,43 @@ def restore_inventory(cur, rows):
         st_res = cur.fetchone()
         status_id = st_res[0] if st_res else 1
 
+        # inventory table only holds item_name and item_status_id
         cur.execute("""
-            INSERT INTO inventory (inventory_id, item_name, item_description, item_sku, brand,
-                item_quantity, unit_of_measure, item_unit_price, item_selling_price, item_status_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO inventory (inventory_id, item_name, item_status_id)
+            VALUES (%s, %s, %s)
             ON CONFLICT (inventory_id) DO UPDATE SET
                 item_name = EXCLUDED.item_name,
-                item_description = EXCLUDED.item_description,
-                item_sku = EXCLUDED.item_sku,
-                brand = EXCLUDED.brand,
-                item_quantity = EXCLUDED.item_quantity,
-                unit_of_measure = EXCLUDED.unit_of_measure,
-                item_unit_price = EXCLUDED.item_unit_price,
-                item_selling_price = EXCLUDED.item_selling_price,
                 item_status_id = EXCLUDED.item_status_id
-        """, (
-            inv_id, row.get('item_name'), row.get('item_description'), row.get('item_sku'),
-            row.get('brand'), int(row.get('item_quantity', 0) or 0), uom_id,
-            float(row.get('item_unit_price', 0) or 0), float(row.get('item_selling_price', 0) or 0),
-            status_id
-        ))
+        """, (inv_id, row.get('item_name'), status_id))
+
+        # Restore brand variant if a matching brand exists
+        brand_name = row.get('brand', '').strip()
+        if brand_name and uom_id:
+            cur.execute("SELECT brand_id FROM brand WHERE brand_name = %s LIMIT 1", (brand_name,))
+            brand_res = cur.fetchone()
+            if brand_res:
+                brand_id = brand_res[0]
+                cur.execute("""
+                    INSERT INTO inventory_brands
+                        (inventory_id, brand_id, item_sku, item_unit_price, item_selling_price,
+                         item_qty, unit_of_measure, item_description, item_status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (inventory_id, brand_id) DO UPDATE SET
+                        item_unit_price = EXCLUDED.item_unit_price,
+                        item_selling_price = EXCLUDED.item_selling_price,
+                        item_qty = EXCLUDED.item_qty,
+                        unit_of_measure = EXCLUDED.unit_of_measure,
+                        item_description = EXCLUDED.item_description
+                """, (
+                    inv_id, brand_id,
+                    row.get('item_sku') or None,
+                    float(row.get('item_unit_price', 0) or 0),
+                    float(row.get('item_selling_price', 0) or 0),
+                    int(row.get('item_quantity', 0) or 0),
+                    uom_id,
+                    row.get('item_description', ''),
+                    status_id,
+                ))
         count += 1
     return count
 
