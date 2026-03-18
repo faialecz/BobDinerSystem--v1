@@ -495,33 +495,39 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
                       { label: 'UOM', key: 'uom' },
                       { label: 'STATUS', key: 'status' },
                     ].map(col => (
-                      <th key={col.key} onClick={() => requestSort(col.key as keyof Product)}>
-                        <div className={s.sortableHeader}>
-                          <span>{col.label}</span>
-                          <div className={s.sortIconsStack}>
-                            <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
-                            <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
-                          </div>
-                        </div>
-                      </th>
-                    ))}
+                            <th
+                              key={col.label}
+                              onClick={() => col.key && requestSort(col.key as keyof Product)}
+                              style={{ cursor: col.key ? 'pointer' : 'default', whiteSpace: 'nowrap' }}
+                            >
+                              <div className={s.sortableHeader}>
+                                <span>{col.label}</span>
+                                {col.key && (
+                                  <div className={s.sortIconsStack}>
+                                    <LuChevronUp className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''} />
+                                    <LuChevronDown className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''} />
+                                  </div>
+                                )}
+                              </div>
+                            </th>
+                          ))}
                     <th className={s.actionHeader}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedProducts.map(p => (
-                    <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer' }}>
-                      <td>{p.id}</td>
+                  <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer', height: '42px' }}>  <td>{p.id}</td>
                       <td>{p.item_name}</td>
-                      <td style={{ fontSize: '0.83rem', color: '#374151' }}>
-                        {(p.brands || []).length === 0 ? (
-                          <span style={{ color: '#9ca3af' }}>—</span>
-                        ) : (
-                          (p.brands || []).map((b, i) => (
-                            <span key={i}>
-                              {i > 0 && <span style={{ color: '#d1d5db', margin: '0 4px' }}>•</span>}
-                              {displayBrandName(b.brand_name)}
-                            </span>
+                     <td style={{ fontSize: '0.83rem', color: '#374151' }}>
+                          {(p.brands || []).length === 0 ? (
+                            <span style={{ color: '#9ca3af' }}>—</span>
+                          ) : (
+                          [...new Set((p.brands || []).map(b => displayBrandName(b.brand_name)))]
+                            .map((name, i, arr) => (
+                              <span key={i}>
+                                {i > 0 && <span style={{ color: '#d1d5db', margin: '0 4px' }}>•</span>}
+                                {name}
+                              </span>
                           ))
                         )}
                       </td>
