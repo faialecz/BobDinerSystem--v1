@@ -60,7 +60,7 @@ export default function AddRoleModal({
 
   const toggleRow = (module: string) => {
     const allOn = ACTIONS.every(a => perms[module]?.[a.key]);
-    const next: GranularPerm = { can_view: !allOn, can_create: !allOn, can_edit: !allOn, can_archive: !allOn };
+    const next: GranularPerm = { can_view: !allOn, can_create: !allOn, can_edit: !allOn, can_archive: !allOn, can_export: !allOn };
     setPerms(prev => ({ ...prev, [module]: next }));
   };
 
