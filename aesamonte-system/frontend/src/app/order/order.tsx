@@ -94,8 +94,18 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
     } catch (err) { console.error('Error fetching orders:', err); }
   };
 
+        const fetchSummary = async () => {
+        const r = await fetch('/api/orders/summary');
+        if (r.ok) {
+          const d = await r.json();
+          if (d && d.shippedToday) setSummary(d);
+        }
+      };
+
+
   useEffect(() => {
     fetchOrders();
+    fetchSummary
     fetch('/api/orders/summary').then(r => r.ok ? r.json() : null).then(d => { if (d && d.shippedToday) setSummary(d); });
     const fetchDropdowns = async () => {
       try {
@@ -125,7 +135,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
           dateTime: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
         setToastTitle("Order Submitted!"); setToastMessage("Your new order has been successfully added.");
-        setIsError(false); setShowToast(true); setShowAddModal(false); fetchOrders();
+        setIsError(false); setShowToast(true); setShowAddModal(false); fetchOrders(); fetchSummary();
       } else {
         const errData = await response.json();
         setToastTitle("Oops!"); setToastMessage(errData.error || "Failed to save order.");
@@ -135,13 +145,28 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
   };
 
   const handleUpdateSave = async (updatedOrder: any) => {
+  const prevStatus = selectedOrderForEdit?.status?.toUpperCase();
+  const newStatus  = updatedOrder.status?.toUpperCase();
+
+  if (prevStatus !== 'CANCELLED' && newStatus === 'CANCELLED') {
+    setSummary(prev => prev ? {
+      ...prev,
+      cancelled: { current: prev.cancelled.current + 1 }
+    } : prev);
+  } else if (prevStatus === 'CANCELLED' && newStatus !== 'CANCELLED') {
+    setSummary(prev => prev ? {
+      ...prev,
+      cancelled: { current: Math.max(0, prev.cancelled.current - 1) }
+    } : prev);
+  }
+  // ──────────────────────────────────────────────────
     try {
       const response = await fetch(`/api/orders/update/${updatedOrder.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOrder),
       });
       if (response.ok) {
         setToastTitle("Updated!"); setToastMessage("The order record has been successfully updated.");
-        setIsError(false); setSubmittedData(null); setShowToast(true); setShowEditModal(false); fetchOrders();
+        setIsError(false); setSubmittedData(null); setShowToast(true); setShowEditModal(false); fetchOrders(); fetchSummary
       } else { setToastTitle("Update Failed"); setToastMessage("Failed to update order."); setIsError(true); setShowToast(true); }
     } catch (err) { console.error(err); }
   };
@@ -155,7 +180,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
         setSubmittedData(null);
         setToastTitle(apiData.is_archived ? "Archived!" : "Restored!");
         setToastMessage(apiData.is_archived ? "Order moved to Archive" : "Order restored from Archive");
-        setIsError(false); setShowToast(true); setOpenMenuId(null); fetchOrders();
+        setIsError(false); setShowToast(true); setOpenMenuId(null); fetchOrders(); fetchSummary();
       } else {
         const errorData = await response.json();
         setSubmittedData(null); setToastTitle("Failed"); setToastMessage(`Failed: ${errorData.error}`); setIsError(true); setShowToast(true);
