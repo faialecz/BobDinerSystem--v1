@@ -204,6 +204,41 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
     return pages
   }
 
+  const renderGrowthPill = (value: number) => {
+    let icon = '—'; // Neutral dash
+    let textColor = '#ca8a04'; // Yellow-600
+    let bgColor = '#fef08a'; // Yellow-200
+
+    if (value > 0) {
+      icon = '↗';
+      textColor = '#15803d'; // Green-700
+      bgColor = '#dcfce7'; // Green-100
+    } else if (value < 0) {
+      icon = '↘';
+      textColor = '#b91c1c'; // Red-700
+      bgColor = '#fee2e2'; // Red-100
+    }
+
+    // Use Math.abs so it shows "↘ 92.6%" instead of "↘ -92.6%"
+    const displayValue = Math.abs(value);
+
+    return (
+      <span 
+        className={s.pill} 
+        style={{ 
+          color: textColor, 
+          backgroundColor: bgColor,
+          fontWeight: 600,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px'
+        }}
+      >
+        {icon} {displayValue}%
+      </span>
+    );
+  }
+
   return (
     <div className={s.container}>
       <TopHeader role={role} onLogout={onLogout} />
@@ -250,8 +285,13 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
           <section className={s.statCard}>
             <p className={s.cardTitle}>Total Sales</p>
             <h2 className={s.bigNumber}>₱ {safeSummary.totalSales.toLocaleString()}</h2>
-            <div className={s.cardFooter}><span className={s.subText}>vs last month</span><span className={s.pill}>↗ {safeSummary.totalSalesChange}%</span></div>
+            <div className={s.cardFooter}>
+              <span className={s.subText}>vs last month</span>
+              {/* Replaced static pill with dynamic function */}
+              {renderGrowthPill(safeSummary.totalSalesChange)}
+            </div>
           </section>
+          
           <section className={s.statCard}>
             <p className={s.cardTitle}>Sales Report</p>
             <div className={s.list}>
@@ -260,10 +300,15 @@ export default function SalesPage({ role = 'Admin', department, employeeId = 0, 
               <div className={`${s.listRow} ${s.altRow}`}><span>Yearly</span><span className={s.blue}>₱ {safeSummary.yearlySales.toLocaleString()}</span></div>
             </div>
           </section>
+          
           <section className={s.statCard}>
             <p className={s.cardTitle}>Top Client</p>
             <h2 className={s.bigNumber}>₱ {safeSummary.topClientSales.toLocaleString()}</h2>
-            <div className={s.cardFooter}><span className={s.subText}>{safeSummary.topClientName}</span><span className={s.pill}>↗ {safeSummary.topClientChange}%</span></div>
+            <div className={s.cardFooter}>
+              <span className={s.subText}>{safeSummary.topClientName}</span>
+              {/* ✅ Replaced static pill with dynamic function */}
+              {renderGrowthPill(safeSummary.topClientChange)}
+            </div>
           </section>
         </div>
 
