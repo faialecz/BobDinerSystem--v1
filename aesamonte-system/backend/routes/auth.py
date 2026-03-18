@@ -46,20 +46,36 @@ def _verify_trust_token(token: str, employee_id: int) -> bool:
         return False
 
 
-def _build_token_response(user: dict) -> dict:
-    """Build the standard login success payload from an employee+role row."""
-    permissions = {
-        "sales":     user['sales_permissions'],
-        "inventory": user['inventory_permissions'],
-        "orders":    user['order_permissions'],
-        "suppliers": user['supplier_permissions'],
-        "reports":   user['reports_permissions'],
-        "settings":  user['settings_permissions'],
-    }
+def _bool_to_granular(val: bool) -> dict:
+    """Convert a legacy boolean permission to a granular dict."""
+    v = bool(val)
+    return {"can_view": v, "can_create": v, "can_edit": v, "can_archive": False, "can_export": False}
+
+
+def _build_token_response(user: dict, granular_perms: dict | None = None) -> dict:
+    """Build the standard login success payload from an employee+role row.
+
+    If granular_perms is provided (from role_permissions table) it is used directly.
+    Otherwise the legacy boolean columns are converted to the granular format so the
+    frontend always receives the same shape: { module: { can_view, can_create, ... } }.
+    """
+    if granular_perms:
+        permissions = granular_perms
+    else:
+        permissions = {
+            "dashboard": _bool_to_granular(user.get('dashboard_permissions', False)),
+            "sales":     _bool_to_granular(user['sales_permissions']),
+            "inventory": _bool_to_granular(user['inventory_permissions']),
+            "orders":    _bool_to_granular(user['order_permissions']),
+            "supplier":  _bool_to_granular(user['supplier_permissions']),
+            "reports":   _bool_to_granular(user['reports_permissions']),
+            "settings":  _bool_to_granular(user['settings_permissions']),
+        }
+
     payload = {
         "employee_id":   user['employee_id'],
         "role_id":       user['role_id'],
-        "role_name":     user['role_name'],  
+        "role_name":     user['role_name'],
         "employee_name": user.get('employee_name', ''),
         "permissions":   permissions,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8),
@@ -68,11 +84,36 @@ def _build_token_response(user: dict) -> dict:
     return {
         "status":        "success",
         "token":         token,
-        "role":          user['role_name'],  
+        "role":          user['role_name'],
         "employee_name": user.get('employee_name', ''),
         "employee_id":   user['employee_id'],
         "permissions":   permissions,
     }
+
+
+def _fetch_granular_perms(cur, role_id: int) -> dict | None:
+    """Query role_permissions for a role. Returns None if table missing or no rows."""
+    try:
+        cur.execute("""
+            SELECT module_name, can_view, can_create, can_edit, can_archive,
+                   COALESCE(can_export, FALSE) AS can_export
+            FROM role_permissions WHERE role_id = %s
+        """, (role_id,))
+        rows = cur.fetchall()
+        if not rows:
+            return None
+        return {
+            r['module_name']: {
+                'can_view':    r['can_view'],
+                'can_create':  r['can_create'],
+                'can_edit':    r['can_edit'],
+                'can_archive': r['can_archive'],
+                'can_export':  r['can_export'],
+            }
+            for r in rows
+        }
+    except Exception:
+        return None
 
 
 def _send_2fa_email(to_email: str, otp_code: str):
@@ -127,7 +168,8 @@ def login():
         if user.get('two_fa_enabled'):
             device_trust_token = (data.get('device_trust_token') or '').strip()
             if device_trust_token and _verify_trust_token(device_trust_token, employee_id):
-                return jsonify(_build_token_response(user)), 200
+                granular = _fetch_granular_perms(cur, user['role_id'])
+                return jsonify(_build_token_response(user, granular)), 200
 
             email = (user.get('employee_email') or '').strip()
             if not email:
@@ -145,7 +187,8 @@ def login():
             return jsonify({"status": "otp_required", "employee_id": user['employee_id'], "contact": masked}), 200
 
         # ── Normal path ──
-        return jsonify(_build_token_response(user)), 200
+        granular = _fetch_granular_perms(cur, user['role_id'])
+        return jsonify(_build_token_response(user, granular)), 200
 
     finally:
         cur.close()
@@ -187,7 +230,8 @@ def complete_2fa_login():
         user = cur.fetchone()
         if not user:
             return jsonify({"status": "error", "message": "Employee not found."}), 404
-        response = _build_token_response(user)
+        granular = _fetch_granular_perms(cur, user['role_id'])
+        response = _build_token_response(user, granular)
         response['device_trust_token'] = _build_trust_token(employee_id)
         return jsonify(response), 200
     finally:

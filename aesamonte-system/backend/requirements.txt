@@ -7,3 +7,4 @@ PyJWT
 bcrypt
 supabase
 requests
+pandas

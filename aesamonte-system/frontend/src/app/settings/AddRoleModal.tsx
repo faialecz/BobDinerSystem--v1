@@ -55,7 +55,17 @@ export default function AddRoleModal({
   const [error, setError]             = useState('');
 
   const togglePerm = (module: string, action: keyof GranularPerm, value: boolean) => {
-    setPerms(prev => ({ ...prev, [module]: { ...prev[module], [action]: value } }));
+    setPerms(prev => {
+      const cur = { ...prev[module] };
+      if (action === 'can_view' && !value) {
+        return { ...prev, [module]: { can_view: false, can_create: false, can_edit: false, can_archive: false, can_export: false } };
+      }
+      if (action !== 'can_view' && value) {
+        cur.can_view = true;
+      }
+      cur[action] = value;
+      return { ...prev, [module]: cur };
+    });
   };
 
   const toggleRow = (module: string) => {
@@ -164,19 +174,25 @@ export default function AddRoleModal({
               {MODULES.map(m => {
                 const mp = perms[m.key] ?? { ...DEFAULT_PERM };
                 const allOn = ACTIONS.every(a => mp[a.key]);
+                const viewOff = !mp.can_view;
                 return (
                   <div key={m.key} className={styles.matrixRow}>
                     <span className={styles.moduleCol}>{m.label}</span>
-                    {ACTIONS.map(a => (
-                      <span key={a.key} className={styles.checkCell}>
-                        <input
-                          type="checkbox"
-                          className={styles.permCheck}
-                          checked={mp[a.key]}
-                          onChange={e => togglePerm(m.key, a.key, e.target.checked)}
-                        />
-                      </span>
-                    ))}
+                    {ACTIONS.map(a => {
+                      const disabled = a.key !== 'can_view' && viewOff;
+                      return (
+                        <span key={a.key} className={styles.checkCell}>
+                          <input
+                            type="checkbox"
+                            className={styles.permCheck}
+                            checked={mp[a.key]}
+                            disabled={disabled}
+                            onChange={e => togglePerm(m.key, a.key, e.target.checked)}
+                            style={disabled ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
+                          />
+                        </span>
+                      );
+                    })}
                     <span className={styles.checkCell}>
                       <input
                         type="checkbox"

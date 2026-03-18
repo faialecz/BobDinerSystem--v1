@@ -58,12 +58,12 @@ export default function Sidebar({
 
   const allMenuItems = [
     { name: "Dashboard",  icon: <GoHome />,             show: true },
-    { name: "Sales",      icon: <GrLineChart />,         show: permissions.sales },
-    { name: "Inventory",  icon: <MdOutlineInventory />, show: permissions.inventory },
-    { name: "Orders",     icon: <PiShoppingBag />,       show: permissions.orders },
-    { name: "Suppliers",  icon: <BsPeople />,            show: permissions.suppliers },
-    { name: "Reports",    icon: <RiBarChart2Line />,     show: permissions.reports },
-    { name: "Settings",   icon: <AiOutlineSetting />,    show: permissions.settings },
+    { name: "Sales",      icon: <GrLineChart />,        show: !!permissions.sales?.can_view },
+    { name: "Inventory",  icon: <MdOutlineInventory />, show: !!permissions.inventory?.can_view },
+    { name: "Orders",     icon: <PiShoppingBag />,      show: !!permissions.orders?.can_view },
+    { name: "Suppliers",  icon: <BsPeople />,           show: !!permissions.supplier?.can_view },
+    { name: "Reports",    icon: <RiBarChart2Line />,    show: !!permissions.reports?.can_view },
+    { name: "Settings",   icon: <AiOutlineSetting />,   show: !!permissions.settings?.can_view },
   ];
 
   const menuItems = allMenuItems.filter(item => item.show);

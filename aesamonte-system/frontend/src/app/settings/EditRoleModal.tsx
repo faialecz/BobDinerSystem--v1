@@ -79,8 +79,8 @@ export default function EditRoleModal({
     const load = async () => {
       try {
         const [roleRes, empRes] = await Promise.all([
-          fetch(`https://ae-samonte-system.onrender.com/api/roles/${roleId}`),
-          fetch('https://ae-samonte-system.onrender.com/api/employees'),
+          fetch(`/api/roles/${roleId}`),
+          fetch('/api/employees'),
         ]);
         const roleData: RoleDetail = await roleRes.json();
         const empData: Employee[]  = await empRes.json();
@@ -106,7 +106,19 @@ export default function EditRoleModal({
   }, [roleId]);
 
   const togglePerm = (module: string, action: keyof GranularPerm, value: boolean) => {
-    setPerms(prev => ({ ...prev, [module]: { ...prev[module], [action]: value } }));
+    setPerms(prev => {
+      const cur = { ...prev[module] };
+      if (action === 'can_view' && !value) {
+        // Unchecking View clears all other permissions
+        return { ...prev, [module]: { can_view: false, can_create: false, can_edit: false, can_archive: false, can_export: false } };
+      }
+      if (action !== 'can_view' && value) {
+        // Checking any action auto-enables View
+        cur.can_view = true;
+      }
+      cur[action] = value;
+      return { ...prev, [module]: cur };
+    });
   };
 
   const toggleRow = (module: string) => {
@@ -117,7 +129,7 @@ export default function EditRoleModal({
 
   const handleAssign = async (emp: Employee) => {
     try {
-      const res = await fetch(`https://ae-samonte-system.onrender.com/api/roles/${roleId}/assign`, {
+      const res = await fetch(`/api/roles/${roleId}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employee_id: emp.id }),
@@ -133,7 +145,7 @@ export default function EditRoleModal({
 
   const handleUnassign = async (empId: number) => {
     try {
-      const res = await fetch(`https://ae-samonte-system.onrender.com/api/roles/${roleId}/unassign`, {
+      const res = await fetch(`/api/roles/${roleId}/unassign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employee_id: empId }),
@@ -162,7 +174,7 @@ export default function EditRoleModal({
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(`https://ae-samonte-system.onrender.com/api/roles/${roleId}`, {
+      const res = await fetch(`/api/roles/${roleId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role_name: roleName, description, is_active: isActive, granular_permissions: perms }),
@@ -257,19 +269,25 @@ export default function EditRoleModal({
                   {MODULES.map(m => {
                     const mp = perms[m.key] ?? { ...DEFAULT_PERM };
                     const allOn = ACTIONS.every(a => mp[a.key]);
+                    const viewOff = !mp.can_view;
                     return (
                       <div key={m.key} className={styles.matrixRow}>
                         <span className={styles.moduleCol}>{m.label}</span>
-                        {ACTIONS.map(a => (
-                          <span key={a.key} className={styles.checkCell}>
-                            <input
-                              type="checkbox"
-                              className={styles.permCheck}
-                              checked={mp[a.key] ?? false}
-                              onChange={e => togglePerm(m.key, a.key, e.target.checked)}
-                            />
-                          </span>
-                        ))}
+                        {ACTIONS.map(a => {
+                          const disabled = a.key !== 'can_view' && viewOff;
+                          return (
+                            <span key={a.key} className={styles.checkCell}>
+                              <input
+                                type="checkbox"
+                                className={styles.permCheck}
+                                checked={mp[a.key] ?? false}
+                                disabled={disabled}
+                                onChange={e => togglePerm(m.key, a.key, e.target.checked)}
+                                style={disabled ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
+                              />
+                            </span>
+                          );
+                        })}
                         <span className={styles.checkCell}>
                           <input
                             type="checkbox"

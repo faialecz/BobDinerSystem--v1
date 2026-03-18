@@ -7,6 +7,9 @@ import styles from "@/css/inventory.module.css";
 import TopHeader from '@/components/layout/TopHeader';
 import ExportButton from '@/components/features/ExportButton';
 import ExportRequestModal from '@/components/features/ExportRequestModal';
+import RestrictedAccessModal from '@/components/features/RestrictedAccessModal';
+import { usePermissionGuard } from '@/hooks/usePermissionGuard';
+import type { ModulePerms } from '@/types/user';
 import AddInventoryModal from './addInventoryModal';
 import EditInventoryModal from './editInventoryModal';
 import ExportModal from './exportModal';
@@ -33,6 +36,7 @@ interface InventoryProps {
   employeeId?: number;
   onLogout: () => void;
   initialSearch?: string;
+  permissions?: ModulePerms;
 }
 
 interface Supplier {
@@ -100,14 +104,9 @@ const ROWS_PER_PAGE = 10;
 
 const displayBrandName = (name: string) => name === 'No Brand' ? '—' : name;
 
-const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, initialSearch }) => {
+const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, initialSearch, permissions }) => {
   const s = styles as Record<string, string>;
-
-const isInventoryHead   = role === 'Inventory Head';
-const isSalesHead       = role === 'Sales Head';
-const canModify         = ['Admin', 'Manager', 'Staff'].includes(role) || isInventoryHead;
-const canExport         = ['Admin', 'Manager'].includes(role) || isInventoryHead;
-const mustRequestExport = isSalesHead || role === 'Staff';
+  const { guard, denied, dismiss } = usePermissionGuard();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [data, setData] = useState<InventorySummary>({
@@ -399,6 +398,8 @@ const mustRequestExport = isSalesHead || role === 'Staff';
         </div>
       )}
 
+      {denied && <RestrictedAccessModal onClose={dismiss} />}
+
       <div className={s.mainContent}>
 
         {/* HEADER ROW */}
@@ -410,12 +411,9 @@ const mustRequestExport = isSalesHead || role === 'Staff';
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {canExport && <div onClick={() => setShowExportModal(true)}><ExportButton /></div>}
-            {mustRequestExport && (
-              <button onClick={() => setShowExportRequestModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#475569', color: 'white', padding: '8px 18px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.9rem' }}>
-                Request Export
-              </button>
-            )}
+            <div onClick={guard(permissions?.can_export, () => setShowExportModal(true))}>
+              <ExportButton />
+            </div>
           </div>
         </div>
 
@@ -476,9 +474,7 @@ const mustRequestExport = isSalesHead || role === 'Staff';
                   <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                   <LuSearch size={18} />
                 </div>
-                {canModify && (
-                  <button className={s.addButton} onClick={() => { setDefaultSupplierName(''); setShowModal(true); }}>ADD</button>
-                )}
+                <button className={s.addButton} onClick={guard(permissions?.can_create, () => { setDefaultSupplierName(''); setShowModal(true); })}>ADD</button>
               </div>
             </div>
 
@@ -546,14 +542,8 @@ const mustRequestExport = isSalesHead || role === 'Staff';
                         <LuEllipsisVertical className={s.moreIcon} onClick={() => setActiveMenuId(activeMenuId === p.id ? null : p.id)} />
                         {activeMenuId === p.id && (
                           <div className={s.popoverMenu} ref={menuRef}>
-                            {canModify ? (
-                              <>
-                                <button className={s.popEditBtn} onClick={e => { e.stopPropagation(); handleEditClick(p); }}><LuPencil size={12}/> Edit</button>
-                                <button className={s.popArchiveBtn} onClick={e => { e.stopPropagation(); handleToggleArchive(p.id); }}><LuArchive size={12}/> Archive</button>
-                              </>
-                            ) : (
-                              <span style={{ padding: '8px 12px', color: '#94a3b8', fontSize: '0.85rem' }}>View only</span>
-                            )}
+                            <button className={s.popEditBtn} onClick={e => { e.stopPropagation(); guard(permissions?.can_edit, () => handleEditClick(p))(); }}><LuPencil size={12}/> Edit</button>
+                            <button className={s.popArchiveBtn} onClick={e => { e.stopPropagation(); guard(permissions?.can_archive, () => handleToggleArchive(p.id))(); }}><LuArchive size={12}/> Archive</button>
                           </div>
                         )}
                       </td>
