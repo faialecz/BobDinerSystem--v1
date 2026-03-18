@@ -187,6 +187,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
         weeklyInventory: summary.weekly,
         monthlyInventory: summary.monthly,
         yearlyInventory: summary.yearly,
+        // CATCH THE PERCENTAGE
+        totalProductsChange: summary.totalProductsChange || 0,
       }));
     } catch (err) {
       console.error("Failed to fetch summary", err);
@@ -379,6 +381,42 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
     return s.viewStatusOutOfStock;
   };
 
+  // ADD THIS HELPER FUNCTION
+  const renderGrowthPill = (value: number) => {
+    let icon = '—';
+    let textColor = '#ca8a04'; // Yellow-600
+    let bgColor = '#fef08a'; // Yellow-200
+
+    if (value > 0) {
+      icon = '↗';
+      textColor = '#15803d'; // Green-700
+      bgColor = '#dcfce7'; // Green-100
+    } else if (value < 0) {
+      icon = '↘';
+      textColor = '#b91c1c'; // Red-700
+      bgColor = '#fee2e2'; // Red-100
+    }
+
+    const displayValue = Math.abs(value);
+
+    return (
+      <span 
+        className={s.pill} 
+        style={{ 
+          color: textColor, 
+          backgroundColor: bgColor,
+          fontWeight: 600,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px'
+        }}
+      >
+        {icon} {displayValue}%
+      </span>
+    );
+  }
+  //END OF HELPER FUNCTION
+
   if (isLoading) return <div className={s.loadingContainer}>Loading Inventory...</div>;
 
   return (
@@ -427,7 +465,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, department, employeeId = 0,
             <h2 className={s.bigNumber}>{data.totalProducts.toLocaleString()}</h2>
             <div className={s.cardFooter}>
               <span className={s.subText}>vs last month</span>
-              <span className={s.pill}>+{data.totalProductsChange}%</span>
+              {renderGrowthPill(data.totalProductsChange)}
             </div>
           </section>
 
