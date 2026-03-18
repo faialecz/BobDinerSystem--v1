@@ -108,11 +108,11 @@ def get_dashboard_extra():
 
         # ----- 4. MOST STOCK ITEMS -----
         cur.execute("""
-            SELECT i.item_name, i.item_quantity 
+            SELECT i.item_name, i.total_quantity
             FROM inventory i
             JOIN static_status ss ON i.item_status_id = ss.status_id
             WHERE ss.status_scope = 'INVENTORY_STATUS' AND ss.status_code != 'INACTIVE'
-            ORDER BY i.item_quantity DESC LIMIT 3
+            ORDER BY i.total_quantity DESC LIMIT 3
         """)
         most_stock_db = cur.fetchall()
         max_stock = max([int(row[1]) for row in most_stock_db]) if most_stock_db else 1
@@ -126,7 +126,7 @@ def get_dashboard_extra():
             JOIN order_transaction ot ON st.order_id = ot.order_id
             JOIN static_status ss ON st.payment_status_id = ss.status_id
             WHERE ss.status_code = 'PAID'
-            GROUP BY yr ORDER BY yr DESC LIMIT 5
+            GROUP BY yr ORDER BY yr DESC LIMIT 8
         """)
         yearly_history_db = cur.fetchall()
         
