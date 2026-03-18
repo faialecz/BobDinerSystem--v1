@@ -67,9 +67,9 @@ export default function Home() {
             {activeTab === "Dashboard" ? (
               <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTab} />
             ) : activeTab === "Inventory" ? (
-              <Inventory role={userInfo.roleName} department={userInfo.department} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Inventory' ? pendingSearch.term : ''} />
+              <Inventory role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Inventory' ? pendingSearch.term : ''} />
             ) : activeTab === "Sales" ? (
-              <Sales role={userInfo.roleName} department={userInfo.department} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Sales' ? pendingSearch.term : ''} />
+              <Sales role={userInfo.roleName}  employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Sales' ? pendingSearch.term : ''} />
             ) : activeTab === "Orders" ? (
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} />
             ) : activeTab === "Reports" ? (
