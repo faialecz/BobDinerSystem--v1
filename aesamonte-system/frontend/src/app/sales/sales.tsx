@@ -67,8 +67,28 @@ const mustRequestExport = isInventoryHead || role === 'Staff';
   const [showViewModal, setShowViewModal] = useState(false)
   const [selectedTx, setSelectedTx]       = useState<Transaction | null>(null)
   const [activeTab, setActiveTab]         = useState<'invoice' | 'delivery'>('invoice')
+  const [statusFilter, setStatusFilter]   = useState<'all' | 'pending' | 'paid'>('all')
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
 
   useEffect(() => { if (initialSearch) setSearchTerm(initialSearch) }, [initialSearch])
+
+  const getStatusBadgeColor = (status: 'all' | 'pending' | 'paid') => {
+    switch(status) {
+      case 'paid': return '#10b981'
+      case 'pending': return '#f59e0b'
+      case 'all': return '#9ca3af'
+      default: return '#9ca3af'
+    }
+  }
+
+  const getStatusLabel = (status: 'all' | 'pending' | 'paid') => {
+    switch(status) {
+      case 'paid': return 'Paid'
+      case 'pending': return 'Pending'
+      case 'all': return 'All Status'
+      default: return 'All Status'
+    }
+  }
 
   // ── Helpers ──
   const handleExportSuccess = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -148,7 +168,8 @@ const mustRequestExport = isInventoryHead || role === 'Staff';
   const filteredTx = transactions.filter(tx => {
     const matchesArchiveView = isArchiveView ? tx.is_archived === true : !tx.is_archived
     const searchStr = `${tx.no} ${tx.name} ${tx.address} ${tx.paymentMethod || ''}`.toLowerCase()
-    return matchesArchiveView && searchStr.includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || tx.status === statusFilter.toUpperCase()
+    return matchesArchiveView && searchStr.includes(searchTerm.toLowerCase()) && matchesStatus
   })
 
   const requestSort = (key: keyof Transaction) => {
@@ -274,10 +295,39 @@ const mustRequestExport = isInventoryHead || role === 'Staff';
             <div className={s.header}>
               <h1 className={s.title}>Transactions</h1>
               <div className={s.controls}>
+                <div className={s.statusFilterContainer}>
+                  <button
+                    className={`${s.statusFilterTrigger} ${isStatusDropdownOpen ? s.statusFilterTriggerOpen : ''}`}
+                    onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                  >
+                    <span className={s.statusBadge} style={{ backgroundColor: getStatusBadgeColor(statusFilter) }}></span>
+                    <span className={s.statusFilterLabel}>{getStatusLabel(statusFilter)}</span>
+                    <svg className={`${s.statusFilterChevron} ${isStatusDropdownOpen ? s.statusFilterChevronOpen : ''}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                  {isStatusDropdownOpen && (
+                    <div className={s.statusFilterMenu}>
+                      {(['all', 'pending', 'paid'] as const).map(option => (
+                        <button
+                          key={option}
+                          className={`${s.statusFilterMenuItem} ${statusFilter === option ? s.statusFilterMenuItemActive : ''}`}
+                          onClick={() => {
+                            setStatusFilter(option)
+                            setIsStatusDropdownOpen(false)
+                            setCurrentPage(1)
+                          }}
+                        >
+                          <span className={s.statusMenuBadge} style={{ backgroundColor: getStatusBadgeColor(option) }}></span>
+                          <span>{getStatusLabel(option)}</span>
+                          {statusFilter === option && <svg className={s.statusFilterCheckmark} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives"><LuArchive size={20} /></button>
                 <div className={s.searchWrapper}>
-                  <input className={s.searchInput} placeholder="Search..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1) }} />
-                  <LuSearch size={18} />
+                  <LuSearch size={18} className={s.searchIcon} />
+                  <input className={s.searchInput} placeholder="Search transactions..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1) }} />
                 </div>
               </div>
             </div>
