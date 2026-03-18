@@ -5,7 +5,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import sharedStyles from "@/css/settings.module.css";
 import prefStyles from "@/css/app-preferences.module.css";
 import SettingsHeader from "@/components/layout/BackSettingsHeader";
-import { LuLayoutTemplate } from "react-icons/lu";
+import { LuLayoutTemplate, LuUser, LuCamera } from "react-icons/lu";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 const TOGGLE_STYLE: React.CSSProperties = {
   position: 'relative',
@@ -36,82 +38,258 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
   );
 }
 
-const DEFAULT_STATE = {
-  timezone: 'PHT',
-  date: new Date().toISOString().split('T')[0],
-  language: 'English',
-  notifs: {
-    lowStock:        true,
-    outOfStock:      true,
-    itemAdded:       false,
-    itemArchived:    true,
-    supplierAdded:   false,
-    exportRequested: false,
-  },
+// ── Admin-only notifications ──
+const DEFAULT_ADMIN_NOTIFS = {
+  lowStock:        true,
+  outOfStock:      true,
+  itemAdded:       false,
+  itemArchived:    true,
+  supplierAdded:   false,
+  exportRequested: false,
 };
 
-export default function GeneralSettings({ onBack }: { onBack: () => void }) {
-  const s = prefStyles as Record<string, string>;
+// ── All other roles ──
+const DEFAULT_STAFF_NOTIFS = {
+  orderStatus: true,
+  systemNews:  true,
+};
 
-  const [timezone, setTimezone] = useState(DEFAULT_STATE.timezone);
-  const [date, setDate] = useState(DEFAULT_STATE.date);
-  const [language, setLanguage] = useState(DEFAULT_STATE.language);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+const DEFAULT_STATE = {
+  twoFA:      false,
+  timezone:   'PHT',
+  dateFormat: 'MM/DD/YYYY',
+  currency:   'PHP',
+  darkMode:   false,
+};
+
+export default function GeneralSettings({
+  onBack,
+  role = 'Staff',
+  employeeId,
+}: {
+  onBack: () => void;
+  role?: string;
+  employeeId?: number;
+}) {
+  const s = prefStyles as Record<string, string>;
+  const isAdmin = role === 'Admin';
+
+  // Profile data from backend
+  const [profileName,  setProfileName]  = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  // Account Profile
+  const [pfpFile,    setPfpFile]    = useState<File | null>(null);
+  const [pfpPreview, setPfpPreview] = useState<string | null>(null);
+  const [phone,      setPhone]      = useState('');
+  const [twoFA,      setTwoFA]      = useState(DEFAULT_STATE.twoFA);
+
+  // System Settings
+  const [timezone,   setTimezone]   = useState(DEFAULT_STATE.timezone);
+  const [dateFormat, setDateFormat] = useState(DEFAULT_STATE.dateFormat);
+  const [currency,   setCurrency]   = useState(DEFAULT_STATE.currency);
+  const [darkMode,   setDarkMode]   = useState(DEFAULT_STATE.darkMode);
+
+  // Notifications
+  const [adminNotifs, setAdminNotifs] = useState({ ...DEFAULT_ADMIN_NOTIFS });
+  const [staffNotifs, setStaffNotifs] = useState({ ...DEFAULT_STAFF_NOTIFS });
+
+  // Save modal
   const [showModal, setShowModal] = useState(false);
   const [noChanges, setNoChanges] = useState(false);
+  const [modalMsg,  setModalMsg]  = useState('');
 
-  const savedState = useRef({ ...DEFAULT_STATE, logoFile: null as File | null });
+  // Password modal
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [currentPw,   setCurrentPw]   = useState('');
+  const [newPw,       setNewPw]       = useState('');
+  const [confirmPw,   setConfirmPw]   = useState('');
+  const [pwError,     setPwError]     = useState('');
+  const [pwLoading,   setPwLoading]   = useState(false);
 
-  const [notifs, setNotifs] = useState({ ...DEFAULT_STATE.notifs });
+  const savedPhone = useRef('');
+  const savedState = useRef({
+    ...DEFAULT_STATE,
+    phone:       '',
+    pfpFile:     null as File | null,
+    adminNotifs: { ...DEFAULT_ADMIN_NOTIFS },
+    staffNotifs: { ...DEFAULT_STAFF_NOTIFS },
+  });
 
+  // ── Fetch profile + restore preferences ──
   useEffect(() => {
+    // Restore localStorage preferences
     try {
-      const saved = localStorage.getItem('notifPreferences');
+      const saved = localStorage.getItem('generalSettings');
       if (saved) {
-        const parsed = JSON.parse(saved);
-        setNotifs(parsed);
-        savedState.current = { ...savedState.current, notifs: parsed };
+        const p = JSON.parse(saved);
+        if (p.twoFA      !== undefined) { setTwoFA(p.twoFA);          savedState.current.twoFA      = p.twoFA; }
+        if (p.timezone)                 { setTimezone(p.timezone);    savedState.current.timezone    = p.timezone; }
+        if (p.dateFormat)               { setDateFormat(p.dateFormat);savedState.current.dateFormat  = p.dateFormat; }
+        if (p.currency)                 { setCurrency(p.currency);    savedState.current.currency    = p.currency; }
+        if (p.darkMode   !== undefined) { setDarkMode(p.darkMode);    savedState.current.darkMode    = p.darkMode; }
+        if (p.adminNotifs) { setAdminNotifs(p.adminNotifs); savedState.current.adminNotifs = p.adminNotifs; }
+        if (p.staffNotifs) { setStaffNotifs(p.staffNotifs); savedState.current.staffNotifs = p.staffNotifs; }
       }
+      const storedPfp = localStorage.getItem(`profilePicture_${employeeId}`);
+      if (storedPfp) setPfpPreview(storedPfp);
     } catch { /* ignore */ }
-  }, []);
 
-  const toggleNotif = (key: keyof typeof notifs) =>
-    setNotifs(prev => ({ ...prev, [key]: !prev[key] }));
+    // Fetch profile from backend
+    const token = localStorage.getItem('token') ?? '';
+    if (!token) { setProfileLoading(false); return; }
 
-  const handleLogoImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) setLogoFile(e.target.files[0]);
+    fetch(`${API}/api/auth/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.name)    setProfileName(data.name);
+        if (data.email)   setProfileEmail(data.email);
+        if (data.contact) {
+          setPhone(data.contact);
+          savedPhone.current       = data.contact;
+          savedState.current.phone = data.contact;
+        }
+        if (data.two_fa_enabled !== undefined) {
+          setTwoFA(data.two_fa_enabled);
+          savedState.current.twoFA = data.two_fa_enabled;
+        }
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => setProfileLoading(false));
+  }, [employeeId]);
+
+  const toggleAdminNotif = (key: keyof typeof adminNotifs) =>
+    setAdminNotifs(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const toggleStaffNotif = (key: keyof typeof staffNotifs) =>
+    setStaffNotifs(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const handleRemovePfp = () => {
+    setPfpFile(null);
+    setPfpPreview(null);
+    try {
+      localStorage.removeItem(`profilePicture_${employeeId}`);
+      window.dispatchEvent(new Event('pfp:updated'));
+    } catch { /* ignore */ }
+  };
+
+  const handlePfpImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setPfpFile(file);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        setPfpPreview(base64);
+        try {
+          localStorage.setItem(`profilePicture_${employeeId}`, base64);
+          window.dispatchEvent(new Event('pfp:updated'));
+        } catch { /* ignore */ }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const hasChanges = () => {
     const prev = savedState.current;
-    if (timezone !== prev.timezone) return true;
-    if (date !== prev.date) return true;
-    if (language !== prev.language) return true;
-    if (logoFile !== prev.logoFile) return true;
-    const prevNotifs = prev.notifs as typeof notifs;
-    return (Object.keys(notifs) as (keyof typeof notifs)[])
-      .some(key => notifs[key] !== prevNotifs[key]);
+    if (phone      !== prev.phone)      return true;
+    if (twoFA      !== prev.twoFA)      return true;
+    if (timezone   !== prev.timezone)   return true;
+    if (dateFormat !== prev.dateFormat) return true;
+    if (currency   !== prev.currency)   return true;
+    if (darkMode   !== prev.darkMode)   return true;
+    if (pfpFile    !== prev.pfpFile)    return true;
+    if ((Object.keys(adminNotifs) as (keyof typeof adminNotifs)[]).some(k => adminNotifs[k] !== prev.adminNotifs[k])) return true;
+    if ((Object.keys(staffNotifs) as (keyof typeof staffNotifs)[]).some(k => staffNotifs[k] !== prev.staffNotifs[k])) return true;
+    return false;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!hasChanges()) {
       setNoChanges(true);
+      setModalMsg('You have not made any changes.');
       setShowModal(true);
       return;
     }
-    localStorage.setItem('notifPreferences', JSON.stringify(notifs));
-    savedState.current = { timezone, date, language, notifs: { ...notifs }, logoFile };
+
+    // Save phone + 2FA pref to backend
+    const token = localStorage.getItem('token') ?? '';
+    if (token) {
+      try {
+        await fetch(`${API}/api/auth/profile`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ contact: phone, two_fa_enabled: twoFA }),
+        });
+        savedPhone.current = phone;
+      } catch { /* ignore */ }
+    }
+
+    // Save preferences to localStorage
+    const toSave = { twoFA, timezone, dateFormat, currency, darkMode, adminNotifs: { ...adminNotifs }, staffNotifs: { ...staffNotifs } };
+    localStorage.setItem('generalSettings', JSON.stringify(toSave));
+    savedState.current = { ...toSave, phone, pfpFile };
+
     setNoChanges(false);
+    setModalMsg('Settings saved successfully!');
     setShowModal(true);
   };
 
-  const notifRows: { key: keyof typeof notifs; label: string; description: string }[] = [
+  const handlePasswordChange = async () => {
+    if (!currentPw || !newPw || !confirmPw) { setPwError('Please fill in all fields.'); return; }
+    if (newPw !== confirmPw)                { setPwError('New passwords do not match.'); return; }
+    if (newPw.length < 8)                   { setPwError('Password must be at least 8 characters.'); return; }
+
+    setPwLoading(true);
+    setPwError('');
+    try {
+      const res = await fetch(`${API}/api/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId:      employeeId,
+          currentPassword: currentPw,
+          newPassword:     newPw,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPwError(data.message || 'Failed to change password.');
+        return;
+      }
+      closePwModal();
+      setNoChanges(false);
+      setModalMsg('Password changed successfully!');
+      setShowModal(true);
+    } catch {
+      setPwError('Network error. Please try again.');
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
+  const closePwModal = () => {
+    setShowPwModal(false); setPwError('');
+    setCurrentPw(''); setNewPw(''); setConfirmPw('');
+  };
+
+  // Admin notification rows
+  const adminNotifRows: { key: keyof typeof adminNotifs; label: string; description: string }[] = [
     { key: 'lowStock',        label: 'Low Stock Alert',          description: 'Notify when an item reaches its reorder point' },
     { key: 'outOfStock',      label: 'Out of Stock Alert',       description: 'Notify when an item quantity reaches zero' },
     { key: 'itemAdded',       label: 'New Item Added',           description: 'Notify when a new inventory item is created' },
     { key: 'itemArchived',    label: 'Item Archived / Restored', description: 'Notify when an item is archived or restored' },
     { key: 'supplierAdded',   label: 'New Supplier Added',       description: 'Notify when a new supplier is registered' },
     { key: 'exportRequested', label: 'Export Requested',         description: 'Notify when an export request is submitted' },
+  ];
+
+  // Non-admin notification rows
+  const staffNotifRows: { key: keyof typeof staffNotifs; label: string; description: string }[] = [
+    { key: 'orderStatus', label: 'Order Status Updates', description: 'Get notified when an order status changes' },
+    { key: 'systemNews',  label: 'System News',          description: 'Receive updates about new features and announcements' },
   ];
 
   return (
@@ -124,25 +302,96 @@ export default function GeneralSettings({ onBack }: { onBack: () => void }) {
 
       <div className={s.formContainer}>
 
-        {/* ── GENERAL SETTINGS ── */}
-        <h3 className={s.sectionLabel}>General Settings</h3>
-        <div className={s.settingsForm}>
+        {/* ── ACCOUNT PROFILE ── */}
+        <h3 className={s.mainSectionLabel}>Account Profile</h3>
 
+        {/* Centered Profile Card */}
+        <div className={s.profileCard}>
+          <label className={s.pfpCircleWrapper} style={{ cursor: 'pointer' }}>
+            <div className={s.pfpCircle}>
+              {pfpPreview
+                ? <img src={pfpPreview} alt="Profile" className={s.pfpImg} />
+                : <LuUser size={36} color="#94a3b8" />}
+            </div>
+            <div className={s.pfpEditOverlay}>
+              <LuCamera size={22} color="#fff" />
+            </div>
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePfpImport} />
+          </label>
+          <div className={s.pfpDisplayName}>
+            {profileLoading ? '—' : (profileName || 'Display Name')}
+          </div>
+          <div className={s.pfpRoleBadge}>{role}</div>
+          {pfpPreview && (
+            <button className={s.removePfpBtn} onClick={handleRemovePfp}>
+              Remove Photo
+            </button>
+          )}
+        </div>
+
+        {/* Personal Information */}
+        <h4 className={s.subSectionLabel}>Personal Information</h4>
+        <div className={s.settingsForm}>
           <div className={s.formRow}>
-            <label>Logo</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {logoFile && (
-                <span style={{ fontSize: '0.78rem', color: '#6b7280', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {logoFile.name}
-                </span>
-              )}
-              <label className={s.importBtn} style={{ cursor: 'pointer', display: 'inline-block' }}>
-                {logoFile ? 'CHANGE' : 'IMPORT'}
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoImport} />
-              </label>
+            <label>Full Name</label>
+            <input
+              type="text"
+              className={s.readOnlyInput}
+              value={profileLoading ? 'Loading...' : profileName}
+              disabled
+            />
+          </div>
+          <div className={s.formRow}>
+            <label>Email</label>
+            <input
+              type="email"
+              className={s.readOnlyInput}
+              value={profileLoading ? 'Loading...' : profileEmail}
+              disabled
+            />
+          </div>
+          <div className={s.formRow}>
+            <label>Phone Number</label>
+            <input
+              type="tel"
+              className={s.formInput}
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="+63 xxx xxx xxxx"
+            />
+          </div>
+        </div>
+
+        {/* Security */}
+        <h4 className={s.subSectionLabel}>Security</h4>
+        <div className={s.settingsForm} style={{ marginBottom: '1rem' }}>
+          <div className={s.formRow}>
+            <label>Password</label>
+            <button className={s.importBtn} style={{ cursor: 'pointer' }} onClick={() => setShowPwModal(true)}>
+              Change Password
+            </button>
+          </div>
+        </div>
+        <div className={s.notifForm} style={{ maxWidth: '450px' }}>
+          <div className={s.notifRow}>
+            <div>
+              <div className={s.notifLabel}>Two-Factor Authentication</div>
+              <div className={s.notifDescription}>Add an extra layer of security to your account</div>
+            </div>
+            <div className={s.notifToggleWrapper}>
+              <span className={s.notifStatus} style={{ color: twoFA ? '#1a4263' : '#9ca3af' }}>
+                {twoFA ? 'ON' : 'OFF'}
+              </span>
+              <Toggle enabled={twoFA} onToggle={() => setTwoFA(p => !p)} />
             </div>
           </div>
+        </div>
 
+        {/* ── SYSTEM SETTINGS ── */}
+        <h3 className={s.mainSectionLabel} style={{ marginTop: '2.5rem' }}>System Settings</h3>
+
+        <h4 className={s.subSectionLabel}>Regional Settings</h4>
+        <div className={s.settingsForm}>
           <div className={s.formRow}>
             <label>Timezone</label>
             <select className={s.formSelect} value={timezone} onChange={e => setTimezone(e.target.value)}>
@@ -166,39 +415,83 @@ export default function GeneralSettings({ onBack }: { onBack: () => void }) {
               </optgroup>
             </select>
           </div>
-
           <div className={s.formRow}>
-            <label>Date</label>
-            <input type="date" className={s.formInput} value={date} onChange={e => setDate(e.target.value)} />
+            <label>Date Format</label>
+            <select className={s.formSelect} value={dateFormat} onChange={e => setDateFormat(e.target.value)}>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+              <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+            </select>
           </div>
-
           <div className={s.formRow}>
-            <label>Default Language</label>
-            <select className={s.formSelect} value={language} onChange={e => setLanguage(e.target.value)}>
-              <option value="English">English</option>
-              <option value="Filipino">Filipino</option>
+            <label>Currency</label>
+            <select className={s.formSelect} value={currency} onChange={e => setCurrency(e.target.value)}>
+              <option value="PHP">PHP — Philippine Peso</option>
+              <option value="USD">USD — US Dollar</option>
+              <option value="EUR">EUR — Euro</option>
+              <option value="SGD">SGD — Singapore Dollar</option>
+              <option value="JPY">JPY — Japanese Yen</option>
             </select>
           </div>
         </div>
 
-        {/* ── NOTIFICATION SETTINGS ── */}
-        <h3 className={s.sectionLabel} style={{ marginTop: '36px' }}>Notification Settings</h3>
-        <div className={s.notifForm}>
-          {notifRows.map(({ key, label, description }) => (
-            <div key={key} className={s.notifRow}>
-              <div>
-                <div className={s.notifLabel}>{label}</div>
-                <div className={s.notifDescription}>{description}</div>
-              </div>
-              <div className={s.notifToggleWrapper}>
-                <span className={s.notifStatus} style={{ color: notifs[key] ? '#1a4263' : '#9ca3af' }}>
-                  {notifs[key] ? 'ON' : 'OFF'}
-                </span>
-                <Toggle enabled={notifs[key]} onToggle={() => toggleNotif(key)} />
-              </div>
+        <h4 className={s.subSectionLabel}>Display Preferences</h4>
+        <div className={s.notifForm} style={{ maxWidth: '450px' }}>
+          <div className={s.notifRow}>
+            <div>
+              <div className={s.notifLabel}>Dark Mode</div>
+              <div className={s.notifDescription}>Switch to a darker color theme</div>
             </div>
-          ))}
+            <div className={s.notifToggleWrapper}>
+              <span className={s.notifStatus} style={{ color: darkMode ? '#1a4263' : '#9ca3af' }}>
+                {darkMode ? 'ON' : 'OFF'}
+              </span>
+              <Toggle enabled={darkMode} onToggle={() => setDarkMode(p => !p)} />
+            </div>
+          </div>
         </div>
+
+        {/* ── NOTIFICATION SETTINGS ── */}
+        <h3 className={s.mainSectionLabel} style={{ marginTop: '2.5rem' }}>Notification Settings</h3>
+
+        <h4 className={s.subSectionLabel}>General Notification</h4>
+
+        {isAdmin ? (
+          <div className={s.notifForm} style={{ maxWidth: '450px' }}>
+            {adminNotifRows.map(({ key, label, description }) => (
+              <div key={key} className={s.notifRow}>
+                <div>
+                  <div className={s.notifLabel}>{label}</div>
+                  <div className={s.notifDescription}>{description}</div>
+                </div>
+                <div className={s.notifToggleWrapper}>
+                  <span className={s.notifStatus} style={{ color: adminNotifs[key] ? '#1a4263' : '#9ca3af' }}>
+                    {adminNotifs[key] ? 'ON' : 'OFF'}
+                  </span>
+                  <Toggle enabled={adminNotifs[key]} onToggle={() => toggleAdminNotif(key)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={s.notifForm} style={{ maxWidth: '450px' }}>
+            {staffNotifRows.map(({ key, label, description }) => (
+              <div key={key} className={s.notifRow}>
+                <div>
+                  <div className={s.notifLabel}>{label}</div>
+                  <div className={s.notifDescription}>{description}</div>
+                </div>
+                <div className={s.notifToggleWrapper}>
+                  <span className={s.notifStatus} style={{ color: staffNotifs[key] ? '#1a4263' : '#9ca3af' }}>
+                    {staffNotifs[key] ? 'ON' : 'OFF'}
+                  </span>
+                  <Toggle enabled={staffNotifs[key]} onToggle={() => toggleStaffNotif(key)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── SAVE ── */}
         <div className={s.formActions}>
@@ -207,7 +500,7 @@ export default function GeneralSettings({ onBack }: { onBack: () => void }) {
 
       </div>
 
-      {/* ── MODAL ── */}
+      {/* ── SAVE / SUCCESS MODAL ── */}
       {showModal && (
         <div className={s.modalOverlay}>
           <div className={s.modalBox}>
@@ -229,12 +522,61 @@ export default function GeneralSettings({ onBack }: { onBack: () => void }) {
               <h3 className={noChanges ? s.modalTitleWarning : s.modalTitle}>
                 {noChanges ? 'No Changes!' : 'Success!'}
               </h3>
-              <p className={s.modalMessage}>
-                {noChanges ? 'You have not made any changes.' : 'Settings saved successfully!'}
-              </p>
+              <p className={s.modalMessage}>{modalMsg}</p>
               <button className={noChanges ? s.modalOkBtnWarning : s.modalOkBtn} onClick={() => setShowModal(false)}>
                 OK
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PASSWORD MODAL ── */}
+      {showPwModal && (
+        <div className={s.modalOverlay}>
+          <div className={s.modalBox}>
+            <div className={s.modalHeader} style={{ backgroundColor: '#1a4263' }}>
+              <div className={s.modalCheckCircle} style={{ backgroundColor: '#1a4263' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+            </div>
+            <div className={s.modalBody}>
+              <h3 className={s.modalTitle} style={{ marginBottom: '1.25rem' }}>Change Password</h3>
+              <div className={s.pwForm}>
+                <div className={s.pwField}>
+                  <label>Current Password</label>
+                  <input type="password" className={s.pwInput} value={currentPw} onChange={e => setCurrentPw(e.target.value)} placeholder="Enter current password" />
+                </div>
+                <div className={s.pwField}>
+                  <label>New Password</label>
+                  <input type="password" className={s.pwInput} value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="Min. 8 characters" />
+                </div>
+                <div className={s.pwField}>
+                  <label>Confirm New Password</label>
+                  <input type="password" className={s.pwInput} value={confirmPw} onChange={e => setConfirmPw(e.target.value)} placeholder="Confirm new password" />
+                </div>
+                {pwError && <p className={s.pwError}>{pwError}</p>}
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <button
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#f8fafc', color: '#333', fontWeight: 600, cursor: 'pointer', fontSize: '0.95rem' }}
+                  onClick={closePwModal}
+                  disabled={pwLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={s.modalOkBtn}
+                  style={{ flex: 1, padding: '10px', opacity: pwLoading ? 0.7 : 1 }}
+                  onClick={handlePasswordChange}
+                  disabled={pwLoading}
+                >
+                  {pwLoading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

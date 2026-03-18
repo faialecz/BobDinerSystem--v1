@@ -49,7 +49,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 interface TopHeaderProps {
-  role: string;
+  role?: string;
   onLogout?: () => void;
 }
 
@@ -64,12 +64,41 @@ function saveSet(storageKey: string, set: Set<string>) {
   try { localStorage.setItem(storageKey, JSON.stringify([...set])); } catch { /* ignore */ }
 }
 
-export default function TopHeader({ role, onLogout }: TopHeaderProps) {
+export default function TopHeader({ role }: TopHeaderProps) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(() => loadSet('notifDismissed'));
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({});
+  const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [employeeName, setEmployeeName] = useState<string>(role ?? '');
   const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const getKey = () => {
+      try {
+        const token = localStorage.getItem('token') ?? '';
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.employee_name) setEmployeeName(payload.employee_name);
+        return `profilePicture_${payload.employee_id}`;
+      } catch { return null; }
+    };
+
+    const key = getKey();
+    if (key) {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored) setProfilePic(stored);
+      } catch { /* ignore */ }
+    }
+
+    const handlePfpUpdate = () => {
+      const k = getKey();
+      if (!k) return;
+      try { setProfilePic(localStorage.getItem(k) ?? null); } catch { /* ignore */ }
+    };
+    window.addEventListener('pfp:updated', handlePfpUpdate);
+    return () => window.removeEventListener('pfp:updated', handlePfpUpdate);
+  }, []);
 
   async function fetchNotifications() {
     try {
@@ -140,7 +169,7 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.welcomeText}>
-        Welcome, <strong>{role}!</strong>
+        Welcome, <strong>{employeeName.split(' ')[0]}!</strong>
       </div>
       <div className={styles.headerActions}>
         <div className={styles.notificationWrapper} ref={panelRef}>
@@ -198,8 +227,13 @@ export default function TopHeader({ role, onLogout }: TopHeaderProps) {
           )}
         </div>
 
-        <div className={styles.avatarContainer} onClick={onLogout}>
-          <img src="/ae-logo.png" alt="AE Logo" className={styles.avatarImage} />
+        <div className={styles.avatarContainer} onClick={() => {
+          window.dispatchEvent(new CustomEvent('app:navigate', { detail: { tab: 'Settings' } }));
+          window.dispatchEvent(new CustomEvent('settings:openView', { detail: { view: 'appPreferences' } }));
+        }}>
+          {profilePic
+            ? <img src={profilePic} alt="Profile" className={styles.avatarImage} style={{ objectFit: 'cover' }} />
+            : <img src="/ae-logo.png" alt="AE Logo" className={styles.avatarImage} />}
         </div>
       </div>
     </header>

@@ -26,6 +26,76 @@ GMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 # In-memory OTP store: { employee_id: { "otp": "123456", "expires_at": <timestamp> } }
 _otp_store: dict = {}
 
+def _build_trust_token(employee_id: int) -> str:
+    """7-day device trust token — lets user skip 2FA OTP on this browser."""
+    payload = {
+        "employee_id": employee_id,
+        "type":        "2fa_trust",
+        "exp":         datetime.datetime.utcnow() + datetime.timedelta(days=7),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+
+def _verify_trust_token(token: str, employee_id: int) -> bool:
+    """Returns True if the trust token is valid and belongs to this employee."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload.get("type") == "2fa_trust" and payload.get("employee_id") == employee_id
+    except Exception:
+        return False
+
+
+def _build_token_response(user: dict) -> dict:
+    """Build the standard login success payload from an employee+role row."""
+    permissions = {
+        "sales":     user['sales_permissions'],
+        "inventory": user['inventory_permissions'],
+        "orders":    user['order_permissions'],
+        "suppliers": user['supplier_permissions'],
+        "reports":   user['reports_permissions'],
+        "settings":  user['settings_permissions'],
+    }
+    payload = {
+        "employee_id":   user['employee_id'],
+        "role_id":       user['role_id'],
+        "role_name":     user['role_name'],
+        "employee_name": user.get('employee_name', ''),
+        "permissions":   permissions,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8),
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    return {
+        "status":        "success",
+        "token":         token,
+        "role":          user['role_name'],
+        "employee_name": user.get('employee_name', ''),
+        "employee_id":   user['employee_id'],
+        "permissions":   permissions,
+    }
+
+
+def _send_2fa_email(to_email: str, otp_code: str):
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "AE Samonte – 2FA Verification Code"
+    msg["From"]    = GMAIL_USER
+    msg["To"]      = to_email
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:32px;
+                border:1px solid #e0e0e0;border-radius:8px;">
+      <h2 style="color:#1a4263;">AE Samonte System</h2>
+      <p>Your two-factor authentication code is:</p>
+      <h1 style="letter-spacing:8px;color:#111;background:#f5f5f5;
+                 padding:12px;border-radius:6px;">{otp_code}</h1>
+      <p style="color:#666;">This code expires in <strong>2 minutes</strong>.
+         Do not share it with anyone.</p>
+    </div>
+    """
+    msg.attach(MIMEText(html_body, "html"))
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(GMAIL_USER, GMAIL_PASSWORD)
+        server.sendmail(GMAIL_USER, to_email, msg.as_string())
+
+
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.json
@@ -38,7 +108,8 @@ def login():
     try:
         cur.execute("""
             SELECT e.employee_id, e.role_id, r.role_name,
-                   e.employee_password,
+                   e.employee_name, e.employee_password, e.two_fa_enabled,
+                   e.employee_email, e.employee_contact,
                    r.sales_permissions, r.inventory_permissions, r.order_permissions,
                    r.supplier_permissions, r.reports_permissions, r.settings_permissions
             FROM employee e
@@ -48,36 +119,77 @@ def login():
 
         user = cur.fetchone()
 
-        if user and bcrypt.checkpw(password.encode("utf-8"), user['employee_password'].encode("utf-8")):
-            permissions = {
-                "sales":     user['sales_permissions'],
-                "inventory": user['inventory_permissions'],
-                "orders":    user['order_permissions'],
-                "suppliers": user['supplier_permissions'],
-                "reports":   user['reports_permissions'],
-                "settings":  user['settings_permissions'],
-            }
+        if not (user and bcrypt.checkpw(password.encode("utf-8"), user['employee_password'].encode("utf-8"))):
+            return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
-            payload = {
-                "employee_id": user['employee_id'],
-                "role_id":     user['role_id'],
-                "role_name":   user['role_name'],
-                "permissions": permissions,
-                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8)
-            }
+        # ── 2FA path ──
+        if user.get('two_fa_enabled'):
+            # Check if this browser has a valid 7-day trust token
+            device_trust_token = (data.get('device_trust_token') or '').strip()
+            if device_trust_token and _verify_trust_token(device_trust_token, employee_id):
+                return jsonify(_build_token_response(user)), 200
 
-            token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+            email = (user.get('employee_email') or '').strip()
+            if not email:
+                return jsonify({"status": "error", "message": "No email on file for 2FA."}), 400
 
-            return jsonify({
-                "status":      "success",
-                "token":       token,
-                "role":        user['role_name'],
-                "employee_id": user['employee_id'],
-                "permissions": permissions,
-            }), 200
+            otp_code = str(random.randint(100000, 999999))
+            _otp_store[str(employee_id)] = {"otp": otp_code, "expires_at": time.time() + 120}
 
-        return jsonify({"status": "error", "message": "Invalid credentials"}), 401
+            try:
+                _send_2fa_email(email, otp_code)
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Failed to send 2FA code: {str(e)}"}), 500
 
+            masked = email[:2] + '***@' + email.split('@')[1] if '@' in email else email
+            return jsonify({"status": "otp_required", "employee_id": user['employee_id'], "contact": masked}), 200
+
+        # ── Normal path ──
+        return jsonify(_build_token_response(user)), 200
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth_bp.route('/complete-2fa-login', methods=['POST'])
+def complete_2fa_login():
+    data = request.json or {}
+    employee_id = data.get('employee_id')
+    otp_input   = data.get('otp', '').strip()
+
+    if not employee_id or not otp_input:
+        return jsonify({"status": "error", "message": "Missing required fields."}), 400
+
+    record = _otp_store.get(str(employee_id))
+    if not record:
+        return jsonify({"status": "error", "message": "No OTP was sent to this account."}), 400
+    if time.time() > record['expires_at']:
+        _otp_store.pop(str(employee_id), None)
+        return jsonify({"status": "error", "message": "OTP has expired. Please log in again."}), 400
+    if otp_input != record['otp']:
+        return jsonify({"status": "error", "message": "Invalid OTP. Please try again."}), 400
+
+    _otp_store.pop(str(employee_id), None)
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT e.employee_id, e.role_id, r.role_name,
+                   e.employee_name,
+                   r.sales_permissions, r.inventory_permissions, r.order_permissions,
+                   r.supplier_permissions, r.reports_permissions, r.settings_permissions
+            FROM employee e
+            JOIN employee_role r ON e.role_id = r.role_id
+            WHERE e.employee_id = %s
+        """, (employee_id,))
+        user = cur.fetchone()
+        if not user:
+            return jsonify({"status": "error", "message": "Employee not found."}), 404
+        response = _build_token_response(user)
+        response['device_trust_token'] = _build_trust_token(employee_id)
+        return jsonify(response), 200
     finally:
         cur.close()
         conn.close()
@@ -271,6 +383,73 @@ def reset_password():
     except Exception as e:
         conn.rollback()
         return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth_bp.route('/profile', methods=['GET'])
+def get_profile():
+    auth_header = request.headers.get('Authorization', '')
+    try:
+        token = auth_header.split(" ")[1]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        employee_id = payload['employee_id']
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "SELECT employee_name, employee_email, employee_contact, two_fa_enabled FROM employee WHERE employee_id = %s",
+            (employee_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "Employee not found"}), 404
+        return jsonify({
+            "name":           row['employee_name'],
+            "email":          row['employee_email'],
+            "contact":        row['employee_contact'] or '',
+            "two_fa_enabled": row['two_fa_enabled'] or False,
+        }), 200
+    finally:
+        cur.close()
+        conn.close()
+
+
+@auth_bp.route('/profile', methods=['PATCH'])
+def update_profile():
+    auth_header = request.headers.get('Authorization', '')
+    try:
+        token = auth_header.split(" ")[1]
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        employee_id = payload['employee_id']
+    except Exception:
+        return jsonify({"error": "Invalid or missing token"}), 401
+
+    data = request.json or {}
+    contact        = data.get('contact', '').strip()
+    two_fa_enabled = data.get('two_fa_enabled')   # boolean or None (omitted = don't change)
+
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute(
+            "UPDATE employee SET employee_contact = %s WHERE employee_id = %s",
+            (contact, employee_id)
+        )
+        if two_fa_enabled is not None:
+            cur.execute(
+                "UPDATE employee SET two_fa_enabled = %s WHERE employee_id = %s",
+                (bool(two_fa_enabled), employee_id)
+            )
+        conn.commit()
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()

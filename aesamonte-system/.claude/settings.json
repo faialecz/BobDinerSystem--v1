@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/rayah/OneDrive/Desktop/AESamonteSystem--v2/aesamonte-system/backend/**)"
+      "Read(//c/Users/rayah/OneDrive/Desktop/AESamonteSystem--v2/aesamonte-system/backend/**)",
+      "Bash(find /c/Users/rayah/OneDrive/Desktop/AESamonteSystem--v2/aesamonte-system -name *schema* -o -name *init*)",
+      "Bash(find /c/Users/rayah/OneDrive/Desktop/AESamonteSystem--v2/aesamonte-system/frontend/src -name *auth* -o -name *login* -o -name *user*)"
     ]
   }
 }

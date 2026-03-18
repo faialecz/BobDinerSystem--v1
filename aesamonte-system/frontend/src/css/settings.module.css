@@ -33,6 +33,7 @@
   font-weight: 700;
   color: #164163;
   margin-bottom: 1rem;
+  display: flex;
 }
 
 .configList {

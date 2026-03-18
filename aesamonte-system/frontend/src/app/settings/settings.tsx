@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import TopHeader from "@/components/layout/TopHeader";
 import UserManagement from "./user-management";
 import styles from "@/css/settings.module.css";
@@ -11,7 +11,6 @@ import AccessControl from "./access-control";
 import GeneralSettings from "./general-settings";
 import BackupRestore from "./backup-restore";
 import AuditLog from "./audit-log";
-import ChangePasswordModal from "./ChangePasswordModal";
 
 interface SettingsPageProps {
   role?: string;
@@ -22,6 +21,15 @@ interface SettingsPageProps {
 export default function SettingsPage({ role = "Admin", employeeId, onLogout }: SettingsPageProps) {
   const [activeView, setActiveView] = useState<"main" | "users" | "access" | "appPreferences" | "backupRestore" | "auditlog">("main");
   const [showChangePassword, setShowChangePassword] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { view } = (e as CustomEvent<{ view: typeof activeView }>).detail;
+      setActiveView(view);
+    };
+    window.addEventListener('settings:openView', handler);
+    return () => window.removeEventListener('settings:openView', handler);
+  }, []);
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info" } | null>(null);
 
   const showToast = (message: string, type: "error" | "success" | "info") => {
@@ -46,7 +54,7 @@ export default function SettingsPage({ role = "Admin", employeeId, onLogout }: S
       show: isAdmin,
     },
     {
-      title: "App Preferences",
+      title: "General Settings",
       icon: <LuLayoutTemplate />,
       action: () => setActiveView("appPreferences"),
       show: true,  // all roles with settings access can see this
@@ -62,13 +70,7 @@ export default function SettingsPage({ role = "Admin", employeeId, onLogout }: S
       icon: <LuClipboardList />,
       action: () => setActiveView("auditlog"),
       show: isAdmin,
-    },
-    {
-      title: "Change Password",
-      icon: <LuKeyRound />,
-      action: () => setShowChangePassword(true),
-      show: true,
-    },
+    }
   ];
 
   const configItems = allConfigItems.filter(item => item.show);
@@ -104,7 +106,7 @@ export default function SettingsPage({ role = "Admin", employeeId, onLogout }: S
         )}
 
         {activeView === "appPreferences" && (
-          <GeneralSettings onBack={() => setActiveView("main")} />
+          <GeneralSettings onBack={() => setActiveView("main")} role={role} employeeId={employeeId} />
         )}
 
         {activeView === "backupRestore" && (

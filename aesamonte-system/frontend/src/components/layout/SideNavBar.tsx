@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AiOutlineUser,
   AiOutlineSetting,
@@ -38,8 +38,23 @@ export default function Sidebar({
 }: SidebarProps) {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [profilePic, setProfilePic] = useState<string | null>(null);
 
   const { permissions } = userInfo;
+
+  useEffect(() => {
+    const key = `profilePicture_${userInfo.employeeId}`;
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) setProfilePic(stored);
+    } catch { /* ignore */ }
+
+    const handlePfpUpdate = () => {
+      try { setProfilePic(localStorage.getItem(key) ?? null); } catch { /* ignore */ }
+    };
+    window.addEventListener('pfp:updated', handlePfpUpdate);
+    return () => window.removeEventListener('pfp:updated', handlePfpUpdate);
+  }, [userInfo.employeeId]);
 
   const allMenuItems = [
     { name: "Dashboard",  icon: <GoHome />,             show: true },
@@ -73,8 +88,12 @@ export default function Sidebar({
 
         {!collapsed && (
           <div className={styles.userInfo}>
-            <div className={styles.avatar}><AiOutlineUser size={24} /></div>
-            <span className={styles.roleName}>{userInfo.roleName}</span>
+            <div className={styles.avatar}>
+              {profilePic
+                ? <img src={profilePic} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                : <AiOutlineUser size={24} />}
+            </div>
+            <span className={styles.roleName}>{userInfo.employeeName.split(' ')[0]}</span>
           </div>
         )}
 
