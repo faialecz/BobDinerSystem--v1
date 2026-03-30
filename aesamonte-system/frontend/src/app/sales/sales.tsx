@@ -71,6 +71,8 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
   const [fromDate, setFromDate] = useState<string>('')
   const [toDate, setToDate] = useState<string>('')
   const [isDateFilterOpen, setIsDateFilterOpen] = useState(false)
+  const [topClientPeriod, setTopClientPeriod] = useState<'week' | 'month'>('week')
+  const [topClients, setTopClients] = useState<{ name: string; sales: number }[]>([])
 
   useEffect(() => { if (initialSearch) setSearchTerm(initialSearch) }, [initialSearch])
 
@@ -160,6 +162,13 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
   }
 
   useEffect(() => { fetchSalesData() }, [])
+
+  useEffect(() => {
+    fetch(`/api/sales/top-clients?period=${topClientPeriod}`)
+      .then(r => r.json())
+      .then(data => setTopClients(Array.isArray(data) ? data : []))
+      .catch(() => setTopClients([]))
+  }, [topClientPeriod])
 
   const handleTogglePaymentStatus = async (tx: Transaction) => {
     if (!tx.paymentMethod?.toLowerCase().includes('bank')) return
@@ -379,12 +388,29 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
           </section>
           
           <section className={s.statCard}>
-            <p className={s.cardTitle}>Top Client</p>
-            <h2 className={s.bigNumber}>₱ {safeSummary.topClientSales.toLocaleString()}</h2>
-            <div className={s.cardFooter}>
-              <span className={s.subText}>{safeSummary.topClientName}</span>
-              {/* ✅ Replaced static pill with dynamic function */}
-              {renderGrowthPill(safeSummary.topClientChange)}
+            <div className={s.topClientsHeader}>
+              <p className={s.cardTitle}>Top Clients</p>
+              <div className={s.periodToggle}>
+                <button
+                  className={`${s.periodBtn} ${topClientPeriod === 'week' ? s.periodBtnActive : ''}`}
+                  onClick={() => setTopClientPeriod('week')}
+                >This Week</button>
+                <button
+                  className={`${s.periodBtn} ${topClientPeriod === 'month' ? s.periodBtnActive : ''}`}
+                  onClick={() => setTopClientPeriod('month')}
+                >This Month</button>
+              </div>
+            </div>
+            <div className={s.topClientsList}>
+              {topClients.length === 0 ? (
+                <p className={s.noClientsText}>No data for this period.</p>
+              ) : topClients.map((c, i) => (
+                <div key={i} className={`${s.topClientRow} ${i % 2 === 0 ? s.altRow : ''}`}>
+                  <div className={s.topClientRank}>{i + 1}</div>
+                  <span className={s.topClientName}>{c.name}</span>
+                  <span className={s.topClientSales}>₱ {c.sales.toLocaleString()}</span>
+                </div>
+              ))}
             </div>
           </section>
         </div>

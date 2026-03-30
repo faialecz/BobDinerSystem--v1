@@ -20,7 +20,7 @@ export default function Login({ onLogin }: LoginProps) {
   // Login fields
   const [employeeId,      setEmployeeId]      = useState("");
   const [employeeIdError, setEmployeeIdError] = useState("");
-  const [password,        setPassword]        = useState("");
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [showPassword,    setShowPassword]    = useState(false);
   const [rememberMe,      setRememberMe]      = useState(false);
 
@@ -56,10 +56,11 @@ export default function Login({ onLogin }: LoginProps) {
     try {
       // Include any stored device trust token so backend can skip OTP if still valid
       const deviceTrustToken = localStorage.getItem(`2fa_trust_${employeeId}`) ?? '';
+      const passwordValue = passwordRef.current?.value ?? '';
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id: employeeId, password, device_trust_token: deviceTrustToken }),
+        body: JSON.stringify({ employee_id: employeeId, password: passwordValue, device_trust_token: deviceTrustToken }),
       });
       const data = await response.json();
 
@@ -164,7 +165,7 @@ export default function Login({ onLogin }: LoginProps) {
       // Since we only have the masked email, we inform the user to re-login instead.
       // Better UX: go back to login
       setView("login");
-      setPassword("");
+      if (passwordRef.current) passwordRef.current.value = "";
       showToast("Please log in again to receive a new code.", "info");
     } catch {
       showToast("Failed to resend code.", "error");
@@ -225,11 +226,9 @@ export default function Login({ onLogin }: LoginProps) {
               <div className={styles.passwordWrapper}>
                 <input
                   type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  ref={passwordRef}
                   className={styles.loginInput}
                   required
-                  suppressHydrationWarning={true}
                 />
                 <span className={styles.eyeIcon} onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <AiFillEyeInvisible /> : <AiFillEye />}
@@ -259,7 +258,7 @@ export default function Login({ onLogin }: LoginProps) {
         ) : view === "otp" ? (
           /* ── 2FA OTP ── */
           <div className={styles.forgotContainer}>
-            <button className={styles.backBtn} onClick={() => { setView("login"); setPassword(""); }}>
+            <button className={styles.backBtn} onClick={() => { setView("login"); if (passwordRef.current) passwordRef.current.value = ""; }}>
               <FaArrowLeft />
             </button>
             <h2 className={styles.forgotTitle}>Two-Factor Authentication</h2>

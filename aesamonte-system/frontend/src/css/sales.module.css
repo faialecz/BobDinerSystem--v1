@@ -82,6 +82,86 @@
   font-weight: 600;
 }
 
+/* ===== TOP CLIENTS CARD ===== */
+.topClientsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.periodToggle {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.periodBtn {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.periodBtnActive {
+  background: #164163;
+  color: #ffffff;
+}
+
+.topClientsList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 0.65rem;
+  flex: 1;
+}
+
+.topClientRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.topClientRank {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.topClientName {
+  flex: 1;
+  font-weight: 500;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topClientSales {
+  font-weight: 700;
+  color: #164163;
+  white-space: nowrap;
+}
+
+.noClientsText {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  text-align: center;
+  margin-top: 1rem;
+}
+
 /* Sales Report List Styling */
 .list {
   display: flex;

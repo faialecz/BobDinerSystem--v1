@@ -167,8 +167,8 @@ def sales_transactions():
             pm.status_name AS payment_method
         FROM sales_transaction st
         JOIN static_status ss ON st.payment_status_id = ss.status_id
-        LEFT JOIN static_status pm ON st.payment_method_id = pm.status_id
         JOIN order_transaction ot ON st.order_id = ot.order_id
+        LEFT JOIN static_status pm ON ot.payment_method_id = pm.status_id
         JOIN customer c ON ot.customer_id = c.customer_id
         LEFT JOIN order_details od ON ot.order_id = od.order_id
         GROUP BY st.sales_id, c.customer_name, c.customer_address, st.sales_date, ss.status_code, pm.status_name, ot.total_amount
@@ -284,16 +284,45 @@ def toggle_archive(sales_id):
 
         cur.execute("UPDATE sales_transaction SET payment_status_id = %s WHERE TRIM(sales_id) = %s", (new_status_id, sales_id))
         conn.commit()
-        
+
         return jsonify({
-            "message": "Archive status updated", 
+            "message": "Archive status updated",
             "is_archived": is_archived,
-            "new_status": new_status_code 
+            "new_status": new_status_code
         }), 200
-        
+
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()
+
+
+# ===================== TOP CLIENTS =====================
+@sales_bp.route("/top-clients", methods=["GET"])
+def top_clients():
+    period = request.args.get('period', 'week')
+    conn = get_connection()
+    cur = conn.cursor()
+
+    today = date.today()
+    start_date = today - timedelta(days=7) if period == 'week' else today.replace(day=1)
+
+    cur.execute("""
+        SELECT c.customer_name, COALESCE(SUM(ot.total_amount), 0) AS total_sales
+        FROM sales_transaction st
+        JOIN order_transaction ot ON st.order_id = ot.order_id
+        JOIN customer c ON ot.customer_id = c.customer_id
+        JOIN static_status ss ON st.payment_status_id = ss.status_id
+        WHERE ss.status_code = 'PAID' AND st.sales_date >= %s
+        GROUP BY c.customer_name
+        ORDER BY total_sales DESC
+        LIMIT 3
+    """, (start_date,))
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return jsonify([{"name": r[0], "sales": float(r[1])} for r in rows])
