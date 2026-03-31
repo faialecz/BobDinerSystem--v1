@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
 import styles from "@/css/inventory.module.css";
-import { LuX, LuPlus, LuTrash2, LuSlidersHorizontal } from "react-icons/lu";
+import { LuX, LuPlus, LuMinus, LuTrash2, LuSlidersHorizontal } from "react-icons/lu";
 
 interface SupplierEntry {
   supplierName: string;
@@ -86,7 +86,11 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 );
 
 const Divider = () => (
-  <hr style={{ border: 'none', borderTop: '1px solid #f3f4f6', margin: '20px 0' }} />
+  <hr style={{ border: 'none', borderTop: '1px solid #d1d5db', margin: '20px 0' }} />
+);
+
+const SubtleDivider = () => (
+  <hr style={{ border: 'none', borderTop: '1px solid #f0f0f0', margin: '16px 0' }} />
 );
 
 const LABEL_STYLE: React.CSSProperties = {
@@ -238,6 +242,18 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
       return;
     }
 
+    // Check Unit Cost and Selling Price on all brands
+    const missingCost = brandVariants.find(bv => bv.unitCost === '' || bv.unitCost === null);
+    if (missingCost) {
+      setDupError(`Unit Cost is required for brand "${missingCost.brandName || 'unnamed brand'}".`);
+      return;
+    }
+    const missingPrice = brandVariants.find(bv => bv.sellingPrice === '' || bv.sellingPrice === null);
+    if (missingPrice) {
+      setDupError(`Selling Price is required for brand "${missingPrice.brandName || 'unnamed brand'}".`);
+      return;
+    }
+
     const hasFormChanges = originalData && formData.itemName !== originalData.itemName;
     const hasSupplierChange = JSON.stringify(supplierEntries) !== JSON.stringify(originalSuppliers);
     const hasBrandChange = JSON.stringify(brandVariants) !== JSON.stringify(originalBrands);
@@ -281,6 +297,10 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
   const itemNameHasError = () => submitAttempted && !formData.itemName?.trim();
   const uomHasError = (brandIdx: number) =>
     submitAttempted && (!brandVariants[brandIdx].uom || brandVariants[brandIdx].uom === 'Select');
+  const unitCostHasError = (brandIdx: number) =>
+    submitAttempted && (brandVariants[brandIdx].unitCost === '' || brandVariants[brandIdx].unitCost === null);
+  const sellingPriceHasError = (brandIdx: number) =>
+    submitAttempted && (brandVariants[brandIdx].sellingPrice === '' || brandVariants[brandIdx].sellingPrice === null);
 
   return (
     <div className={s.modalOverlay} style={{ zIndex: 1100 }}>
@@ -306,7 +326,7 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '20px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                 <SectionHeading>Basic Information</SectionHeading>
-                <span style={{ fontSize: '0.75rem', color: '#6b7280', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '2px 10px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '0.75rem', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '3px 12px', fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '0.4px' }}>
                   ID: {formData.id}
                 </span>
               </div>
@@ -383,8 +403,8 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
               </div>
 
               {/* ── Inventory Settings ── */}
-              <Divider />
-              <SectionHeading>Inventory Settings</SectionHeading>
+              <SubtleDivider />
+              <SectionHeading>Unit & Reorder Threshold</SectionHeading>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div>
                   <label style={{ ...LABEL_STYLE, color: uomHasError(brandIdx) ? '#dc2626' : '#6b7280' }}>
@@ -411,29 +431,46 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
                   <label style={{ ...LABEL_STYLE }}>Reorder Point</label>
                   <input type="number" min="0" style={{ ...FIELD_STYLE, borderColor: '#fcd34d' }}
                     value={brand.reorderPoint}
+                    onKeyDown={e => ['-', 'e', 'E'].includes(e.key) && e.preventDefault()}
                     onChange={e => handleBrandChange(brandIdx, 'reorderPoint', e.target.value)}
                     placeholder="20" />
                 </div>
               </div>
 
               {/* ── Pricing ── */}
-              <Divider />
+              <SubtleDivider />
               <SectionHeading>Pricing</SectionHeading>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div>
-                  <label style={{ ...LABEL_STYLE }}>Unit Cost</label>
-                  <input type="number" min="0" step="0.01" style={{ ...FIELD_STYLE }} value={brand.unitCost}
+                  <label style={{ ...LABEL_STYLE, color: unitCostHasError(brandIdx) ? '#dc2626' : '#6b7280' }}>
+                    Unit Cost <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input type="number" min="0" step="0.01"
+                    style={unitCostHasError(brandIdx) ? FIELD_ERROR_STYLE : FIELD_STYLE}
+                    value={brand.unitCost}
+                    onKeyDown={e => ['-', 'e', 'E'].includes(e.key) && e.preventDefault()}
                     onChange={e => handleBrandChange(brandIdx, 'unitCost', e.target.value)} placeholder="0.00" />
+                  {unitCostHasError(brandIdx) && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Unit cost is required.</p>
+                  )}
                 </div>
                 <div>
-                  <label style={{ ...LABEL_STYLE }}>Selling Price</label>
-                  <input type="number" min="0" step="0.01" style={{ ...FIELD_STYLE }} value={brand.sellingPrice}
+                  <label style={{ ...LABEL_STYLE, color: sellingPriceHasError(brandIdx) ? '#dc2626' : '#6b7280' }}>
+                    Selling Price <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input type="number" min="0" step="0.01"
+                    style={sellingPriceHasError(brandIdx) ? FIELD_ERROR_STYLE : FIELD_STYLE}
+                    value={brand.sellingPrice}
+                    onKeyDown={e => ['-', 'e', 'E'].includes(e.key) && e.preventDefault()}
                     onChange={e => handleBrandChange(brandIdx, 'sellingPrice', e.target.value)} placeholder="0.00" />
+                  {sellingPriceHasError(brandIdx) && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Selling price is required.</p>
+                  )}
                 </div>
               </div>
 
               {/* ── Stock Adjustment ── */}
-              <Divider />
+              <SubtleDivider />
               <SectionHeading>Stock Adjustment</SectionHeading>
               {(() => {
                 const current = Number(brand.qty) || 0;
@@ -481,11 +518,23 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
                           </button>
                         ))}
                       </div>
-                      <input type="text" inputMode="numeric"
-                        style={{ ...FIELD_STYLE, flex: 1, textAlign: 'center', fontWeight: 600 }}
-                        value={brand.stockDelta}
-                        onChange={e => handleBrandChange(brandIdx, 'stockDelta', e.target.value.replace(/[^0-9]/g, ''))}
-                        placeholder="Enter quantity" />
+                      <div style={{ display: 'flex', flex: 1, border: '1px solid #9ca3af', borderRadius: '6px', overflow: 'hidden', height: '38px' }}>
+                        <button type="button"
+                          onClick={() => handleBrandChange(brandIdx, 'stockDelta', String(Math.max(0, (Number(brand.stockDelta) || 0) - 1)))}
+                          style={{ width: '38px', flexShrink: 0, border: 'none', borderRight: '1px solid #e5e7eb', background: '#f3f4f6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151' }}>
+                          <LuMinus size={14} />
+                        </button>
+                        <input type="text" inputMode="numeric"
+                          style={{ flex: 1, border: 'none', outline: 'none', textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: '#374151', backgroundColor: '#fff' }}
+                          value={brand.stockDelta}
+                          onChange={e => handleBrandChange(brandIdx, 'stockDelta', e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="0" />
+                        <button type="button"
+                          onClick={() => handleBrandChange(brandIdx, 'stockDelta', String((Number(brand.stockDelta) || 0) + 1))}
+                          style={{ width: '38px', flexShrink: 0, border: 'none', borderLeft: '1px solid #e5e7eb', background: '#f3f4f6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151' }}>
+                          <LuPlus size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -569,11 +618,11 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ ...LABEL_STYLE }}>Lead Time (Days)</label>
-                    <input type="number" style={{ ...FIELD_STYLE }} value={entry.leadTime} placeholder="e.g. 7" onChange={e => handleSupplierChange(idx, 'leadTime', e.target.value)} />
+                    <input type="number" min="0" style={{ ...FIELD_STYLE }} value={entry.leadTime} placeholder="e.g. 7" onKeyDown={e => ['-', 'e', 'E'].includes(e.key) && e.preventDefault()} onChange={e => handleSupplierChange(idx, 'leadTime', e.target.value)} />
                   </div>
                   <div>
                     <label style={{ ...LABEL_STYLE }}>Min Order (MOQ)</label>
-                    <input type="number" style={{ ...FIELD_STYLE }} value={entry.minOrder} placeholder="e.g. 50" onChange={e => handleSupplierChange(idx, 'minOrder', e.target.value)} />
+                    <input type="number" min="0" style={{ ...FIELD_STYLE }} value={entry.minOrder} placeholder="e.g. 50" onKeyDown={e => ['-', 'e', 'E'].includes(e.key) && e.preventDefault()} onChange={e => handleSupplierChange(idx, 'minOrder', e.target.value)} />
                   </div>
                 </div>
 

@@ -66,7 +66,7 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
   const [showViewModal, setShowViewModal] = useState(false)
   const [selectedTx, setSelectedTx]       = useState<Transaction | null>(null)
   const [activeTab, setActiveTab]         = useState<'invoice' | 'delivery'>('invoice')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'cash' | 'e-wallet' | 'card'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'cash' | 'e-wallet' | 'bank'>('all')
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
   const [fromDate, setFromDate] = useState<string>('')
   const [toDate, setToDate] = useState<string>('')
@@ -121,21 +121,21 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
     return true
   }
 
-  const getStatusBadgeColor = (status: 'all' | 'cash' | 'e-wallet' | 'card') => {
+  const getStatusBadgeColor = (status: 'all' | 'cash' | 'e-wallet' | 'bank') => {
   switch(status) {
     case 'cash': return '#10b981'
     case 'e-wallet': return '#3b82f6'
-    case 'card': return '#8b5cf6'
+    case 'bank': return '#8b5cf6'
     case 'all': return '#9ca3af'
     default: return '#9ca3af'
   }
 }
 
-  const getStatusLabel = (status: 'all' | 'cash' | 'e-wallet' | 'card') => {
+  const getStatusLabel = (status: 'all' | 'cash' | 'e-wallet' | 'bank') => {
   switch(status) {
     case 'cash': return 'Cash'
     case 'e-wallet': return 'E-Wallet'
-    case 'card': return 'Card'
+    case 'bank': return 'Bank Transaction'
     case 'all': return 'All Methods'
     default: return 'All Methods'
   }
@@ -471,7 +471,7 @@ const totalPages = Math.max(1, Math.ceil(sortedTx.length / itemsPerPage));  cons
                   </button>
                   {isStatusDropdownOpen && (
                     <div className={s.statusFilterMenu}>
-                     {(['all', 'cash', 'e-wallet', 'card'] as const).map(option => (   <button
+                     {(['all', 'cash', 'e-wallet', 'bank'] as const).map(option => (   <button
                           key={option}
                           className={`${s.statusFilterMenuItem} ${statusFilter === option ? s.statusFilterMenuItemActive : ''}`}
                           onClick={() => {
