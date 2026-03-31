@@ -5,7 +5,13 @@ from psycopg2.extras import RealDictCursor
 import jwt
 import datetime
 import os
+import random
+import time
 import bcrypt
+import requests as http_requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 auth_bp = Blueprint('auth', __name__)
 
