@@ -46,7 +46,6 @@ const getViewStatusClass = (isArchived: boolean | undefined, s: Record<string, s
 
 const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
 
-// ── ADDED: required fields for create modal validation ──
 const CREATE_REQUIRED: { field: keyof typeof EMPTY_CREATE_FORM; label: string }[] = [
   { field: 'supplierName', label: 'Supplier Name' },
   { field: 'address',      label: 'Address' },
@@ -61,6 +60,23 @@ const EMPTY_CREATE_FORM = {
   contact: '',
   email: '',
   paymentTerms: 'Cash on Delivery'
+};
+
+// Required fields for EDIT modal
+const EDIT_REQUIRED: { field: keyof Supplier; label: string }[] = [
+  { field: 'supplierName',  label: 'Supplier Name' },
+  { field: 'address',       label: 'Address' },
+  { field: 'contactPerson', label: 'Contact Person' },
+  { field: 'contactNumber', label: 'Contact No.' },
+];
+
+const errStyle = { borderColor: '#fca5a5', backgroundColor: '#fff5f5' };
+
+// ── ADDED: matches Add Order LABEL_STYLE ──
+const LABEL_STYLE: React.CSSProperties = {
+  display: 'block', fontSize: '0.72rem', fontWeight: 700,
+  textTransform: 'uppercase', letterSpacing: '0.5px',
+  color: '#6b7280', marginBottom: '4px',
 };
 
 /* ================= COMPONENT ================= */
@@ -94,24 +110,26 @@ export default function Suppliers({
   const [showModal, setShowModal] = useState(false);
   const [supplierFormData, setSupplierFormData] = useState({ ...EMPTY_CREATE_FORM });
   const [createDupError, setCreateDupError] = useState('');
-  // ── ADDED: single banner + empty fields for red borders ──
   const [createFormError, setCreateFormError] = useState('');
   const [createEmptyFields, setCreateEmptyFields] = useState<Set<string>>(new Set());
-  // ── ADDED: discard confirm for create modal ──
   const [showCreateCancelConfirm, setShowCreateCancelConfirm] = useState(false);
+  // ── ADDED ──
+  const [createSubmitAttempted, setCreateSubmitAttempted] = useState(false);
 
   // --- EDIT MODAL STATE ---
   const [editModal, setEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Supplier | null>(null);
+  const [editOriginalData, setEditOriginalData] = useState<Supplier | null>(null);
   const [editDupError, setEditDupError] = useState('');
+  const [editFormError, setEditFormError] = useState('');
+  const [editEmptyFields, setEditEmptyFields] = useState<Set<string>>(new Set());
+  const [editSubmitAttempted, setEditSubmitAttempted] = useState(false);
+  const [showEditCancelConfirm, setShowEditCancelConfirm] = useState(false);
 
   const [sortConfig, setSortConfig] = useState<{
     key: SortKey | null;
     direction: 'asc' | 'desc' | null;
-  }>({
-    key: null,
-    direction: null
-  });
+  }>({ key: null, direction: null });
 
   /* ================= FETCH ================= */
 
@@ -131,7 +149,6 @@ export default function Suppliers({
 
   /* ================= CREATE MODAL HELPERS ================= */
 
-  // ── ADDED: check if create form has any user input ──
   const isCreateFormDirty = (): boolean => {
     return !!(
       supplierFormData.supplierName.trim() ||
@@ -142,36 +159,26 @@ export default function Suppliers({
     );
   };
 
-  // ── ADDED: clear a field's red border as user types ──
   const clearCreateEmpty = (field: string) => {
     setCreateEmptyFields(prev => { const next = new Set(prev); next.delete(field); return next; });
     if (createFormError) setCreateFormError('');
   };
 
-  // ── ADDED: validate required fields, show single banner ──
   const validateCreate = (): boolean => {
     const missing: string[] = [];
     const empty = new Set<string>();
-
     CREATE_REQUIRED.forEach(({ field, label }) => {
-      if (!supplierFormData[field].trim()) {
-        missing.push(label);
-        empty.add(field);
-      }
+      if (!supplierFormData[field].trim()) { missing.push(label); empty.add(field); }
     });
-
     setCreateEmptyFields(empty);
-
     if (missing.length > 0) {
       setCreateFormError(`Please fill in the following required fields: ${missing.join(', ')}.`);
       return false;
     }
-
     setCreateFormError('');
     return true;
   };
 
-  // ── ADDED: close + reset create modal fully ──
   const handleCloseCreateModal = () => {
     setShowModal(false);
     setSupplierFormData({ ...EMPTY_CREATE_FORM });
@@ -179,30 +186,88 @@ export default function Suppliers({
     setCreateFormError('');
     setCreateEmptyFields(new Set());
     setShowCreateCancelConfirm(false);
+    setCreateSubmitAttempted(false); // ── ADDED ──
   };
 
-  // ── ADDED: intercept cancel to show confirm if dirty ──
-  const handleCreateCancelClick = () => {
-    if (isCreateFormDirty()) {
-      setShowCreateCancelConfirm(true);
-    } else {
-      handleCloseCreateModal();
-    }
-  };
+    const handleCreateCancelClick = () => {
+      if (isCreateFormDirty()) setShowCreateCancelConfirm(true);
+      else handleCloseCreateModal();
+    };
 
-  /* ================= HANDLERS ================= */
+    /* ================= EDIT MODAL HELPERS ================= */
 
-  const handleCreateSupplier = async () => {
-    // ── ADDED: required field validation first ──
-    if (!validateCreate()) return;
+    const isEditFormDirty = (): boolean => {
+      if (!editFormData || !editOriginalData) return false;
+      return (
+        editFormData.supplierName  !== editOriginalData.supplierName  ||
+        editFormData.address       !== editOriginalData.address       ||
+        editFormData.contactPerson !== editOriginalData.contactPerson ||
+        editFormData.contactNumber !== editOriginalData.contactNumber ||
+        editFormData.email         !== editOriginalData.email
+      );
+    };
 
-    // ── duplicate name check ──
-    const newName = normalize(supplierFormData.supplierName);
-    const isDuplicate = suppliers.some(sup => normalize(sup.supplierName) === newName);
-    if (isDuplicate) {
-      setCreateDupError(`"${supplierFormData.supplierName.trim()}" already exists. Please use a different supplier name.`);
-      return;
-    }
+    const clearEditEmpty = (field: string) => {
+      setEditEmptyFields(prev => { const next = new Set(prev); next.delete(field); return next; });
+      if (editFormError) setEditFormError('');
+    };
+
+    const validateEdit = (): boolean => {
+      if (!editFormData) return false;
+      const missing: string[] = [];
+      const empty = new Set<string>();
+      EDIT_REQUIRED.forEach(({ field, label }) => {
+        if (!String(editFormData[field] ?? '').trim()) { missing.push(label); empty.add(field); }
+      });
+      setEditEmptyFields(empty);
+      if (missing.length > 0) {
+        setEditFormError(`Please fill in the following required fields: ${missing.join(', ')}.`);
+        return false;
+      }
+      setEditFormError('');
+      return true;
+    };
+
+    const handleOpenEditModal = (sup: Supplier) => {
+      setEditFormData({ ...sup });
+      setEditOriginalData({ ...sup });
+      setEditDupError('');
+      setEditFormError('');
+      setEditEmptyFields(new Set());
+      setEditSubmitAttempted(false);
+      setShowEditCancelConfirm(false);
+      setEditModal(true);
+      setOpenMenuId(null);
+    };
+
+    const handleCloseEditModal = () => {
+      setEditModal(false);
+      setEditFormData(null);
+      setEditOriginalData(null);
+      setEditDupError('');
+      setEditFormError('');
+      setEditEmptyFields(new Set());
+      setEditSubmitAttempted(false);
+      setShowEditCancelConfirm(false);
+    };
+
+    const handleEditCancelClick = () => {
+      if (isEditFormDirty()) setShowEditCancelConfirm(true);
+      else handleCloseEditModal();
+    };
+
+    /* ================= HANDLERS ================= */
+
+    const handleCreateSupplier = async () => {
+      setCreateSubmitAttempted(true); // ── ADDED ──
+      if (!validateCreate()) return;
+
+      const newName = normalize(supplierFormData.supplierName);
+      const isDuplicate = suppliers.some(sup => normalize(sup.supplierName) === newName);
+      if (isDuplicate) {
+        setCreateDupError(`"${supplierFormData.supplierName.trim()}" already exists. Please use a different supplier name.`);
+        return;
+      }
 
     try {
       const response = await fetch('/api/suppliers', {
@@ -239,6 +304,18 @@ export default function Suppliers({
   const handleEditSupplier = async () => {
     if (!editFormData) return;
 
+    setEditSubmitAttempted(true);
+
+    // 1. Required fields
+    if (!validateEdit()) return;
+
+    // 2. No changes check
+    if (!isEditFormDirty()) {
+      setEditFormError('No changes detected. Please modify at least one field before updating.');
+      return;
+    }
+
+    // 3. Duplicate name check
     const newName = normalize(editFormData.supplierName);
     const conflict = suppliers.find(
       sup => normalize(sup.supplierName) === newName && sup.id !== editFormData.id
@@ -263,9 +340,7 @@ export default function Suppliers({
       const data = await response.json();
       if (response.ok) {
         await fetchSuppliers();
-        setEditModal(false);
-        setEditFormData(null);
-        setEditDupError('');
+        handleCloseEditModal();
         setToastMessage(data.message || 'Supplier updated successfully!');
         setIsError(false);
         setShowToast(true);
@@ -283,9 +358,7 @@ export default function Suppliers({
 
   const handleToggleArchive = async (id: number) => {
     try {
-      const response = await fetch(`/api/suppliers/archive/${id}`, {
-        method: 'PUT',
-      });
+      const response = await fetch(`/api/suppliers/archive/${id}`, { method: 'PUT' });
       if (response.ok) {
         const apiData = await response.json();
         setSuppliers(prev =>
@@ -308,18 +381,10 @@ export default function Suppliers({
     }
   };
 
-  const handleNumericInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    const cleanValue = value.replace(/[^\d]/g, '');
-    setSupplierFormData({ ...supplierFormData, [name]: cleanValue });
-  };
-
   const handleSort = (key: SortKey) => {
     if (!key) return;
     setSortConfig(prev => {
-      if (prev.key === key) {
-        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      }
+      if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       return { key, direction: 'asc' };
     });
   };
@@ -453,7 +518,6 @@ export default function Suppliers({
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
-
     if (!sortConfig.key || !sortConfig.direction) {
       return arr.sort((a, b) => {
         const numA = Number(String(a.id).replace(/\D/g, '')) || 0;
@@ -461,21 +525,17 @@ export default function Suppliers({
         return numA - numB;
       });
     }
-
     const { key, direction } = sortConfig;
     return arr.sort((a, b) => {
       const A = a[key!];
       const B = b[key!];
-
       if (key === 'id') {
         const numA = Number(String(A).replace(/\D/g, '')) || 0;
         const numB = Number(String(B).replace(/\D/g, '')) || 0;
         return direction === 'asc' ? numA - numB : numB - numA;
       }
-
       const strA = String(A ?? '').toLowerCase();
       const strB = String(B ?? '').toLowerCase();
-
       if (strA < strB) return direction === 'asc' ? -1 : 1;
       if (strA > strB) return direction === 'asc' ? 1 : -1;
       return 0;
@@ -495,19 +555,11 @@ export default function Suppliers({
     const maxVisiblePages = 5;
     let startPage = Math.max(1, currentPage - 2);
     let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
+    if (endPage - startPage + 1 < maxVisiblePages) startPage = Math.max(1, endPage - maxVisiblePages + 1);
     const pages = [];
     for (let i = startPage; i <= endPage; i++) {
       pages.push(
-        <button
-          key={i}
-          className={currentPage === i ? s.pageCircleActive : s.pageCircle}
-          onClick={() => setCurrentPage(i)}
-        >
+        <button key={i} className={currentPage === i ? s.pageCircleActive : s.pageCircle} onClick={() => setCurrentPage(i)}>
           {i}
         </button>
       );
@@ -526,8 +578,7 @@ export default function Suppliers({
     { label: 'ADDRESS', key: 'address' }
   ];
 
-  // ── shared error border style ──
-  const errStyle = { borderColor: '#fca5a5', backgroundColor: '#fff5f5' };
+  /* ================= RENDER ================= */
 
   return (
     <div className={s.container}>
@@ -545,17 +596,13 @@ export default function Suppliers({
             <div className={s.alertBody}>
               <h2 className={s.alertTitle}>{isError ? 'Oops!' : 'Success!'}</h2>
               <p className={s.alertMessage}>{toastMessage}</p>
-              <button
-                className={`${s.okButton} ${isError ? s.okButtonError : ''}`}
-                onClick={() => setShowToast(false)}
-              >OK</button>
+              <button className={`${s.okButton} ${isError ? s.okButtonError : ''}`} onClick={() => setShowToast(false)}>OK</button>
             </div>
           </div>
         </div>
       )}
 
       <div className={s.mainContent}>
-
         {isArchiveView ? (
           <ArchiveSupplierTable
             suppliers={suppliers}
@@ -567,11 +614,7 @@ export default function Suppliers({
             <div className={s.header}>
               <h2 className={s.title}>Suppliers</h2>
               <div className={s.controls}>
-                <button
-                  className={s.archiveIconBtn}
-                  onClick={() => setIsArchiveView(true)}
-                  title="View Archives"
-                >
+                <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives">
                   <LuArchive size={20} />
                 </button>
                 <div className={s.searchWrapper}>
@@ -608,12 +651,7 @@ export default function Suppliers({
                 <tbody>
                   {paginated.length ? (
                     paginated.map((sup, i) => (
-                      <tr
-                        key={sup.id}
-                        className={i % 2 ? s.altRow : ''}
-                        onClick={() => handleOpenView(sup)}
-                        style={{ cursor: 'pointer' }}
-                      >
+                      <tr key={sup.id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(sup)} style={{ cursor: 'pointer' }}>
                         <td>{sup.id}</td>
                         <td><strong>{sup.supplierName}</strong></td>
                         <td>{sup.contactPerson}</td>
@@ -621,20 +659,10 @@ export default function Suppliers({
                         <td>{sup.email}</td>
                         <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sup.address}</td>
                         <td className={s.actionCell} onClick={e => e.stopPropagation()}>
-                          <LuEllipsisVertical
-                            className={s.moreIcon}
-                            onClick={() => setOpenMenuId(openMenuId === sup.id ? null : sup.id)}
-                          />
+                          <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === sup.id ? null : sup.id)} />
                           {openMenuId === sup.id && (
                             <div className={s.popupMenu}>
-                              <button
-                                className={s.popBtnEdit}
-                                onClick={() => {
-                                  setEditFormData(sup);
-                                  setEditModal(true);
-                                  setOpenMenuId(null);
-                                }}
-                              >
+                              <button className={s.popBtnEdit} onClick={() => handleOpenEditModal(sup)}>
                                 <LuPencil size={14} /> Edit
                               </button>
                               <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.id)}>
@@ -682,7 +710,6 @@ export default function Suppliers({
                 <h2 className={s.title}>Register New Supplier</h2>
                 <p className={s.subText}>Create a profile for a new supplier.</p>
               </div>
-              {/* ── CHANGED: X now uses handleCreateCancelClick ── */}
               <LuX onClick={handleCreateCancelClick} className={s.closeIcon} />
             </div>
 
@@ -690,7 +717,10 @@ export default function Suppliers({
               <h4 className={s.sectionTitle}>Company Information</h4>
               <div className={s.formRow}>
                 <div className={s.formGroup}>
-                  <label>Supplier Name <span style={{ color: '#ef4444' }}>*</span></label>
+                  {/* ── CHANGED: label now uses LABEL_STYLE, turns red on error ── */}
+                  <label style={{ ...LABEL_STYLE, color: createSubmitAttempted && createEmptyFields.has('supplierName') ? '#dc2626' : '#6b7280' }}>
+                    Supplier Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     name="supplierName"
                     value={supplierFormData.supplierName}
@@ -702,10 +732,13 @@ export default function Suppliers({
                     style={createEmptyFields.has('supplierName') || createDupError ? errStyle : {}}
                     placeholder="e.g. Juan dela Cruz Trading"
                   />
+                  {/* ── ADDED: helper text below field ── */}
+                  {createSubmitAttempted && createEmptyFields.has('supplierName') && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Supplier name is required.</p>
+                  )}
                 </div>
               </div>
 
-              {/* ── duplicate error banner ── */}
               {createDupError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', fontWeight: 500, marginBottom: '12px' }}>
                   <span>⚠</span> {createDupError}
@@ -713,51 +746,63 @@ export default function Suppliers({
               )}
 
               <div className={s.formGroupFull}>
-                <label>Address <span style={{ color: '#ef4444' }}>*</span></label>
+                {/* ── CHANGED ── */}
+                <label style={{ ...LABEL_STYLE, color: createSubmitAttempted && createEmptyFields.has('address') ? '#dc2626' : '#6b7280' }}>
+                  Address <span style={{ color: '#ef4444' }}>*</span>
+                </label>
                 <input
                   name="address"
                   value={supplierFormData.address}
-                  onChange={e => {
-                    clearCreateEmpty('address');
-                    setSupplierFormData({ ...supplierFormData, address: e.target.value });
-                  }}
+                  onChange={e => { clearCreateEmpty('address'); setSupplierFormData({ ...supplierFormData, address: e.target.value }); }}
                   style={createEmptyFields.has('address') ? errStyle : {}}
                   placeholder="Street, Barangay, City"
                 />
+                {/* ── ADDED ── */}
+                {createSubmitAttempted && createEmptyFields.has('address') && (
+                  <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Address is required.</p>
+                )}
               </div>
 
               <h4 className={s.sectionTitle}>Primary Contact</h4>
               <div className={s.formRow}>
                 <div className={s.formGroup}>
-                  <label>Contact Person <span style={{ color: '#ef4444' }}>*</span></label>
+                  {/* ── CHANGED ── */}
+                  <label style={{ ...LABEL_STYLE, color: createSubmitAttempted && createEmptyFields.has('contactPerson') ? '#dc2626' : '#6b7280' }}>
+                    Contact Person <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     name="contactPerson"
                     value={supplierFormData.contactPerson}
-                    onChange={e => {
-                      clearCreateEmpty('contactPerson');
-                      setSupplierFormData({ ...supplierFormData, contactPerson: e.target.value });
-                    }}
+                    onChange={e => { clearCreateEmpty('contactPerson'); setSupplierFormData({ ...supplierFormData, contactPerson: e.target.value }); }}
                     style={createEmptyFields.has('contactPerson') ? errStyle : {}}
                     placeholder="Full name"
                   />
+                  {/* ── ADDED ── */}
+                  {createSubmitAttempted && createEmptyFields.has('contactPerson') && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Contact person is required.</p>
+                  )}
                 </div>
                 <div className={s.formGroup}>
-                  <label>Contact No. <span style={{ color: '#ef4444' }}>*</span></label>
+                  {/* ── CHANGED ── */}
+                  <label style={{ ...LABEL_STYLE, color: createSubmitAttempted && createEmptyFields.has('contact') ? '#dc2626' : '#6b7280' }}>
+                    Contact No. <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     name="contact"
                     value={supplierFormData.contact}
-                    onChange={e => {
-                      clearCreateEmpty('contact');
-                      setSupplierFormData({ ...supplierFormData, contact: e.target.value.replace(/[^\d]/g, '') });
-                    }}
+                    onChange={e => { clearCreateEmpty('contact'); setSupplierFormData({ ...supplierFormData, contact: e.target.value.replace(/[^\d]/g, '') }); }}
                     style={createEmptyFields.has('contact') ? errStyle : {}}
                     placeholder="09XXXXXXXXX"
                   />
+                  {/* ── ADDED ── */}
+                  {createSubmitAttempted && createEmptyFields.has('contact') && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Contact number is required.</p>
+                  )}
                 </div>
               </div>
 
               <div className={s.formGroupFull}>
-                <label>Email Address</label>
+                <label style={{ ...LABEL_STYLE }}>Email Address</label>
                 <input
                   name="email"
                   value={supplierFormData.email}
@@ -768,7 +813,7 @@ export default function Suppliers({
 
               <h4 className={s.sectionTitle}>Terms & Notes</h4>
               <div className={s.formGroup}>
-                <label>Payment Terms</label>
+                <label style={{ ...LABEL_STYLE }}>Payment Terms</label>
                 <select
                   name="paymentTerms"
                   value={supplierFormData.paymentTerms}
@@ -779,75 +824,29 @@ export default function Suppliers({
                 </select>
               </div>
 
-              {/* ── ADDED: single banner error ── */}
               {createFormError && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  background: '#fee2e2', border: '1px solid #fca5a5',
-                  color: '#dc2626', borderRadius: '8px',
-                  padding: '12px 16px', fontSize: '0.85rem', fontWeight: 500,
-                  marginTop: '8px',
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '12px 16px', fontSize: '0.85rem', fontWeight: 500, marginTop: '8px' }}>
                   ⚠ {createFormError}
                 </div>
               )}
 
               <div className={s.modalFooter}>
-                {/* ── CHANGED: Cancel now uses handleCreateCancelClick ── */}
                 <button type="button" onClick={handleCreateCancelClick} className={s.cancelBtn}>Cancel</button>
-                <button type="button" onClick={handleCreateSupplier} className={s.saveBtn}>
-                  Create Supplier
-                </button>
+                <button type="button" onClick={handleCreateSupplier} className={s.saveBtn}>Create Supplier</button>
               </div>
             </div>
           </div>
 
-          {/* ── ADDED: Discard Changes confirm dialog ── */}
+          {/* Create discard confirm */}
           {showCreateCancelConfirm && (
-            <div
-              style={{
-                position: 'fixed', inset: 0, zIndex: 1100,
-                background: 'rgba(0,0,0,0.45)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              onClick={() => setShowCreateCancelConfirm(false)}
-            >
-              <div
-                style={{
-                  background: '#fff', borderRadius: '20px',
-                  padding: '40px 36px', width: '380px', textAlign: 'center',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-                }}
-                onClick={e => e.stopPropagation()}
-              >
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowCreateCancelConfirm(false)}>
+              <div style={{ background: '#fff', borderRadius: '20px', padding: '40px 36px', width: '380px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
                 <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
-                <p style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px', color: '#111' }}>
-                  Discard Changes?
-                </p>
-                <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '28px' }}>
-                  All entered information will be lost.
-                </p>
+                <p style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px', color: '#111' }}>Discard Changes?</p>
+                <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '28px' }}>All entered information will be lost.</p>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                  <button
-                    onClick={() => setShowCreateCancelConfirm(false)}
-                    style={{
-                      flex: 1, padding: '12px', borderRadius: '10px',
-                      border: '1.5px solid #ddd', background: '#fff',
-                      fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#333',
-                    }}
-                  >
-                    Keep Editing
-                  </button>
-                  <button
-                    onClick={handleCloseCreateModal}
-                    style={{
-                      flex: 1, padding: '12px', borderRadius: '10px',
-                      border: 'none', background: '#ef4444',
-                      fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#fff',
-                    }}
-                  >
-                    Yes, Discard
-                  </button>
+                  <button onClick={() => setShowCreateCancelConfirm(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1.5px solid #ddd', background: '#fff', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#333' }}>Keep Editing</button>
+                  <button onClick={handleCloseCreateModal} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#ef4444', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#fff' }}>Yes, Discard</button>
                 </div>
               </div>
             </div>
@@ -864,19 +863,30 @@ export default function Suppliers({
                 <h2 className={s.title}>Edit Supplier</h2>
                 <p className={s.subText}>Update supplier information.</p>
               </div>
-              <LuX onClick={() => { setEditModal(false); setEditFormData(null); setEditDupError(''); }} className={s.closeIcon} />
+              <LuX onClick={handleEditCancelClick} className={s.closeIcon} />
             </div>
 
             <div className={`${s.modalForm} ${s.mt_20}`}>
               <h4 className={s.sectionTitle}>Company Information</h4>
               <div className={s.formRow}>
                 <div className={s.formGroup}>
-                  <label>Supplier Name</label>
+                  {/* ── CHANGED ── */}
+                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('supplierName') ? '#dc2626' : '#6b7280' }}>
+                    Supplier Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     value={editFormData.supplierName}
-                    onChange={e => { setEditDupError(''); setEditFormData({ ...editFormData, supplierName: e.target.value }); }}
-                    style={editDupError ? { borderColor: '#fca5a5' } : {}}
+                    onChange={e => {
+                      setEditDupError('');
+                      clearEditEmpty('supplierName');
+                      setEditFormData({ ...editFormData, supplierName: e.target.value });
+                    }}
+                    style={editEmptyFields.has('supplierName') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : editDupError ? errStyle : {}}
                   />
+                  {/* ── ADDED ── */}
+                  {editSubmitAttempted && editEmptyFields.has('supplierName') && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Supplier name is required.</p>
+                  )}
                 </div>
               </div>
 
@@ -887,47 +897,90 @@ export default function Suppliers({
               )}
 
               <div className={s.formGroupFull}>
-                <label>Address</label>
+                {/* ── CHANGED ── */}
+                <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('address') ? '#dc2626' : '#6b7280' }}>
+                  Address <span style={{ color: '#ef4444' }}>*</span>
+                </label>
                 <input
                   value={editFormData.address}
-                  onChange={e => setEditFormData({ ...editFormData, address: e.target.value })}
+                  onChange={e => { clearEditEmpty('address'); setEditFormData({ ...editFormData, address: e.target.value }); }}
+                  style={editEmptyFields.has('address') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
                 />
+                {/* ── ADDED ── */}
+                {editSubmitAttempted && editEmptyFields.has('address') && (
+                  <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Address is required.</p>
+                )}
               </div>
 
               <h4 className={s.sectionTitle}>Primary Contact</h4>
               <div className={s.formRow}>
                 <div className={s.formGroup}>
-                  <label>Contact Person</label>
+                  {/* ── CHANGED ── */}
+                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('contactPerson') ? '#dc2626' : '#6b7280' }}>
+                    Contact Person <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     value={editFormData.contactPerson}
-                    onChange={e => setEditFormData({ ...editFormData, contactPerson: e.target.value })}
+                    onChange={e => { clearEditEmpty('contactPerson'); setEditFormData({ ...editFormData, contactPerson: e.target.value }); }}
+                    style={editEmptyFields.has('contactPerson') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
                   />
+                  {/* ── ADDED ── */}
+                  {editSubmitAttempted && editEmptyFields.has('contactPerson') && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Contact person is required.</p>
+                  )}
                 </div>
                 <div className={s.formGroup}>
-                  <label>Contact No.</label>
+                  {/* ── CHANGED ── */}
+                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('contactNumber') ? '#dc2626' : '#6b7280' }}>
+                    Contact No. <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     value={editFormData.contactNumber}
-                    onChange={e => setEditFormData({ ...editFormData, contactNumber: e.target.value.replace(/[^\d]/g, '') })}
+                    onChange={e => { clearEditEmpty('contactNumber'); setEditFormData({ ...editFormData, contactNumber: e.target.value.replace(/[^\d]/g, '') }); }}
+                    style={editEmptyFields.has('contactNumber') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
                   />
+                  {/* ── ADDED ── */}
+                  {editSubmitAttempted && editEmptyFields.has('contactNumber') && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Contact number is required.</p>
+                  )}
                 </div>
               </div>
 
               <div className={s.formGroupFull}>
-                <label>Email Address</label>
+                <label style={{ ...LABEL_STYLE }}>Email Address</label>
                 <input
                   value={editFormData.email}
                   onChange={e => setEditFormData({ ...editFormData, email: e.target.value })}
                 />
               </div>
 
+              {editFormError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: '8px', padding: '12px 16px', fontSize: '0.85rem', fontWeight: 500, marginTop: '8px' }}>
+                  ⚠ {editFormError}
+                </div>
+              )}
+
               <div className={s.modalFooter}>
-                <button type="button" onClick={() => { setEditModal(false); setEditFormData(null); setEditDupError(''); }} className={s.cancelBtn}>Cancel</button>
-                <button type="button" onClick={handleEditSupplier} className={s.saveBtn}>
-                  Update Supplier
-                </button>
+                <button type="button" onClick={handleEditCancelClick} className={s.cancelBtn}>Cancel</button>
+                <button type="button" onClick={handleEditSupplier} className={s.saveBtn}>Update Supplier</button>
               </div>
             </div>
           </div>
+
+          {/* Edit discard confirm */}
+          {showEditCancelConfirm && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowEditCancelConfirm(false)}>
+              <div style={{ background: '#fff', borderRadius: '20px', padding: '40px 36px', width: '380px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
+                <p style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px', color: '#111' }}>Discard Changes?</p>
+                <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '28px' }}>All entered information will be lost.</p>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                  <button onClick={() => setShowEditCancelConfirm(false)} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1.5px solid #ddd', background: '#fff', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#333' }}>Keep Editing</button>
+                  <button onClick={handleCloseEditModal} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: '#ef4444', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', color: '#fff' }}>Yes, Discard</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -935,7 +988,6 @@ export default function Suppliers({
       {showViewModal && selectedSupplierForView && (
         <div className={s.viewBackdrop} onClick={closeViewModal}>
           <div className={s.viewModal} onClick={e => e.stopPropagation()}>
-
             <div className={s.viewModalHeader}>
               <div>
                 <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
@@ -998,9 +1050,8 @@ export default function Suppliers({
             </div>
 
             <div className={s.viewModalFooter}>
-              <button className={s.viewBtnPrint} onClick={handlePrint}><LuPrinter size={14} /> Print </button>
+              <button className={s.viewBtnPrint} onClick={handlePrint}><LuPrinter size={14} /> Print</button>
             </div>
-
           </div>
         </div>
       )}
