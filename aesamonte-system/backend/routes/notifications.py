@@ -212,13 +212,19 @@ def get_notifications():
             date_str = ""
             time_str = ""
 
+        # Grab the relevant name (either the item name or the customer name)
+        entity_name = n.get("item_name") or n.get("customer_name") or "Unknown"
+
+        # Construct a human-readable label that prioritizes the Name instead of the ID
+        display_label = f"{n['status_name']}: {entity_name}"
+
         result.append({
             "id": idx + 1,
             "key": f"{n['status_code'].lower()}:{n['reference']}",
             "type": n["status_code"].lower(),
-            "label": n["status_name"],
-            "reference": n["reference"],
-            "name": n.get("item_name") or n.get("customer_name"),
+            "label": display_label,       # e.g., "Pending: John Doe" or "Low Stock: Whole Milk"
+            "reference": n["reference"],  # Kept in payload for backend operations/linking
+            "name": entity_name,
             "sales_id": n.get("sales_id"),
             "sku": n.get("item_sku"),
             "date": date_str,
