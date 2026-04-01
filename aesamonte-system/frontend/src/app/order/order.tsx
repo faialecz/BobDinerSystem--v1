@@ -15,7 +15,7 @@ import {
   LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX, LuPrinter
 } from 'react-icons/lu';
 
-const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'TO SHIP': 2, 'RECEIVED': 3, 'CANCELLED': 4 };
+const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'PACKED': 2, 'SHIPPING': 3, 'CANCELLED': 4, 'RECEIVED': 5 };
 const ITEM_STATUS_MAP: Record<number, string> = { 1: 'AVAILABLE', 2: 'PARTIALLY_AVAILABLE', 3: 'OUT_OF_STOCK' };
 const ROWS_PER_PAGE = 10;
 
@@ -41,7 +41,8 @@ type SortKey = 'id' | 'customer' | 'address' | 'totalQty' | 'totalAmount' | 'pay
 const getViewStatusClass = (status: string, s: Record<string, string>) => {
   switch (status?.toUpperCase()) {
     case 'PREPARING': return s.viewStatusPreparing;
-    case 'SHIPPING':   return s.viewStatusToShip;
+    case 'PACKED':    return s.viewStatusPacked;
+    case 'SHIPPING':  return s.viewStatusToShip;
     case 'RECEIVED':  return s.viewStatusReceived;
     case 'CANCELLED': return s.viewStatusCancelled;
     default:          return s.viewStatusDefault;
@@ -91,15 +92,16 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
 
   const s = styles;
 
-  const ORDER_STATUS_OPTIONS = ['All Status', 'PREPARING', 'TO SHIP', 'RECEIVED', 'CANCELLED'];
+  const ORDER_STATUS_OPTIONS = ['All Status', 'PREPARING', 'PACKED', 'SHIPPING', 'CANCELLED', 'RECEIVED'];
 
   const getStatusBadgeColor = (status: string) => {
-    if (status === 'PREPARING') return '#3b82f6';
-    if (status === 'TO SHIP')   return '#f59e0b';
-    if (status === 'RECEIVED')  return '#10b981';
-    if (status === 'CANCELLED') return '#ef4444';
-    return '#9ca3af';
-  };
+  if (status === 'PREPARING') return '#3b82f6';
+  if (status === 'PACKED')    return '#7c3aed';
+  if (status === 'SHIPPING')  return '#f59e0b';
+  if (status === 'RECEIVED')  return '#10b981';
+  if (status === 'CANCELLED') return '#ef4444';
+  return '#9ca3af';
+};
 
   const getDateRangeLabel = () => {
     if (!fromDate && !toDate) return 'Date Range';
@@ -382,13 +384,16 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
     const arr = [...filtered];
     const getSafeId = (id: any) => Number(String(id).replace(/\D/g, '')) || 0;
     if (!sortConfig.key || !sortConfig.direction) {
-      return arr.sort((a, b) => {
-        const dateA = parseDate(a.date)?.getTime() ?? 0;
-        const dateB = parseDate(b.date)?.getTime() ?? 0;
-        if (dateB !== dateA) return dateB - dateA; // newest first
-        return getSafeId(b.id) - getSafeId(a.id);  // then by ID descending
-      });
-    }
+  return arr.sort((a, b) => {
+    const priorityA = STATUS_PRIORITY[String(a.status ?? '').toUpperCase()] ?? 999;
+    const priorityB = STATUS_PRIORITY[String(b.status ?? '').toUpperCase()] ?? 999;
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    const dateA = parseDate(a.date)?.getTime() ?? 0;
+    const dateB = parseDate(b.date)?.getTime() ?? 0;
+    if (dateB !== dateA) return dateB - dateA;
+    return getSafeId(b.id) - getSafeId(a.id);
+  });
+}
     const { key, direction } = sortConfig;
     return arr.sort((a, b) => {
       const A = a[key as keyof Order]; const B = b[key as keyof Order];
@@ -412,20 +417,21 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
   const paginated = sorted.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
   
   const getStatusStyle = (status: string | undefined): React.CSSProperties => {
-    const base: React.CSSProperties = {
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      width: 'fit-content', whiteSpace: 'nowrap',
-      padding: '2px 10px', borderRadius: '999px',
-      fontSize: '0.78rem', fontWeight: 600,
-    };
-    switch (status?.toUpperCase()) {
-      case 'PREPARING': return { ...base, color: '#2563eb', border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff' };
-      case 'TO SHIP':   return { ...base, color: '#b45309', border: '1.5px solid #fcd34d', backgroundColor: '#fffbeb' };
-      case 'RECEIVED':  return { ...base, color: '#15803d', border: '1.5px solid #86efac', backgroundColor: '#f0fdf4' };
-      case 'CANCELLED': return { ...base, color: '#dc2626', border: '1.5px solid #fca5a5', backgroundColor: '#fef2f2' };
-      default:          return { ...base, color: '#6b7280', border: '1.5px solid #e5e7eb', backgroundColor: '#f9fafb' };
-    }
+  const base: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 'fit-content', whiteSpace: 'nowrap',
+    padding: '2px 10px', borderRadius: '999px',
+    fontSize: '0.78rem', fontWeight: 600,
   };
+  switch (status?.toUpperCase()) {
+    case 'PREPARING': return { ...base, color: '#2563eb', border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff' };
+    case 'PACKED':    return { ...base, color: '#7c3aed', border: '1.5px solid #c4b5fd', backgroundColor: '#f5f3ff' };
+    case 'SHIPPING':  return { ...base, color: '#b45309', border: '1.5px solid #fcd34d', backgroundColor: '#fffbeb' };
+    case 'RECEIVED':  return { ...base, color: '#15803d', border: '1.5px solid #86efac', backgroundColor: '#f0fdf4' };
+    case 'CANCELLED': return { ...base, color: '#dc2626', border: '1.5px solid #fca5a5', backgroundColor: '#fef2f2' };
+    default:          return { ...base, color: '#6b7280', border: '1.5px solid #e5e7eb', backgroundColor: '#f9fafb' };
+  }
+};
 
   const vatRate = 0.12;
   const vatableBase = selectedOrderForView ? selectedOrderForView.totalAmount / (1 + vatRate) : 0;
