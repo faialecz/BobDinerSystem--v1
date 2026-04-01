@@ -75,7 +75,7 @@ export default function Home() {
             ) : activeTab === "Reports" ? (
               <Reports role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Settings" ? (
-              <Settings role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} />
+              <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (
               <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (

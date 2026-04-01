@@ -95,8 +95,8 @@ export default function AccessControl({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Exclude Admin role (role_id === 1)
-  const visibleRoles = roles.filter(r => r.role_id !== 1);
+  // Exclude system roles: Super Admin (role_id === 1) and Admin (role_id === 2)
+  const visibleRoles = roles.filter(r => r.role_id !== 1 && r.role_id !== 2);
 
   return (
     <div className={styles.settingsCard}>

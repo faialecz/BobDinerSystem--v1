@@ -106,6 +106,10 @@ export default function GeneralSettings({
   const [pwError,     setPwError]     = useState('');
   const [pwLoading,   setPwLoading]   = useState(false);
 
+  // Reactive "last saved" values for phone and twoFA — used to show/hide Save
+  const [initPhone, setInitPhone] = useState('');
+  const [initTwoFA, setInitTwoFA] = useState(DEFAULT_STATE.twoFA);
+
   const savedPhone = useRef('');
   const savedState = useRef({
     ...DEFAULT_STATE,
@@ -146,11 +150,13 @@ export default function GeneralSettings({
         if (data.email)   setProfileEmail(data.email);
         if (data.contact) {
           setPhone(data.contact);
+          setInitPhone(data.contact);
           savedPhone.current       = data.contact;
           savedState.current.phone = data.contact;
         }
         if (data.two_fa_enabled !== undefined) {
           setTwoFA(data.two_fa_enabled);
+          setInitTwoFA(data.two_fa_enabled);
           savedState.current.twoFA = data.two_fa_enabled;
         }
       })
@@ -220,6 +226,8 @@ export default function GeneralSettings({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ contact: phone, two_fa_enabled: twoFA }),
         });
+        setInitPhone(phone);
+        setInitTwoFA(twoFA);
         savedPhone.current = phone;
       } catch { /* ignore */ }
     }
@@ -443,10 +451,12 @@ export default function GeneralSettings({
           </div>
         )}
 
-        {/* ── SAVE ── */}
-        <div className={s.formActions}>
-          <button className={s.saveBtn} onClick={handleSave}>SAVE</button>
-        </div>
+        {/* ── SAVE — only visible when phone or 2FA has changed ── */}
+        {(phone !== initPhone || twoFA !== initTwoFA) && (
+          <div className={s.formActions}>
+            <button className={s.saveBtn} onClick={handleSave}>SAVE</button>
+          </div>
+        )}
 
       </div>
 

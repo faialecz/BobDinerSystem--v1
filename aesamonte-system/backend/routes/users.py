@@ -10,19 +10,23 @@ def get_employees():
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT employee_id, employee_name, employee_email, 
-                   employee_contact, role_id, employee_status_id
-            FROM employee ORDER BY employed_date DESC
+            SELECT e.employee_id, e.employee_name, e.employee_email,
+                   e.employee_contact, e.role_id, e.employee_status_id,
+                   s.status_code
+            FROM employee e
+            JOIN static_status s ON e.employee_status_id = s.status_id
+            ORDER BY e.employed_date DESC
         """)
         rows = cursor.fetchall()
         employees = [
             {
-                "id": r[0], 
-                "name": r[1], 
-                "email": r[2], 
-                "contact": r[3], 
-                "role_id": r[4], 
-                "status_id": r[5]
+                "id":          r[0],
+                "name":        r[1],
+                "email":       r[2],
+                "contact":     r[3],
+                "role_id":     r[4],
+                "status_id":   r[5],
+                "status_code": r[6],
             } for r in rows
         ]
         return jsonify(employees)

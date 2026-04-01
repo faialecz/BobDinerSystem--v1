@@ -26,9 +26,12 @@ def get_roles():
                    COALESCE(r.is_active, TRUE) AS is_active,
                    r.sales_permissions, r.inventory_permissions, r.order_permissions,
                    r.supplier_permissions, r.reports_permissions, r.settings_permissions,
-                   COUNT(e.employee_id) FILTER (WHERE e.employee_status_id = 9) AS user_count
+                   COUNT(e.employee_id) FILTER (
+                       WHERE s.status_code = 'ACTIVE'
+                   ) AS user_count
             FROM employee_role r
             LEFT JOIN employee e ON e.role_id = r.role_id
+            LEFT JOIN static_status s ON e.employee_status_id = s.status_id
             GROUP BY r.role_id, r.role_name, r.is_active,
                      r.sales_permissions, r.inventory_permissions, r.order_permissions,
                      r.supplier_permissions, r.reports_permissions, r.settings_permissions
@@ -200,9 +203,11 @@ def get_role_detail(role_id):
 
         # Assigned active employees
         cur.execute("""
-            SELECT employee_id, employee_name, employee_email
-            FROM employee WHERE role_id = %s AND employee_status_id = 9
-            ORDER BY employee_name
+            SELECT e.employee_id, e.employee_name, e.employee_email
+            FROM employee e
+            JOIN static_status s ON e.employee_status_id = s.status_id
+            WHERE e.role_id = %s AND s.status_code = 'ACTIVE'
+            ORDER BY e.employee_name
         """, (role_id,))
         users = [dict(u) for u in cur.fetchall()]
 
@@ -333,12 +338,16 @@ def update_permissions(role_id):
 
 @roles_bp.route('/roles/<int:role_id>', methods=['DELETE'])
 def delete_role(role_id):
-    if role_id == 1:
-        return jsonify({"error": "Cannot delete the Admin role"}), 400
+    if role_id in (1, 2):
+        return jsonify({"error": "Cannot delete a system role"}), 400
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM employee WHERE role_id = %s AND employee_status_id = 9", (role_id,))
+        cur.execute("""
+            SELECT COUNT(*) FROM employee e
+            JOIN static_status s ON e.employee_status_id = s.status_id
+            WHERE e.role_id = %s AND s.status_code = 'ACTIVE'
+        """, (role_id,))
         count = cur.fetchone()[0]
         if count > 0:
             return jsonify({"error": f"Cannot delete: {count} active employee(s) assigned to this role"}), 400

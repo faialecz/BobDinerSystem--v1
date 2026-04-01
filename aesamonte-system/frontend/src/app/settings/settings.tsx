@@ -14,11 +14,12 @@ import AuditLog from "./audit-log";
 
 interface SettingsPageProps {
   role?: string;
+  roleId?: number;
   employeeId?: number;
   onLogout: () => void;
 }
 
-export default function SettingsPage({ role = "Admin", employeeId, onLogout }: SettingsPageProps) {
+export default function SettingsPage({ role = "Admin", roleId, employeeId, onLogout }: SettingsPageProps) {
   const [activeView, setActiveView] = useState<"main" | "users" | "access" | "appPreferences" | "backupRestore" | "auditlog">("main");
   const [showChangePassword, setShowChangePassword] = useState(false);
 
@@ -37,7 +38,8 @@ export default function SettingsPage({ role = "Admin", employeeId, onLogout }: S
     setTimeout(() => setToast(null), 4000);
   };
 
-  const isAdmin = role === "Admin";
+  // role_id 1 = Super Admin, role_id 2 = Admin — both get full settings access
+  const isAdmin = roleId === 1 || roleId === 2;
   const isManagerOrHead = role === "Manager" || role === "Head";
 
   const allConfigItems = [

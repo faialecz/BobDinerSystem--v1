@@ -67,6 +67,7 @@ export default function Login({ onLogin }: LoginProps) {
         employeeName:     data.employee_name,
         employeeUsername: data.employee_username,
         roleName:         data.role,
+        roleId:           data.role_id,
         permissions:      data.permissions,
         token:            data.token,
       });

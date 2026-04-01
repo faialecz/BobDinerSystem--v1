@@ -66,11 +66,64 @@ def _build_token_response(user: dict) -> dict:
         "status":            "success",
         "token":             token,
         "role":              user['role_name'],
+        "role_id":           user['role_id'],
         "employee_id":       user['employee_id'],
         "employee_name":     user['employee_name'],
         "employee_username": user['employee_username'],
         "permissions":       permissions,
     }
+
+
+@auth_bp.route('/profile', methods=['GET', 'PATCH'])
+def profile():
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    token = auth_header.split(' ', 1)[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        return jsonify({"status": "error", "message": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"status": "error", "message": "Invalid token"}), 401
+
+    employee_id = payload.get('employee_id')
+
+    conn = get_connection()
+    cur  = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        if request.method == 'GET':
+            cur.execute(
+                "SELECT employee_name, employee_email, employee_contact FROM employee WHERE employee_id = %s",
+                (employee_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return jsonify({"status": "error", "message": "Employee not found"}), 404
+            return jsonify({
+                "name":    row['employee_name'],
+                "email":   row['employee_email'],
+                "contact": row['employee_contact'],
+            }), 200
+
+        # PATCH
+        data    = request.json or {}
+        contact = data.get('contact')
+        if contact is not None:
+            cur.execute(
+                "UPDATE employee SET employee_contact = %s WHERE employee_id = %s",
+                (contact, employee_id)
+            )
+            conn.commit()
+        return jsonify({"status": "success"}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @auth_bp.route('/login', methods=['POST'])

@@ -13,11 +13,12 @@ interface User {
   id: number;
   name: string;
   role: string;
-  role_id: number; 
+  role_id: number;
   email: string;
   contact: string;
   status: 'Active' | 'Inactive';
   status_id: number;
+  status_code: string;
 }
 
 export default function UserManagement({ onBack }: { onBack: () => void }) {
@@ -35,11 +36,11 @@ export default function UserManagement({ onBack }: { onBack: () => void }) {
       const response = await fetch(`/api/employees`);
       const data = await response.json();
       const formattedUsers = data
-        .filter((emp: any) => emp.status_id !== 10)
+        .filter((emp: any) => emp.status_code !== 'DEACTIVATED')
         .map((emp: any) => ({
           ...emp,
           role: map[emp.role_id] ?? `Role ${emp.role_id}`,
-          status: emp.status_id === 9 ? "Active" : "Inactive"
+          status: emp.status_code === 'ACTIVE' ? "Active" : "Inactive"
         }));
       setUsers(formattedUsers);
     } catch (error) {
