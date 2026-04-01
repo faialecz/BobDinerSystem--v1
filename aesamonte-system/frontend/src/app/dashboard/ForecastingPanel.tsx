@@ -38,10 +38,8 @@ export default function ForecastingPanel({ charts, insights, loading }: Forecast
           <div>
             <h3 className={styles.panelTitle}>
               {slideIndex === 0
-                ? "Sales Forecasting"
-                : slideIndex === 1
-                ? "Smart Reorder Suggestion"
-                : "Stock-Out Prediction"}
+                ? "Smart Reorder Suggestion" : slideIndex === 1
+                ?  "Stock-Out Prediction" }
             </h3>
             {slideIndex === 0 && <p className={styles.panelSub}>{forecastView}</p>}
           </div>

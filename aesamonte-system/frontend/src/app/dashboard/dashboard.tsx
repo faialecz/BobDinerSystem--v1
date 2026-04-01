@@ -49,6 +49,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
 
@@ -128,6 +129,11 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
     return () => clearInterval(interval);
   }, []);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    fetchData();
+    setTimeout(() => setIsRefreshing(false), 800);
+  };
 
   const handleOrderClick = async (orderId: number) => {
     setReceiptLoading(true);
@@ -159,13 +165,6 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
     <div className={styles.dashboardContainer}>
       <TopHeader role={role} onLogout={onLogout} />
       <div className={styles.mainContent}>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <div>
-            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>DASHBOARD</h1>
-            <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '2px 0 0' }}>Overview of sales, orders, and inventory performance.</p>
-          </div>
-        </div>
 
         <StatsGrid
           metrics={metrics}
