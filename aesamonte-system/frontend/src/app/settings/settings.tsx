@@ -83,7 +83,9 @@ export default function SettingsPage({ role = "Admin", roleId, employeeId, onLog
       <main className={styles.mainContent}>
         {activeView === "main" && (
           <div className={styles.settingsCard}>
-            <h3 className={styles.pageTitle}>Controls & Configurations</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <h3 className={styles.pageTitle} style={{ margin: 0 }}>Controls & Configurations</h3>
+            </div>
             <div className={styles.configList}>
               {configItems.map((item) => (
                 <button

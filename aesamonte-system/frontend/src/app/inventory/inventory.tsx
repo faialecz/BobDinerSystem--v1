@@ -48,10 +48,12 @@ interface Supplier {
 
 interface Brand {
   id: number;
+  code: string;
   name: string;
 }
 
 interface UOM {
+  code: string;
   id: number;
   name: string;
 }
@@ -207,36 +209,34 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
     }
   };
 
-  useEffect(() => { fetchInventory(); fetchInventorySummary(); }, []);
+  const fetchSuppliers = async () => {
+    try {
+      const res = await fetch("/api/suppliers");
+      if (res.ok) { const d = await res.json(); setSuppliers(d); }
+    } catch (err) { console.error("Failed to fetch suppliers", err); }
+  };
+
+  const fetchBrands = async () => {
+    try {
+      const res = await fetch("/api/brands");
+      if (res.ok) { const d = await res.json(); setBrands(d); }
+    } catch (err) { console.error("Failed to fetch brands", err); }
+  };
+
+  const fetchUoms = async () => {
+    try {
+      const res = await fetch("/api/uom");
+      if (res.ok) { const d = await res.json(); setUoms(d); }
+    } catch (err) { console.error("Failed to fetch UOMs", err); }
+  };
+
 
   useEffect(() => {
-    const fetchSuppliers = async () => {
-      try {
-        const res = await fetch("/api/suppliers");
-        if (res.ok) { const d = await res.json(); setSuppliers(d); }
-      } catch (err) { console.error("Failed to fetch suppliers", err); }
-    };
+    fetchInventory();
+    fetchInventorySummary();
     fetchSuppliers();
-  }, []);
-
-  useEffect(() => {
-    const fetchBrands = async () => {
-      try {
-        const res = await fetch("/api/brands");
-        if (res.ok) { const d = await res.json(); setBrands(d); }
-      } catch (err) { console.error("Failed to fetch brands", err); }
-    };
     fetchBrands();
-  }, []);
-
-  useEffect(() => {
-    const fetchUOMs = async () => {
-      try {
-        const res = await fetch("/api/uom");
-        if (res.ok) { const d = await res.json(); setUoms(d); }
-      } catch (err) { console.error("Failed to fetch UOMs", err); }
-    };
-    fetchUOMs();
+    fetchUoms();
   }, []);
 
   useEffect(() => {
@@ -497,7 +497,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
               Manage products, stock levels, and supplier information.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <ExportButton onSelect={(type) => guard(permissions?.can_export, () => {
               setExportType(type);
               setShowExportModal(true);
@@ -766,14 +766,14 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
       <AddSupplierModal
         isOpen={showSupplierModal}
         onClose={() => setShowSupplierModal(false)}
-        onSuccess={msg => { setToastMessage(msg); setIsError(false); setShowToast(true); setShowSupplierModal(false); }}
+        onSuccess={msg => { setToastMessage(msg); setIsError(false); setShowToast(true); setShowSupplierModal(false); fetchSuppliers(); }}
         existingSuppliers={suppliers}
       />
 
       <UomModal
         isOpen={showUomModal}
         onClose={() => setShowUomModal(false)}
-        onUomAdded={newUom => setUoms(prev => [...prev, newUom].sort((a, b) => a.name.localeCompare(b.name)))}
+        onUomAdded={() => fetchUoms()}
       />
 
       {/* VIEW MODAL */}

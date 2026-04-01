@@ -14,6 +14,7 @@ const Help: React.FC<HelpProps> = ({ role, onLogout }) => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const s = styles as Record<string, string>;
 
+
   // Normalize the active role name to lowercase for strict matching
   const currentRole = role?.toLowerCase() || '';
 
@@ -180,7 +181,9 @@ const Help: React.FC<HelpProps> = ({ role, onLogout }) => {
 
       <div className={s['help-main-layout']}>
         <div className={s['help-card']}>
-          <h1 className={s['help-title']}>User Guide & System Help</h1>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h1 className={s['help-title']} style={{ margin: 0 }}>User Guide & System Help</h1>
+          </div>
           
           <div className={s['video-container']}>
             <div className={s['video-placeholder']}>

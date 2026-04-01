@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import styles from "@/css/reports.module.css";
 import exportStyles from "../../css/exportReports.module.css";
 import TopHeader from '@/components/layout/TopHeader';
@@ -63,38 +63,37 @@ export default function ReportsPage({ role = "Admin", onLogout }: { role?: strin
     setShowToast(true);
   };
 
-  useEffect(() => {
-    const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
+    try {
+      const t = new Date().getTime();
+
+      const salesRes = await fetch(`/api/reports/sales?t=${t}`, { cache: 'no-store' });
+      if (salesRes.ok) setSalesData(await salesRes.json());
+      else throw new Error("Failed to load sales report.");
+
+      const extraRes = await fetch(`/api/reports/extra?t=${t}`, { cache: 'no-store' });
+      if (extraRes.ok) setExtraData(await extraRes.json());
+      else throw new Error("Failed to load extra report data.");
+
       try {
-        const t = new Date().getTime();
-
-        const salesRes = await fetch(`/api/reports/sales?t=${t}`, { cache: 'no-store' });
-        if (salesRes.ok) setSalesData(await salesRes.json());
-        else throw new Error("Failed to load sales report.");
-
-        const extraRes = await fetch(`/api/reports/extra?t=${t}`, { cache: 'no-store' });
-        if (extraRes.ok) setExtraData(await extraRes.json());
-        else throw new Error("Failed to load extra report data.");
-
-        try {
-          const invRes = await fetch(`/api/inventory/summary?t=${t}`, { cache: 'no-store' });
-          if (invRes.ok) {
-            const data = await invRes.json();
-            setInventoryData({ weekly: data.weekly || 0, monthly: data.monthly || 0, yearly: data.yearly || 0 });
-          } else {
-            setInventoryData({ weekly: 0, monthly: 0, yearly: 0 });
-          }
-        } catch {
+        const invRes = await fetch(`/api/inventory/summary?t=${t}`, { cache: 'no-store' });
+        if (invRes.ok) {
+          const data = await invRes.json();
+          setInventoryData({ weekly: data.weekly || 0, monthly: data.monthly || 0, yearly: data.yearly || 0 });
+        } else {
           setInventoryData({ weekly: 0, monthly: 0, yearly: 0 });
         }
-
-      } catch (e: any) {
-        setErrorMsg(e.message || "Network error. Is Flask running?");
+      } catch {
+        setInventoryData({ weekly: 0, monthly: 0, yearly: 0 });
       }
-    };
 
-    fetchReports();
+    } catch (e: any) {
+      setErrorMsg(e.message || "Network error. Is Flask running?");
+    }
   }, []);
+
+  useEffect(() => { fetchReports(); }, [fetchReports]);
+
 
   const maxOrders = extraData && extraData.topClients.length > 0
     ? Math.max(...extraData.topClients.map(c => c.orders))
@@ -180,7 +179,7 @@ export default function ReportsPage({ role = "Admin", onLogout }: { role?: strin
               View sales, inventory, and client performance data.
             </p>
           </div>
-          <div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {['Admin', 'Manager'].includes(role ?? '') && (
               <div onClick={() => setShowExportModal(true)}>
                 <ExportButton />

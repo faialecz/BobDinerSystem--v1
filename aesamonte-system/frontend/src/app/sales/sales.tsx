@@ -145,6 +145,7 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
     setToastMessage(msg); setIsError(type === 'error'); setShowToast(true)
   }
 
+
   const fetchSalesData = async (isBackground = false) => {
     try {
       if (!isBackground) setIsLoading(true)
@@ -386,7 +387,7 @@ if (isLoading || summary === null) return (
               Track, manage, and export all sales transactions and invoices.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {canExport && (
               <ExportButton onSelect={(type) => {
                 setExportType(type)

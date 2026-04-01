@@ -52,13 +52,12 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchData = () => {
-      Promise.all([
-        fetch(`${API}/api/dashboard/all`, { credentials: "include" }).then((r) => r.json()),
-        fetch(`/api/inventory`, { headers: { "Cache-Control": "no-cache" } }).then((r) => r.json()),
-      ])
-        .then(([dashData, inventoryData]) => {
+  const fetchData = () => {
+    Promise.all([
+      fetch(`${API}/api/dashboard/all`, { credentials: "include" }).then((r) => r.json()),
+      fetch(`/api/inventory`, { headers: { "Cache-Control": "no-cache" } }).then((r) => r.json()),
+    ])
+      .then(([dashData, inventoryData]) => {
           const { metrics: m, recentOrders: ro, charts: ch, insights: ins, lowStockItems: dashLowStock } = dashData;
 
           if (ch && !ch.error) setCharts(ch);
@@ -121,13 +120,14 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
         })
         .catch((e) => console.error("Dashboard fetch error:", e))
         .finally(() => setLoading(false));
-    };
+  };
 
-    fetchData(); // run on mount
-
-    const interval = setInterval(fetchData, 30_000); // re-fetch every 30s
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30_000);
     return () => clearInterval(interval);
   }, []);
+
 
   const handleOrderClick = async (orderId: number) => {
     setReceiptLoading(true);
@@ -159,6 +159,13 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
     <div className={styles.dashboardContainer}>
       <TopHeader role={role} onLogout={onLogout} />
       <div className={styles.mainContent}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>DASHBOARD</h1>
+            <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '2px 0 0' }}>Overview of sales, orders, and inventory performance.</p>
+          </div>
+        </div>
 
         <StatsGrid
           metrics={metrics}

@@ -11,7 +11,7 @@ import OrderEditModal from './editOrderModal';
 import AddOrderModal from './addOrderModal';
 import ArchiveTable from './archiveOrderModal';
 import { 
-  LuSearch, LuChevronUp, LuChevronDown, LuEllipsisVertical, 
+  LuSearch, LuChevronUp, LuChevronDown, LuEllipsisVertical,
   LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX, LuPrinter
 } from 'react-icons/lu';
 
@@ -157,6 +157,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
       if (r.ok) { const d = await r.json(); if (d && d.shippedToday) setSummary(d); }
     } catch (err) { console.error('Error fetching summary:', err); }
   };
+
 
   useEffect(() => {
     fetchOrders();
@@ -536,7 +537,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
             <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>ORDERS</h1>
             <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '2px 0 0' }}>Track, manage, and process customer orders.</p>
           </div>
-          <div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {['Admin', 'Manager'].includes(role) && (
               <ExportButton onSelect={(type) => { setExportType(type); setShowExportModal(true); }} />
             )}

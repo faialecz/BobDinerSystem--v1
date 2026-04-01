@@ -13,17 +13,58 @@ import Orders from "@/app/order/order";
 import Suppliers from "@/app/suppliers/suppliers";
 import type { UserInfo } from "@/types/user";
 
+function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
+  const [authReady, setAuthReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState("Dashboard");
+
+  const setActiveTabPersisted = (tab: string) => {
+    localStorage.setItem("activeTab", tab);
+    setActiveTab(tab);
+  };
   const [pendingSearch, setPendingSearch] = useState<{ tab: string; term: string } | null>(null);
+
+  // Restore session from localStorage token on page load / browser refresh
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      const payload = decodeJwt(token);
+      const expired = !payload || (typeof payload.exp === "number" && Date.now() / 1000 > payload.exp);
+      if (!expired && payload) {
+        setUserInfo({
+          employeeId:       payload.employee_id as number,
+          employeeName:     payload.employee_name as string,
+          employeeUsername: "",
+          roleName:         payload.role_name as string,
+          roleId:           payload.role_id as number,
+          permissions:      payload.permissions as UserInfo["permissions"],
+          token,
+        });
+        setIsLoggedIn(true);
+        const savedTab = localStorage.getItem("activeTab");
+        if (savedTab) setActiveTab(savedTab);
+      } else {
+        localStorage.removeItem("token");
+      }
+    }
+    setAuthReady(true);
+  }, []);
 
   useEffect(() => {
     function handleNavigate(e: Event) {
       const { tab, search } = (e as CustomEvent<{ tab: string; search: string }>).detail;
-      setActiveTab(tab);
+      setActiveTabPersisted(tab);
       setPendingSearch({ tab, term: search ?? '' });
     }
     window.addEventListener('app:navigate', handleNavigate);
@@ -37,6 +78,7 @@ export default function Home() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("activeTab");
     setIsLoggedIn(false);
     setUserInfo(null);
     setActiveTab("Dashboard");
@@ -44,7 +86,7 @@ export default function Home() {
 
  return (
     <main className="min-h-screen bg-linear-to-b from-[#0A2A43] to-[#1a5887]">
-      {!isLoggedIn || !userInfo ? (
+      {!authReady ? null : !isLoggedIn || !userInfo ? (
         /* Show Login Screen */
         <div className="flex justify-center items-center h-screen">
           <Login onLogin={handleLogin} />
@@ -57,7 +99,7 @@ export default function Home() {
             collapsed={isCollapsed}
             setCollapsed={setIsCollapsed}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={setActiveTabPersisted}
           />
 
           <div
@@ -65,7 +107,7 @@ export default function Home() {
               ${isCollapsed ? "ml-*" : "ml-*"}`}
           >
             {activeTab === "Dashboard" ? (
-              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTab} />
+              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTabPersisted} />
             ) : activeTab === "Inventory" ? (
               <Inventory role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Inventory' ? pendingSearch.term : ''} permissions={userInfo.permissions?.inventory} />
             ) : activeTab === "Sales" ? (

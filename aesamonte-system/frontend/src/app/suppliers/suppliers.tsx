@@ -18,7 +18,7 @@ import {
   LuPhone,
   LuMail,
   LuMapPin,
-  LuUser
+  LuUser,
 } from 'react-icons/lu';
 
 /* ================= TYPES ================= */
@@ -146,6 +146,7 @@ export default function Suppliers({
   };
 
   useEffect(() => { fetchSuppliers(); }, []);
+
 
   /* ================= CREATE MODAL HELPERS ================= */
 
