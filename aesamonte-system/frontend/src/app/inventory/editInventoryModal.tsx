@@ -34,6 +34,7 @@ interface EditInventoryModalProps {
   itemData: any;
   onSave: (updatedItem: any) => void;
   onOpenUomModal: () => void;
+  onOpenSupplierModal: () => void;
   suppliers: any[];
   brands: { id: number; code: string; name: string }[];
   uoms: any[];
@@ -100,7 +101,7 @@ const LABEL_STYLE: React.CSSProperties = {
 };
 
 const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
-  isOpen, onClose, itemData, onSave, onOpenUomModal,
+  isOpen, onClose, itemData, onSave, onOpenUomModal, onOpenSupplierModal,
   suppliers, brands = [], uoms, existingProducts = []
 }) => {
   const s = styles as Record<string, string>;
@@ -125,11 +126,11 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
 
       const sups: SupplierEntry[] = (itemData.suppliers && itemData.suppliers.length > 0)
         ? itemData.suppliers.map((sup: any, i: number) => ({
-            supplierName: sup.supplierName || '',
-            contactPerson: sup.contactPerson || '',
-            contactNumber: sup.contactNumber || '',
-            leadTime: String(sup.leadTime ?? ''),
-            minOrder: String(sup.minOrder ?? ''),
+            supplierName: sup.supplier_name || '',
+            contactPerson: sup.contact_person || '',
+            contactNumber: sup.contact_number || '',
+            leadTime: i === 0 ? String(itemData.leadTime ?? '') : '',
+            minOrder: i === 0 ? String(itemData.minOrder ?? '') : '',
             isPrimary: i === 0,
           }))
         : [{
@@ -276,6 +277,11 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
       .filter(e => e.supplierName)
       .map((e, i) => ({ ...e, isPrimary: i === 0 }));
 
+    if (validSuppliers.length === 0) {
+      setDupError('At least one supplier is required.');
+      return;
+    }
+
     onSave({
       ...formData,
       suppliers: validSuppliers,
@@ -301,6 +307,8 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
     submitAttempted && (brandVariants[brandIdx].unitCost === '' || brandVariants[brandIdx].unitCost === null);
   const sellingPriceHasError = (brandIdx: number) =>
     submitAttempted && (brandVariants[brandIdx].sellingPrice === '' || brandVariants[brandIdx].sellingPrice === null);
+  const supplierHasError = (idx: number) =>
+    submitAttempted && idx === 0 && !supplierEntries[0]?.supplierName;
 
   return (
     <div className={s.modalOverlay} style={{ zIndex: 1100 }}>
@@ -415,7 +423,7 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
                       <select style={{ ...(uomHasError(brandIdx) ? FIELD_ERROR_STYLE : FIELD_STYLE), width: '100%' }}
                         value={brand.uom} onChange={e => handleBrandChange(brandIdx, 'uom', e.target.value)}>
                         <option value="Select">Select</option>
-                        {uoms.map((u: any) => <option key={u.id} value={u.code}>{u.name} ({u.code})</option>)}
+                        {uoms.map((u: any) => <option key={u.id} value={u.name}>{u.name}</option>)}
                       </select>
                       {uomHasError(brandIdx) && (
                         <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Please select a unit of measure.</p>
@@ -548,7 +556,7 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
           <div style={{ padding: '0 24px 8px' }}>
             <button type="button" onClick={handleAddBrandVariant}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <LuPlus size={14} /> Add Brand Variant
+              <LuPlus size={14} /> Add Another Brand
             </button>
           </div>
 
@@ -557,10 +565,9 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
             <Divider />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>Suppliers</p>
-              <button type="button" onClick={handleAddSupplier}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <LuPlus size={14} /> Add Supplier
-              </button>
+              <span onClick={onOpenSupplierModal} style={{ cursor: 'pointer', fontSize: '0.82rem', color: '#007bff', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <LuPlus size={13} /> New Supplier
+              </span>
             </div>
 
             {supplierError && (
@@ -592,14 +599,19 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
 
                 {/* Supplier select + auto-filled contact info below it */}
                 <div style={{ marginBottom: '12px' }}>
-                  <label style={{ ...LABEL_STYLE }}>Supplier Name</label>
-                  <select style={{ ...FIELD_STYLE }} value={entry.supplierName} onChange={e => handleSupplierChange(idx, 'supplierName', e.target.value)}>
+                  <label style={{ ...LABEL_STYLE, color: supplierHasError(idx) ? '#dc2626' : '#6b7280' }}>
+                    Supplier Name {idx === 0 && <span style={{ color: '#ef4444' }}>*</span>}
+                  </label>
+                  <select style={supplierHasError(idx) ? FIELD_ERROR_STYLE : FIELD_STYLE} value={entry.supplierName} onChange={e => handleSupplierChange(idx, 'supplierName', e.target.value)}>
                     <option value="">Select Supplier</option>
                     {suppliers.map((sup: any) => {
                       const used = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
                       return <option key={sup.id} value={sup.supplierName} disabled={used} style={{ color: used ? '#9ca3af' : '#374151' }}>{sup.supplierName}</option>;
                     })}
                   </select>
+                  {supplierHasError(idx) && (
+                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Supplier is required.</p>
+                  )}
                 </div>
 
                 {/* Contact info (read-only, auto-filled from supplier) + Lead Time + Min Order */}
@@ -628,6 +640,10 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
 
               </div>
             ))}
+            <button type="button" onClick={handleAddSupplier}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <LuPlus size={14} /> Add Supplier
+            </button>
           </div>
         </div>
         {/* END SCROLLABLE BODY */}

@@ -110,11 +110,11 @@ def orders_list():
                     json_build_object(
                         'inventory_id', od.inventory_id,
                         'order_quantity', od.order_quantity,
-                        'available_quantity', COALESCE((SELECT SUM(ib.item_qty) FROM inventory_brands ib WHERE ib.inventory_id = i.inventory_id), 0),
+                        'available_quantity', COALESCE((SELECT SUM(ib.total_quantity) FROM inventory_brand ib WHERE ib.inventory_id = i.inventory_id), 0),
                         'item_name', i.item_name,
-                        'description', (SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
+                        'description', (SELECT ib2.item_description FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
                         'amount', od.order_total,
-                        'uom', (SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1)
+                        'uom', (SELECT u2.uom_name FROM inventory_brand ib2 JOIN unit_of_measure u2 ON ib2.uom_id = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1)
                     )
                 ) FILTER (WHERE od.order_id IS NOT NULL), '[]') AS items_json
             FROM order_transaction ot
@@ -325,10 +325,10 @@ def update_order(order_id):
             for old_inv_id, old_qty in old_items:
                 # Add the old quantity back into the first brand variant
                 cur.execute("""
-                    UPDATE inventory_brands
+                    UPDATE inventory_brand
                     SET item_qty = item_qty + %s
                     WHERE inventory_id = %s AND brand_id = (
-                        SELECT brand_id FROM inventory_brands
+                        SELECT brand_id FROM inventory_brand
                         WHERE inventory_id = %s ORDER BY brand_id LIMIT 1
                     )
                 """, (old_qty, old_inv_id, old_inv_id))
@@ -342,7 +342,7 @@ def update_order(order_id):
                         LIMIT 1
                     )
                     WHERE inventory_id = %s
-                      AND COALESCE((SELECT SUM(item_qty) FROM inventory_brands WHERE inventory_id = %s), 0) > 0
+                      AND COALESCE((SELECT SUM(item_qty) FROM inventory_brand WHERE inventory_id = %s), 0) > 0
                       AND item_status_id = (
                         SELECT status_id FROM static_status
                         WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK'
@@ -391,16 +391,16 @@ def update_order(order_id):
 
                     # Deduct the new quantities from the first brand variant
                     cur.execute("""
-                        UPDATE inventory_brands
+                        UPDATE inventory_brand
                         SET item_qty = item_qty - %s
                         WHERE inventory_id = %s AND brand_id = (
-                            SELECT brand_id FROM inventory_brands
+                            SELECT brand_id FROM inventory_brand
                             WHERE inventory_id = %s ORDER BY brand_id LIMIT 1
                         )
                     """, (qty, inv_id, inv_id))
 
                     cur.execute("""
-                        SELECT COALESCE(SUM(item_qty), 0) FROM inventory_brands WHERE inventory_id = %s
+                        SELECT COALESCE(SUM(item_qty), 0) FROM inventory_brand WHERE inventory_id = %s
                     """, (inv_id,))
                     new_qty = cur.fetchone()[0]
                     # Automatically set status to "Out of Stock" if total drops to 0
@@ -536,16 +536,16 @@ def add_order():
 
                 # Deduct from the first brand variant automatically
                 cur.execute("""
-                    UPDATE inventory_brands
+                    UPDATE inventory_brand
                     SET item_qty = item_qty - %s
                     WHERE inventory_id = %s AND brand_id = (
-                        SELECT brand_id FROM inventory_brands
+                        SELECT brand_id FROM inventory_brand
                         WHERE inventory_id = %s ORDER BY brand_id LIMIT 1
                     )
                 """, (qty, inv_id, inv_id))
 
                 cur.execute("""
-                    SELECT COALESCE(SUM(item_qty), 0) FROM inventory_brands WHERE inventory_id = %s
+                    SELECT COALESCE(SUM(item_qty), 0) FROM inventory_brand WHERE inventory_id = %s
                 """, (inv_id,))
                 new_qty = cur.fetchone()[0]
 

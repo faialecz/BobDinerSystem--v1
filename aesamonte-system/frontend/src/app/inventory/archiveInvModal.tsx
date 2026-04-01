@@ -15,7 +15,7 @@ import {
 export interface Product {
   id: string;
   item_name: string;
-  item_description: string;
+  item_description?: string;
   qty: number;
   uom: string;
   status: string;

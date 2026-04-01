@@ -92,14 +92,14 @@ def _build_zip_bytes():
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
             cur.execute("""
                 SELECT i.inventory_id, i.item_name,
-                       COALESCE((SELECT ib2.item_description FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_description,
-                       COALESCE((SELECT ib2.item_sku FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_sku,
-                       COALESCE((SELECT b2.brand_name FROM inventory_brands ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
-                       i.total_quantity AS item_quantity,
-                       COALESCE((SELECT u2.uom_code FROM inventory_brands ib2 JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom_code,
+                       COALESCE((SELECT ib2.item_description FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_description,
+                       COALESCE((SELECT ib2.item_sku FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_sku,
+                       COALESCE((SELECT b2.brand_name FROM inventory_brand ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
+                       COALESCE((SELECT SUM(ib3.total_quantity) FROM inventory_brand ib3 WHERE ib3.inventory_id = i.inventory_id), 0) AS item_quantity,
+                       COALESCE((SELECT u2.uom_name FROM inventory_brand ib2 JOIN unit_of_measure u2 ON ib2.uom_id = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom_code,
                        s.status_name,
-                       COALESCE((SELECT ib2.item_unit_price FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_unit_price,
-                       COALESCE((SELECT ib2.item_selling_price FROM inventory_brands ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_selling_price
+                       COALESCE((SELECT ib2.item_unit_price FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_unit_price,
+                       COALESCE((SELECT ib2.item_selling_price FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_selling_price
                 FROM inventory i
                 JOIN static_status s ON i.item_status_id = s.status_id
                 ORDER BY i.inventory_id
@@ -307,8 +307,8 @@ def restore_inventory(cur, rows):
         if not inv_id:
             continue
 
-        uom_code = row.get('uom', '')
-        cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_code = %s", (uom_code,))
+        uom_name = row.get('uom', '')
+        cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_name = %s", (uom_name,))
         uom_res = cur.fetchone()
         uom_id = uom_res[0] if uom_res else None
 
@@ -337,7 +337,7 @@ def restore_inventory(cur, rows):
             if brand_res:
                 brand_id = brand_res[0]
                 cur.execute("""
-                    INSERT INTO inventory_brands
+                    INSERT INTO inventory_brand
                         (inventory_id, brand_id, item_sku, item_unit_price, item_selling_price,
                          item_qty, unit_of_measure, item_description, item_status)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)

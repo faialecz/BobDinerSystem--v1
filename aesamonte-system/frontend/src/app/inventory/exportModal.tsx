@@ -6,7 +6,7 @@ import styles from "@/css/inventory.module.css";
 import { exportPDF, exportExcel, exportCSV } from '@/utils/exportUtils';
 
 interface Product {
-  id: string; item_name: string; item_description: string;
+  id: string; item_name: string; item_description?: string;
   qty: number; uom: string; status: string;
   brands?: { brand_name: string; sku: string; unit_price: number; selling_price: number; qty: number }[];
   suppliers?: { supplier_name: string }[];

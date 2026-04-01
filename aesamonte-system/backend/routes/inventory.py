@@ -11,7 +11,7 @@ def get_brands():
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT brand_id, brand_code, brand_name
+            SELECT brand_id, brand_name
             FROM brand
             ORDER BY brand_name ASC
         """)
@@ -21,7 +21,7 @@ def get_brands():
     finally:
         cur.close()
         conn.close()
-    return jsonify([{"id": r[0], "code": r[1], "name": r[2]} for r in rows])
+    return jsonify([{"id": r[0], "name": r[1]} for r in rows])
 
 # ================= GET INVENTORY =================
 @inventory_bp.route("/api/inventory", methods=["GET"])
@@ -33,22 +33,22 @@ def get_inventory():
             SELECT
                 i.inventory_id,
                 i.item_name,
+                COALESCE(SUM(ib.total_quantity), 0) AS total_quantity,
                 COALESCE(
-                    (SELECT ib2.item_description FROM inventory_brands ib2
-                     WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
-                    ''
-                ) AS item_description,
-                i.total_quantity,
-                COALESCE(
-                    (SELECT u2.uom_code FROM inventory_brands ib2
-                     JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id
+                    (SELECT u2.uom_name FROM inventory_brand ib2
+                     JOIN unit_of_measure u2 ON ib2.uom_id = u2.uom_id
                      WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
                     '—'
                 ) AS uom,
                 s.status_name AS item_status,
-                i.item_status_id
+                i.item_status_id,
+                COALESCE(ia.reorder_qty, 0) AS low_stock_qty,
+                s.status_code
             FROM inventory i
             JOIN static_status s ON i.item_status_id = s.status_id
+            LEFT JOIN inventory_brand ib ON ib.inventory_id = i.inventory_id
+            LEFT JOIN inventory_action ia ON ia.inventory_id = i.inventory_id
+            GROUP BY i.inventory_id, i.item_name, s.status_name, s.status_code, i.item_status_id, ia.reorder_qty
             ORDER BY i.inventory_id ASC;
         """)
         rows = cur.fetchall()
@@ -56,24 +56,26 @@ def get_inventory():
         cur.execute("""
             SELECT ib.inventory_id, b.brand_id, b.brand_name,
                    ib.item_sku, ib.item_unit_price, ib.item_selling_price,
-                   ib.item_qty, ib.item_description
-            FROM inventory_brands ib
+                   ib.total_quantity
+            FROM inventory_brand ib
             JOIN brand b ON ib.brand_id = b.brand_id
             ORDER BY ib.inventory_id, b.brand_name
         """)
         brand_rows = cur.fetchall()
 
         cur.execute("""
-            SELECT ins.inventory_id, s.supplier_id, s.supplier_name,
+            SELECT DISTINCT i.inventory_id, s.supplier_id, s.supplier_name,
                    s.contact_person, s.supplier_contact
-            FROM inventory_supplier ins
-            JOIN supplier s ON ins.supplier_id = s.supplier_id
-            ORDER BY ins.inventory_id
+            FROM inventory i
+            JOIN inventory_brand ib ON ib.inventory_id = i.inventory_id
+            JOIN inventory_brand_supplier ibs ON ibs.inventory_brand_id = ib.inventory_brand_id
+            JOIN supplier s ON s.supplier_id = ibs.supplier_id
+            ORDER BY i.inventory_id
         """)
         supplier_rows = cur.fetchall()
 
     except Exception as e:
-        print("Inventory GET error:", e)
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
@@ -89,7 +91,6 @@ def get_inventory():
             "unit_price": float(br[4] or 0),
             "selling_price": float(br[5] or 0),
             "qty": int(br[6] or 0),
-            "description": br[7] or "",
         })
 
     suppliers_map = {}
@@ -105,15 +106,27 @@ def get_inventory():
     result = []
     for r in rows:
         inv_id = str(r[0])
-        status_id = r[6]
-        is_arch = (status_id == 4)
+        total_qty = int(r[2] or 0)
+        status_id = r[5]
+        low_stock_qty = int(r[6] or 0)
+        status_code = r[7] or ""
+        is_arch = (status_code == "INACTIVE")
+
+        if is_arch:
+            dynamic_status = r[4] or "Archived"
+        elif total_qty == 0:
+            dynamic_status = "Out of Stock"
+        elif low_stock_qty > 0 and total_qty <= low_stock_qty:
+            dynamic_status = "Low Stock"
+        else:
+            dynamic_status = "Available"
+
         result.append({
             "id": inv_id,
             "item_name": r[1],
-            "item_description": r[2],
-            "qty": int(r[3] or 0),
-            "uom": r[4] or "—",
-            "status": r[5] or "Unknown",
+            "qty": total_qty,
+            "uom": r[3] or "—",
+            "status": dynamic_status,
             "is_archived": is_arch,
             "brands": brands_map.get(inv_id, []),
             "suppliers": suppliers_map.get(inv_id, []),
@@ -214,6 +227,9 @@ def add_inventory_batch():
                     "minOrder": int(sup.get('minOrder') or 0),
                 })
 
+            if not resolved_suppliers:
+                raise Exception("At least one supplier is required.")
+
             # Insert master inventory record
             cur.execute("""
                 INSERT INTO public.inventory (item_name, item_status_id)
@@ -222,17 +238,21 @@ def add_inventory_batch():
             """, (item_name,))
             new_inventory_id = cur.fetchone()[0]
 
-            # Link suppliers
-            for sup in resolved_suppliers:
-                cur.execute("""
-                    INSERT INTO public.inventory_supplier (inventory_id, supplier_id)
-                    VALUES (%s, %s)
-                """, (new_inventory_id, sup['supplier_id']))
-
             # Insert brand variants (UOM and description are per-brand)
             brand_variants = item.get('brands', [])
             if not brand_variants:
                 raise Exception(f"At least one brand variant is required for '{item_name}'.")
+
+            # Resolve the correct status_id for inventory_brand (scope differs from inventory)
+            cur.execute("""
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'AVAILABLE'
+                LIMIT 1
+            """)
+            brand_status_row = cur.fetchone()
+            if not brand_status_row:
+                raise Exception("Could not find AVAILABLE status for inventory_brand in static_status.")
+            brand_status_id = brand_status_row[0]
 
             first_reorder_point = 0
             for idx, bv in enumerate(brand_variants):
@@ -246,30 +266,29 @@ def add_inventory_batch():
                         brand_id = b_res[0]
                     else:
                         cur.execute(
-                            "INSERT INTO brand (brand_name, brand_code) VALUES (%s, %s) RETURNING brand_id",
-                            (brand_name, brand_name.upper()[:20])
+                            "INSERT INTO brand (brand_name) VALUES (%s) RETURNING brand_id",
+                            (brand_name,)
                         )
                         brand_id = cur.fetchone()[0]
 
                 # Per-brand UOM
-                uom_code = bv.get('uom')
-                if not uom_code or uom_code == 'Select':
+                uom_name = bv.get('uom')
+                if not uom_name or uom_name == 'Select':
                     raise Exception(f"UOM missing for a brand variant of '{item_name}'")
-                cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_code = %s", (uom_code,))
+                cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_name = %s", (uom_name,))
                 uom_res = cur.fetchone()
                 if not uom_res:
-                    raise Exception(f"UOM '{uom_code}' not found.")
+                    raise Exception(f"UOM '{uom_name}' not found.")
                 uom_id = uom_res[0]
 
-                item_description = bv.get('itemDescription') or ''
                 if idx == 0:
                     first_reorder_point = int(bv.get('reorderPoint', 0))
 
                 cur.execute("""
-                    INSERT INTO public.inventory_brands
+                    INSERT INTO public.inventory_brand
                         (inventory_id, brand_id, item_sku, item_unit_price, item_selling_price,
-                         item_qty, unit_of_measure, item_description, item_status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
+                         total_quantity, uom_id, item_status_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     new_inventory_id, brand_id,
                     bv.get('sku') or None,
@@ -277,13 +296,27 @@ def add_inventory_batch():
                     float(bv.get('selling_price', 0)),
                     int(bv.get('qty', 0)),
                     uom_id,
-                    item_description,
+                    brand_status_id,
                 ))
+
+            # Link suppliers to each brand variant
+            if resolved_suppliers:
+                cur.execute(
+                    "SELECT inventory_brand_id FROM public.inventory_brand WHERE inventory_id = %s",
+                    (new_inventory_id,)
+                )
+                new_brand_ids = [row[0] for row in cur.fetchall()]
+                for ibid in new_brand_ids:
+                    for sup in resolved_suppliers:
+                        cur.execute("""
+                            INSERT INTO public.inventory_brand_supplier (inventory_brand_id, supplier_id)
+                            VALUES (%s, %s)
+                        """, (ibid, sup['supplier_id']))
 
             # Insert inventory_action (reorder point from first brand)
             primary = resolved_suppliers[0] if resolved_suppliers else {}
             cur.execute("""
-                INSERT INTO public.inventory_action (inventory_id, suggestion_date, stockout_predict, lead_time_days, min_order_qty, reorder_qty)
+                INSERT INTO public.inventory_action (inventory_id, action_date, stockout_predict, lead_time_days, min_order_qty, reorder_qty)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (
                 new_inventory_id, datetime.now(), False,
@@ -313,13 +346,8 @@ def get_inventory_item(id):
             SELECT
                 i.inventory_id, i.item_name,
                 COALESCE(
-                    (SELECT ib2.item_description FROM inventory_brands ib2
-                     WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
-                    ''
-                ) AS item_description,
-                COALESCE(
-                    (SELECT u2.uom_code FROM inventory_brands ib2
-                     JOIN unit_of_measure u2 ON ib2.unit_of_measure = u2.uom_id
+                    (SELECT u2.uom_name FROM inventory_brand ib2
+                     JOIN unit_of_measure u2 ON ib2.uom_id = u2.uom_id
                      WHERE ib2.inventory_id = i.inventory_id LIMIT 1),
                     'Select'
                 ) AS uom,
@@ -334,8 +362,8 @@ def get_inventory_item(id):
 
         cur.execute("""
             SELECT b.brand_id, b.brand_name, ib.item_sku, ib.item_unit_price,
-                   ib.item_selling_price, ib.item_qty, ib.item_description
-            FROM inventory_brands ib
+                   ib.item_selling_price, ib.total_quantity
+            FROM inventory_brand ib
             JOIN brand b ON ib.brand_id = b.brand_id
             WHERE ib.inventory_id = %s
             ORDER BY b.brand_name
@@ -348,16 +376,16 @@ def get_inventory_item(id):
                 "unit_price": float(row[3] or 0),
                 "selling_price": float(row[4] or 0),
                 "qty": int(row[5] or 0),
-                "description": row[6] or "",
             }
             for row in cur.fetchall()
         ]
 
         cur.execute("""
-            SELECT s.supplier_id, s.supplier_name, s.contact_person, s.supplier_contact
-            FROM inventory_supplier ins
-            JOIN supplier s ON s.supplier_id = ins.supplier_id
-            WHERE ins.inventory_id = %s
+            SELECT DISTINCT s.supplier_id, s.supplier_name, s.contact_person, s.supplier_contact
+            FROM inventory_brand ib
+            JOIN inventory_brand_supplier ibs ON ibs.inventory_brand_id = ib.inventory_brand_id
+            JOIN supplier s ON s.supplier_id = ibs.supplier_id
+            WHERE ib.inventory_id = %s
         """, (id,))
         suppliers_list = [
             {
@@ -373,11 +401,10 @@ def get_inventory_item(id):
         return jsonify({
             "id": r[0],
             "itemName": r[1],
-            "itemDescription": r[2],
-            "uom": r[3] or "Select",
-            "leadTime": r[4] or 0,
-            "minOrder": r[5] or 0,
-            "reorderPoint": r[6] or 0,
+            "uom": r[2] or "Select",
+            "leadTime": r[3] or 0,
+            "minOrder": r[4] or 0,
+            "reorderPoint": r[5] or 0,
             "brands": brands_list,
             "suppliers": suppliers_list,
         })
@@ -413,21 +440,35 @@ def update_inventory_item(id):
                 "minOrder": int(sup.get('minOrder') or 0),
             })
 
-        # Only item_name lives on inventory; description/uom are on inventory_brands
+        if not resolved_suppliers:
+            return jsonify({"error": "At least one supplier is required."}), 400
+
+        # Only item_name lives on inventory; description/uom are on inventory_brand
         cur.execute("""
             UPDATE public.inventory
             SET item_name = %s
             WHERE inventory_id = %s
         """, (data.get('itemName'), id))
 
-        cur.execute("DELETE FROM public.inventory_supplier WHERE inventory_id = %s", (id,))
-        for sup in resolved_suppliers:
-            cur.execute("""
-                INSERT INTO public.inventory_supplier (inventory_id, supplier_id)
-                VALUES (%s, %s)
-            """, (id, sup['supplier_id']))
+        # Remove old supplier links before removing brand variants (avoids FK violations)
+        cur.execute("""
+            DELETE FROM public.inventory_brand_supplier
+            WHERE inventory_brand_id IN (
+                SELECT inventory_brand_id FROM public.inventory_brand WHERE inventory_id = %s
+            )
+        """, (id,))
+        cur.execute("DELETE FROM public.inventory_brand WHERE inventory_id = %s", (id,))
 
-        cur.execute("DELETE FROM public.inventory_brands WHERE inventory_id = %s", (id,))
+        cur.execute("""
+            SELECT status_id FROM static_status
+            WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'AVAILABLE'
+            LIMIT 1
+        """)
+        brand_status_row = cur.fetchone()
+        if not brand_status_row:
+            raise Exception("Could not find AVAILABLE status for inventory_brand in static_status.")
+        brand_status_id = brand_status_row[0]
+
         first_reorder_point = 0
         for idx, bv in enumerate(data.get('brands', [])):
             # Resolve brand by id or name
@@ -440,30 +481,29 @@ def update_inventory_item(id):
                     brand_id = b_res[0]
                 else:
                     cur.execute(
-                        "INSERT INTO brand (brand_name, brand_code) VALUES (%s, %s) RETURNING brand_id",
-                        (brand_name, brand_name.upper()[:20])
+                        "INSERT INTO brand (brand_name) VALUES (%s) RETURNING brand_id",
+                        (brand_name,)
                     )
                     brand_id = cur.fetchone()[0]
 
             # Per-brand UOM
-            uom_code = bv.get('uom')
-            if not uom_code or uom_code == 'Select':
+            uom_name = bv.get('uom')
+            if not uom_name or uom_name == 'Select':
                 return jsonify({"error": "UOM is required for each brand variant"}), 400
-            cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_code = %s", (uom_code,))
+            cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_name = %s", (uom_name,))
             uom_res = cur.fetchone()
             if not uom_res:
-                return jsonify({"error": f"UOM '{uom_code}' not found"}), 400
+                return jsonify({"error": f"UOM '{uom_name}' not found"}), 400
             uom_id = uom_res[0]
 
-            item_description = bv.get('itemDescription') or ''
             if idx == 0:
                 first_reorder_point = int(bv.get('reorderPoint', 0))
 
             cur.execute("""
-                INSERT INTO public.inventory_brands
+                INSERT INTO public.inventory_brand
                     (inventory_id, brand_id, item_sku, item_unit_price, item_selling_price,
-                     item_qty, unit_of_measure, item_description, item_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1)
+                     total_quantity, uom_id, item_status_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 id, brand_id,
                 bv.get('sku') or None,
@@ -471,8 +511,22 @@ def update_inventory_item(id):
                 float(bv.get('selling_price', 0)),
                 int(bv.get('qty', 0)),
                 uom_id,
-                item_description,
+                brand_status_id,
             ))
+
+        # Re-link suppliers to the newly inserted brand variants
+        if resolved_suppliers:
+            cur.execute(
+                "SELECT inventory_brand_id FROM public.inventory_brand WHERE inventory_id = %s",
+                (id,)
+            )
+            new_brand_ids = [row[0] for row in cur.fetchall()]
+            for ibid in new_brand_ids:
+                for sup in resolved_suppliers:
+                    cur.execute("""
+                        INSERT INTO public.inventory_brand_supplier (inventory_brand_id, supplier_id)
+                        VALUES (%s, %s)
+                    """, (ibid, sup['supplier_id']))
 
         primary = resolved_suppliers[0] if resolved_suppliers else {}
         lead_time = primary.get('leadTime', 0)
@@ -486,7 +540,7 @@ def update_inventory_item(id):
         """, (lead_time, min_order, reorder_point, id))
         if cur.rowcount == 0:
             cur.execute("""
-                INSERT INTO public.inventory_action (inventory_id, suggestion_date, stockout_predict, lead_time_days, min_order_qty, reorder_qty)
+                INSERT INTO public.inventory_action (inventory_id, action_date, stockout_predict, lead_time_days, min_order_qty, reorder_qty)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (id, datetime.now(), False, lead_time, min_order, reorder_point))
 
@@ -508,13 +562,13 @@ def get_uoms():
     cur = conn.cursor()
     try:
         cur.execute("""
-            SELECT uom_id, uom_code, uom_name, low_stock_threshold
+            SELECT uom_id, uom_name
             FROM unit_of_measure
             WHERE is_active = true
             ORDER BY uom_name ASC
         """)
         rows = cur.fetchall()
-        return jsonify([{"id": r[0], "code": r[1], "name": r[2], "low_stock_threshold": r[3]} for r in rows])
+        return jsonify([{"id": r[0], "name": r[1]} for r in rows])
     except Exception as e:
         print("UOM GET error:", e)
         return jsonify({"error": str(e)}), 500
@@ -530,31 +584,24 @@ def add_uom():
     uom_name = (data.get("uom_name") or "").strip()
     if not uom_name:
         return jsonify({"error": "UOM name is required"}), 400
-    uom_code = uom_name.upper().replace(" ", "_")
-    low_stock_threshold = data.get("low_stock_threshold")
-    if low_stock_threshold is not None:
-        try:
-            low_stock_threshold = int(low_stock_threshold)
-        except (ValueError, TypeError):
-            low_stock_threshold = None
 
     conn = get_connection()
     cur = conn.cursor()
     try:
         cur.execute(
-            "SELECT uom_id FROM unit_of_measure WHERE uom_code = %s",
-            (uom_code,)
+            "SELECT uom_id FROM unit_of_measure WHERE uom_name = %s",
+            (uom_name,)
         )
         if cur.fetchone():
             return jsonify({"error": f"UOM '{uom_name}' already exists"}), 409
         cur.execute("""
-            INSERT INTO unit_of_measure (uom_name, uom_code, is_active, low_stock_threshold)
-            VALUES (%s, %s, true, %s)
+            INSERT INTO unit_of_measure (uom_name, is_active)
+            VALUES (%s, true)
             RETURNING uom_id
-        """, (uom_name, uom_code, low_stock_threshold))
+        """, (uom_name,))
         new_id = cur.fetchone()[0]
         conn.commit()
-        return jsonify({"id": new_id, "code": uom_code, "name": uom_name, "low_stock_threshold": low_stock_threshold}), 201
+        return jsonify({"id": new_id, "name": uom_name}), 201
     except Exception as e:
         conn.rollback()
         print("UOM POST error:", e)
@@ -579,24 +626,18 @@ def update_uom(uom_id):
                 return jsonify({"error": "UOM name cannot be empty"}), 400
             updates.append("uom_name = %s")
             values.append(uom_name)
-            updates.append("uom_code = %s")
-            values.append(uom_name.upper().replace(" ", "_"))
-        if "low_stock_threshold" in data:
-            lsq = data["low_stock_threshold"]
-            updates.append("low_stock_threshold = %s")
-            values.append(int(lsq) if lsq is not None else None)
         if not updates:
             return jsonify({"error": "Nothing to update"}), 400
         values.append(uom_id)
         cur.execute(
-            f"UPDATE unit_of_measure SET {', '.join(updates)} WHERE uom_id = %s RETURNING uom_id, uom_code, uom_name, low_stock_threshold",
+            f"UPDATE unit_of_measure SET {', '.join(updates)} WHERE uom_id = %s RETURNING uom_id, uom_name",
             values
         )
         row = cur.fetchone()
         if not row:
             return jsonify({"error": "UOM not found"}), 404
         conn.commit()
-        return jsonify({"id": row[0], "code": row[1], "name": row[2], "low_stock_threshold": row[3]})
+        return jsonify({"id": row[0], "name": row[1]})
     except Exception as e:
         conn.rollback()
         print("UOM PUT error:", e)

@@ -48,13 +48,11 @@ interface Supplier {
 
 interface Brand {
   id: number;
-  code: string;
   name: string;
 }
 
 interface UOM {
   id: number;
-  code: string;
   name: string;
 }
 
@@ -79,12 +77,11 @@ interface SupplierInfo {
 export interface Product {
   id: string;
   item_name: string;
-  item_description: string;
+  item_description?: string;
   qty: number;
   uom: string;
   status: string;
   is_archived?: boolean;
-  item_location?: string;
   brands: BrandVariant[];
   suppliers: SupplierInfo[];
 }
@@ -759,6 +756,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
         itemData={selectedProduct}
         onSave={handleUpdate}
         onOpenUomModal={() => setShowUomModal(true)}
+        onOpenSupplierModal={() => setShowSupplierModal(true)}
         suppliers={suppliers}
         brands={brands}
         uoms={uoms}
