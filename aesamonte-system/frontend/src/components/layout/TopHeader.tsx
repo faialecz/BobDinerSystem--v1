@@ -173,8 +173,10 @@ export default function TopHeader({ role }: TopHeaderProps) {
       </div>
       <div className={styles.headerActions}>
         <div className={styles.notificationWrapper} ref={panelRef}>
-          <div className={styles.bellButton} onClick={() => setOpen((p) => !p)}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <div className={styles.bellButton} onClick={() => setOpen((p) => !p)}
+           style={{ color: open ? '#c79518' : undefined }}>
+
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
               <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
             </svg>
@@ -204,6 +206,9 @@ export default function TopHeader({ role }: TopHeaderProps) {
                         >
                           {notif.label}
                         </span>
+                      {notif.name && (
+                          <span className={styles.notifName}>{notif.name}</span>
+                        )}
                         <span className={styles.notifRef}>
                           {['out_of_stock', 'low_stock', 'item_added'].includes(notif.type)
                             ? `Item ID: ${notif.reference}`
@@ -211,9 +216,6 @@ export default function TopHeader({ role }: TopHeaderProps) {
                               ? `Sales ID: ${notif.sales_id}`
                               : `Order ID: ${notif.reference}`}
                         </span>
-                        {notif.name && (
-                          <span className={styles.notifName}>{notif.name}</span>
-                        )}
                       </div>
                       <div className={styles.notifRight}>
                         <span className={styles.notifDate}>{notif.date}</span>
