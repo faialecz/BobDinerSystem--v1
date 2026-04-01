@@ -137,7 +137,6 @@ export default function Login({ onLogin }: LoginProps) {
               <div className={styles.passwordWrapper}>
                 <input
                   type={showPassword ? "text" : "password"}
-                  value={password}
                   className={styles.loginInput}
                   onChange={handlePasswordChange}
                   required
