@@ -568,7 +568,7 @@ export default function Suppliers({
     return pages;
   };
 
-  if (isLoading) return (
+  if (false) return (
   <div className={s.container}>
     <TopHeader role={role} onLogout={onLogout} />
     <div className={s.mainContent}>
@@ -673,7 +673,26 @@ export default function Suppliers({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginated.length ? (
+                {isLoading ? (
+                  <>
+                    {[0,1,2,3,4,5,6,7].map(i => (
+                      <tr key={i}>
+                        {[40,140,120,100,160,200,40].map((w,j) => (
+                          <td key={j}>
+                            <div style={{
+                              height: '12px',
+                              borderRadius: '4px',
+                              background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
+                              backgroundSize: '600px 100%',
+                              animation: 'shimmer 1.4s infinite linear',
+                              width: `${w}px`,
+                            }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                ) : paginated.length ? (
                     paginated.map((sup, i) => (
                       <tr key={sup.id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(sup)} style={{ cursor: 'pointer' }}>
                         <td>{sup.id}</td>

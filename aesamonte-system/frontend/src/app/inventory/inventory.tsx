@@ -427,7 +427,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
     );
   };
 
-  if (isLoading) return (
+  if (false) return (
   <div className={s.container}>
     <TopHeader role={role} onLogout={onLogout} />
     <div className={s.mainContent}>
@@ -668,7 +668,27 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedProducts.map(p => (
+                {isLoading ? (
+                  <>
+                    {[0,1,2,3,4,5,6,7].map(i => (
+                      <tr key={i}>
+                        {[40,140,120,50,50,70,40].map((w,j) => (
+                          <td key={j}>
+                            <div style={{
+                              height: '12px',
+                              borderRadius: j === 5 ? '20px' : '4px',
+                              background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
+                              backgroundSize: '600px 100%',
+                              animation: 'shimmer 1.4s infinite linear',
+                              width: `${w}px`,
+                            }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                ) : paginatedProducts.map(p => (
+
                     <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer', height: '42px' }}>
                       <td>{p.id}</td>
                       <td>{p.item_name}</td>
