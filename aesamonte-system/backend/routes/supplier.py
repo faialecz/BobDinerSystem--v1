@@ -36,12 +36,12 @@ def get_suppliers():
 
     suppliers = [
         {
-            "id": r[0],
-            "supplierName": r[1],
-            "contactPerson": r[2],
-            "contactNumber": r[3],
-            "email": r[4],
-            "address": r[5],
+            "supplier_id": r[0],
+            "supplier_name": r[1],
+            "contact_person": r[2],
+            "supplier_contact": r[3],
+            "supplier_email": r[4],
+            "supplier_address": r[5],
             "status": r[6],
             "is_archived": r[7] == 'INACTIVE'
         }

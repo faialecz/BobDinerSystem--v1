@@ -24,12 +24,12 @@ import {
 /* ================= TYPES ================= */
 
 type Supplier = {
-  id: number;
-  supplierName: string;
-  contactPerson: string;
-  contactNumber: string;
-  email: string;
-  address: string;
+  supplier_id: number;
+  supplier_name: string;
+  contact_person: string;
+  supplier_contact: string;
+  supplier_email: string;
+  supplier_address: string;
   paymentTerms?: string;
   is_archived?: boolean;
 };
@@ -64,10 +64,10 @@ const EMPTY_CREATE_FORM = {
 
 // Required fields for EDIT modal
 const EDIT_REQUIRED: { field: keyof Supplier; label: string }[] = [
-  { field: 'supplierName',  label: 'Supplier Name' },
-  { field: 'address',       label: 'Address' },
-  { field: 'contactPerson', label: 'Contact Person' },
-  { field: 'contactNumber', label: 'Contact No.' },
+  { field: 'supplier_name',    label: 'Supplier Name' },
+  { field: 'supplier_address', label: 'Address' },
+  { field: 'contact_person',   label: 'Contact Person' },
+  { field: 'supplier_contact', label: 'Contact No.' },
 ];
 
 const errStyle = { borderColor: '#fca5a5', backgroundColor: '#fff5f5' };
@@ -200,11 +200,11 @@ export default function Suppliers({
     const isEditFormDirty = (): boolean => {
       if (!editFormData || !editOriginalData) return false;
       return (
-        editFormData.supplierName  !== editOriginalData.supplierName  ||
-        editFormData.address       !== editOriginalData.address       ||
-        editFormData.contactPerson !== editOriginalData.contactPerson ||
-        editFormData.contactNumber !== editOriginalData.contactNumber ||
-        editFormData.email         !== editOriginalData.email
+        editFormData.supplier_name    !== editOriginalData.supplier_name    ||
+        editFormData.supplier_address !== editOriginalData.supplier_address ||
+        editFormData.contact_person   !== editOriginalData.contact_person   ||
+        editFormData.supplier_contact !== editOriginalData.supplier_contact ||
+        editFormData.supplier_email   !== editOriginalData.supplier_email
       );
     };
 
@@ -264,7 +264,7 @@ export default function Suppliers({
       if (!validateCreate()) return;
 
       const newName = normalize(supplierFormData.supplierName);
-      const isDuplicate = suppliers.some(sup => normalize(sup.supplierName) === newName);
+      const isDuplicate = suppliers.some(sup => normalize(sup.supplier_name) === newName);
       if (isDuplicate) {
         setCreateDupError(`"${supplierFormData.supplierName.trim()}" already exists. Please use a different supplier name.`);
         return;
@@ -317,25 +317,25 @@ export default function Suppliers({
     }
 
     // 3. Duplicate name check
-    const newName = normalize(editFormData.supplierName);
+    const newName = normalize(editFormData.supplier_name);
     const conflict = suppliers.find(
-      sup => normalize(sup.supplierName) === newName && sup.id !== editFormData.id
+      sup => normalize(sup.supplier_name) === newName && sup.supplier_id !== editFormData.supplier_id
     );
     if (conflict) {
-      setEditDupError(`"${editFormData.supplierName.trim()}" already exists. Please use a different supplier name.`);
+      setEditDupError(`"${editFormData.supplier_name.trim()}" already exists. Please use a different supplier name.`);
       return;
     }
 
     try {
-      const response = await fetch(`/api/suppliers/${editFormData.id}`, {
+      const response = await fetch(`/api/suppliers/${editFormData.supplier_id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          supplierName: editFormData.supplierName,
-          address: editFormData.address,
-          contactPerson: editFormData.contactPerson,
-          contactNumber: editFormData.contactNumber,
-          email: editFormData.email,
+          supplierName: editFormData.supplier_name,
+          address: editFormData.supplier_address,
+          contactPerson: editFormData.contact_person,
+          contactNumber: editFormData.supplier_contact,
+          email: editFormData.supplier_email,
         })
       });
       const data = await response.json();
@@ -363,7 +363,7 @@ export default function Suppliers({
       if (response.ok) {
         const apiData = await response.json();
         setSuppliers(prev =>
-          prev.map(sup => sup.id === id ? { ...sup, is_archived: apiData.is_archived } : sup)
+          prev.map(sup => sup.supplier_id === id ? { ...sup, is_archived: apiData.is_archived } : sup)
         );
         setToastMessage(apiData.message);
         setIsError(false);
@@ -411,7 +411,7 @@ export default function Suppliers({
     pw.document.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>Supplier Profile - No. ${String(selectedSupplierForView.id).padStart(4, '0')}</title>
+  <title>Supplier Profile - No. ${String(selectedSupplierForView.supplier_id).padStart(4, '0')}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; font-size: 11px; color: #000; padding: 24px 28px; }
@@ -446,7 +446,7 @@ export default function Suppliers({
     </div>
     <div class="receipt-block">
       <div class="receipt-title">SUPPLIER PROFILE</div>
-      <div class="receipt-no"><span>S-</span>${String(selectedSupplierForView.id).padStart(4, '0')}</div>
+      <div class="receipt-no"><span>S-</span>${String(selectedSupplierForView.supplier_id).padStart(4, '0')}</div>
       <div style="margin-top:6px; font-size:10px;">Printed: ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
       <div style="margin-top:4px;"><span class="status-badge">${selectedSupplierForView.is_archived ? 'ARCHIVED' : 'ACTIVE'}</span></div>
     </div>
@@ -455,11 +455,11 @@ export default function Suppliers({
     <div class="section-title">Company Information</div>
     <div class="info-full">
       <label>Supplier Name</label>
-      <span style="font-size:15px; font-weight:700;">${selectedSupplierForView.supplierName}</span>
+      <span style="font-size:15px; font-weight:700;">${selectedSupplierForView.supplier_name}</span>
     </div>
     <div class="info-full">
       <label>Address</label>
-      <span>${selectedSupplierForView.address}</span>
+      <span>${selectedSupplierForView.supplier_address}</span>
     </div>
   </div>
   <div class="section">
@@ -467,16 +467,16 @@ export default function Suppliers({
     <div class="info-grid">
       <div class="info-item">
         <label>Contact Person</label>
-        <span>${selectedSupplierForView.contactPerson}</span>
+        <span>${selectedSupplierForView.contact_person}</span>
       </div>
       <div class="info-item">
         <label>Contact Number</label>
-        <span>${selectedSupplierForView.contactNumber}</span>
+        <span>${selectedSupplierForView.supplier_contact}</span>
       </div>
     </div>
     <div class="info-full" style="margin-top:10px;">
       <label>Email Address</label>
-      <span>${selectedSupplierForView.email}</span>
+      <span>${selectedSupplierForView.supplier_email}</span>
     </div>
   </div>
   ${selectedSupplierForView.paymentTerms ? `
@@ -507,12 +507,12 @@ export default function Suppliers({
     return suppliers.filter(sup => {
       const matchesArchiveView = isArchiveView ? Boolean(sup.is_archived) : !sup.is_archived;
       return matchesArchiveView && (
-        sup.id.toString().includes(term) ||
-        sup.supplierName.toLowerCase().includes(term) ||
-        sup.contactPerson.toLowerCase().includes(term) ||
-        sup.contactNumber.toLowerCase().includes(term) ||
-        sup.email.toLowerCase().includes(term) ||
-        sup.address.toLowerCase().includes(term)
+        sup.supplier_id.toString().includes(term) ||
+        (sup.supplier_name || '').toLowerCase().includes(term) ||
+        (sup.contact_person || '').toLowerCase().includes(term) ||
+        (sup.supplier_contact || '').toLowerCase().includes(term) ||
+        (sup.supplier_email || '').toLowerCase().includes(term) ||
+        (sup.supplier_address || '').toLowerCase().includes(term)
       );
     });
   }, [suppliers, searchTerm, isArchiveView]);
@@ -521,8 +521,8 @@ export default function Suppliers({
     const arr = [...filtered];
     if (!sortConfig.key || !sortConfig.direction) {
       return arr.sort((a, b) => {
-        const numA = Number(String(a.id).replace(/\D/g, '')) || 0;
-        const numB = Number(String(b.id).replace(/\D/g, '')) || 0;
+        const numA = Number(String(a.supplier_id).replace(/\D/g, '')) || 0;
+        const numB = Number(String(b.supplier_id).replace(/\D/g, '')) || 0;
         return numA - numB;
       });
     }
@@ -530,7 +530,7 @@ export default function Suppliers({
     return arr.sort((a, b) => {
       const A = a[key!];
       const B = b[key!];
-      if (key === 'id') {
+      if (key === 'supplier_id') {
         const numA = Number(String(A).replace(/\D/g, '')) || 0;
         const numB = Number(String(B).replace(/\D/g, '')) || 0;
         return direction === 'asc' ? numA - numB : numB - numA;
@@ -594,12 +594,12 @@ export default function Suppliers({
 );
 
   const columns: { label: string; key: SortKey }[] = [
-    { label: 'ID', key: 'id' },
-    { label: 'SUPPLIER NAME', key: 'supplierName' },
-    { label: 'CONTACT PERSON', key: 'contactPerson' },
-    { label: 'CONTACT NUMBER', key: 'contactNumber' },
-    { label: 'EMAIL', key: 'email' },
-    { label: 'ADDRESS', key: 'address' }
+    { label: 'ID',             key: 'supplier_id' },
+    { label: 'SUPPLIER NAME',  key: 'supplier_name' },
+    { label: 'CONTACT PERSON', key: 'contact_person' },
+    { label: 'CONTACT NUMBER', key: 'supplier_contact' },
+    { label: 'EMAIL',          key: 'supplier_email' },
+    { label: 'ADDRESS',        key: 'supplier_address' }
   ];
 
   /* ================= RENDER ================= */
@@ -694,21 +694,21 @@ export default function Suppliers({
                   </>
                 ) : paginated.length ? (
                     paginated.map((sup, i) => (
-                      <tr key={sup.id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(sup)} style={{ cursor: 'pointer' }}>
-                        <td>{sup.id}</td>
-                        <td><strong>{sup.supplierName}</strong></td>
-                        <td>{sup.contactPerson}</td>
-                        <td>{sup.contactNumber}</td>
-                        <td>{sup.email}</td>
-                        <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sup.address}</td>
+                      <tr key={sup.supplier_id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(sup)} style={{ cursor: 'pointer' }}>
+                        <td>{sup.supplier_id}</td>
+                        <td><strong>{sup.supplier_name}</strong></td>
+                        <td>{sup.contact_person}</td>
+                        <td>{sup.supplier_contact}</td>
+                        <td>{sup.supplier_email}</td>
+                        <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sup.supplier_address}</td>
                         <td className={s.actionCell} onClick={e => e.stopPropagation()}>
-                          <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === sup.id ? null : sup.id)} />
-                          {openMenuId === sup.id && (
+                          <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === sup.supplier_id ? null : sup.supplier_id)} />
+                          {openMenuId === sup.supplier_id && (
                             <div className={s.popupMenu}>
                               <button className={s.popBtnEdit} onClick={() => handleOpenEditModal(sup)}>
                                 <LuPencil size={14} /> Edit
                               </button>
-                              <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.id)}>
+                              <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.supplier_id)}>
                                 <LuArchive size={14} /> Archive
                               </button>
                               <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
@@ -912,20 +912,20 @@ export default function Suppliers({
               <div className={s.formRow}>
                 <div className={s.formGroup}>
                   {/* ── CHANGED ── */}
-                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('supplierName') ? '#dc2626' : '#6b7280' }}>
+                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('supplier_name') ? '#dc2626' : '#6b7280' }}>
                     Supplier Name <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <input
-                    value={editFormData.supplierName}
+                    value={editFormData.supplier_name}
                     onChange={e => {
                       setEditDupError('');
-                      clearEditEmpty('supplierName');
-                      setEditFormData({ ...editFormData, supplierName: e.target.value });
+                      clearEditEmpty('supplier_name');
+                      setEditFormData({ ...editFormData, supplier_name: e.target.value });
                     }}
-                    style={editEmptyFields.has('supplierName') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : editDupError ? errStyle : {}}
+                    style={editEmptyFields.has('supplier_name') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : editDupError ? errStyle : {}}
                   />
                   {/* ── ADDED ── */}
-                  {editSubmitAttempted && editEmptyFields.has('supplierName') && (
+                  {editSubmitAttempted && editEmptyFields.has('supplier_name') && (
                     <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Supplier name is required.</p>
                   )}
                 </div>
@@ -939,16 +939,16 @@ export default function Suppliers({
 
               <div className={s.formGroupFull}>
                 {/* ── CHANGED ── */}
-                <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('address') ? '#dc2626' : '#6b7280' }}>
+                <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('supplier_address') ? '#dc2626' : '#6b7280' }}>
                   Address <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
-                  value={editFormData.address}
-                  onChange={e => { clearEditEmpty('address'); setEditFormData({ ...editFormData, address: e.target.value }); }}
-                  style={editEmptyFields.has('address') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
+                  value={editFormData.supplier_address}
+                  onChange={e => { clearEditEmpty('supplier_address'); setEditFormData({ ...editFormData, supplier_address: e.target.value }); }}
+                  style={editEmptyFields.has('supplier_address') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
                 />
                 {/* ── ADDED ── */}
-                {editSubmitAttempted && editEmptyFields.has('address') && (
+                {editSubmitAttempted && editEmptyFields.has('supplier_address') && (
                   <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Address is required.</p>
                 )}
               </div>
@@ -957,31 +957,31 @@ export default function Suppliers({
               <div className={s.formRow}>
                 <div className={s.formGroup}>
                   {/* ── CHANGED ── */}
-                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('contactPerson') ? '#dc2626' : '#6b7280' }}>
+                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('contact_person') ? '#dc2626' : '#6b7280' }}>
                     Contact Person <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <input
-                    value={editFormData.contactPerson}
-                    onChange={e => { clearEditEmpty('contactPerson'); setEditFormData({ ...editFormData, contactPerson: e.target.value }); }}
-                    style={editEmptyFields.has('contactPerson') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
+                    value={editFormData.contact_person}
+                    onChange={e => { clearEditEmpty('contact_person'); setEditFormData({ ...editFormData, contact_person: e.target.value }); }}
+                    style={editEmptyFields.has('contact_person') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
                   />
                   {/* ── ADDED ── */}
-                  {editSubmitAttempted && editEmptyFields.has('contactPerson') && (
+                  {editSubmitAttempted && editEmptyFields.has('contact_person') && (
                     <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Contact person is required.</p>
                   )}
                 </div>
                 <div className={s.formGroup}>
                   {/* ── CHANGED ── */}
-                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('contactNumber') ? '#dc2626' : '#6b7280' }}>
+                  <label style={{ ...LABEL_STYLE, color: editSubmitAttempted && editEmptyFields.has('supplier_contact') ? '#dc2626' : '#6b7280' }}>
                     Contact No. <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <input
-                    value={editFormData.contactNumber}
-                    onChange={e => { clearEditEmpty('contactNumber'); setEditFormData({ ...editFormData, contactNumber: e.target.value.replace(/[^\d]/g, '') }); }}
-                    style={editEmptyFields.has('contactNumber') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
+                    value={editFormData.supplier_contact}
+                    onChange={e => { clearEditEmpty('supplier_contact'); setEditFormData({ ...editFormData, supplier_contact: e.target.value.replace(/[^\d]/g, '') }); }}
+                    style={editEmptyFields.has('supplier_contact') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
                   />
                   {/* ── ADDED ── */}
-                  {editSubmitAttempted && editEmptyFields.has('contactNumber') && (
+                  {editSubmitAttempted && editEmptyFields.has('supplier_contact') && (
                     <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Contact number is required.</p>
                   )}
                 </div>
@@ -990,8 +990,8 @@ export default function Suppliers({
               <div className={s.formGroupFull}>
                 <label style={{ ...LABEL_STYLE }}>Email Address</label>
                 <input
-                  value={editFormData.email}
-                  onChange={e => setEditFormData({ ...editFormData, email: e.target.value })}
+                  value={editFormData.supplier_email}
+                  onChange={e => setEditFormData({ ...editFormData, supplier_email: e.target.value })}
                 />
               </div>
 
@@ -1032,7 +1032,7 @@ export default function Suppliers({
             <div className={s.viewModalHeader}>
               <div>
                 <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
-                <p className={s.viewOrderNumber}>S-{String(selectedSupplierForView.id).padStart(4, '0')}</p>
+                <p className={s.viewOrderNumber}>S-{String(selectedSupplierForView.supplier_id).padStart(4, '0')}</p>
               </div>
               <div className={s.viewHeaderRight}>
                 <button className={s.viewCloseBtn} onClick={closeViewModal}><LuX size={20} /></button>
@@ -1042,8 +1042,8 @@ export default function Suppliers({
             <div className={s.viewSupplierBanner}>
               <div>
                 <p className={s.viewSupplierLabel}>Supplier Name</p>
-                <p className={s.viewSupplierNameLarge}>{selectedSupplierForView.supplierName}</p>
-                <p className={s.viewSupplierAddress}>{selectedSupplierForView.address}</p>
+                <p className={s.viewSupplierNameLarge}>{selectedSupplierForView.supplier_name}</p>
+                <p className={s.viewSupplierAddress}>{selectedSupplierForView.supplier_address}</p>
               </div>
             </div>
 
@@ -1055,21 +1055,21 @@ export default function Suppliers({
                     <div className={s.viewDetailIcon}><LuUser size={14} /></div>
                     <div>
                       <p className={s.viewInfoLabel}>Contact Person</p>
-                      <p className={s.viewInfoValue}>{selectedSupplierForView.contactPerson || '—'}</p>
+                      <p className={s.viewInfoValue}>{selectedSupplierForView.contact_person || '—'}</p>
                     </div>
                   </div>
                   <div className={s.viewDetailItem}>
                     <div className={s.viewDetailIcon}><LuPhone size={14} /></div>
                     <div>
                       <p className={s.viewInfoLabel}>Contact Number</p>
-                      <p className={s.viewInfoValue}>{selectedSupplierForView.contactNumber || '—'}</p>
+                      <p className={s.viewInfoValue}>{selectedSupplierForView.supplier_contact || '—'}</p>
                     </div>
                   </div>
                   <div className={s.viewDetailItem}>
                     <div className={s.viewDetailIcon}><LuMail size={14} /></div>
                     <div>
                       <p className={s.viewInfoLabel}>Email Address</p>
-                      <p className={s.viewInfoValue}>{selectedSupplierForView.email || '—'}</p>
+                      <p className={s.viewInfoValue}>{selectedSupplierForView.supplier_email || '—'}</p>
                     </div>
                   </div>
                 </div>
