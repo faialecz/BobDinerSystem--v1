@@ -107,19 +107,22 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
 }
 
   const isDateInRange = (txDate: string): boolean => {
-    if (!fromDate && !toDate) return true
-    const tx = parseDate(txDate)
-    if (!tx) return true
-    if (fromDate) {
-      const from = parseDate(fromDate)
-      if (from && tx < from) return false
-    }
-    if (toDate) {
-      const to = parseDate(toDate)
-      if (to && tx > to) return false
-    }
-    return true
+  if (!fromDate && !toDate) return true
+  const tx = parseDate(txDate)
+  if (!tx) return true
+  if (fromDate) {
+    const from = parseDate(fromDate)
+    if (from && tx < from) return false
   }
+  if (toDate) {
+    const to = parseDate(toDate)
+    if (to) {
+      to.setHours(23, 59, 59, 999)
+      if (tx > to) return false
+    }
+  }
+  return true
+}
 
   const getStatusBadgeColor = (status: 'all' | 'cash' | 'e-wallet' | 'bank') => {
   switch(status) {
@@ -637,7 +640,7 @@ if (isLoading === null) return (
         isOpen={showExportModal}
         onClose={() => { setShowExportModal(false); setExportType(null) }}
         onSuccess={handleExportSuccess}
-        data={transactions.filter(tx => !tx.is_archived)}
+        data={filteredTx}
         summary={safeSummary}
         exportType={exportType}
       />
