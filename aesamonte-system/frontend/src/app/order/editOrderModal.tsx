@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styles from "@/css/order.module.css"; 
 import { LuX, LuPlus, LuTrash2, LuSearch} from "react-icons/lu";
 
@@ -25,7 +25,7 @@ const FIELD_ERROR_STYLE: React.CSSProperties = {
   backgroundColor: '#fff5f5',
 };
 
-const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], paymentMethods = [], inventoryItems = [] }: OrderEditModalProps) => {
+const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], paymentMethods = [] }: OrderEditModalProps) => {
   const s = styles as Record<string, string>;
   const [formData, setFormData] = useState<any>(null);
   const [originalData, setOriginalData] = useState<any>(null);
@@ -33,37 +33,29 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
-
-  const activeInventory = (inventoryItems || []).filter((inv: any) => !inv.is_archived);
-
-  const searchableItems = activeInventory.flatMap((inv: any) =>
-    (inv.brands || [])
-      .filter((b: any) => Number(b.qty) > 0)
-      .map((b: any) => ({
-        inventory_brand_id: b.inventory_brand_id,
-        inventory_id: inv.id,
-        brand_id: b.brand_id,
-        brand_name: b.brand_name !== 'No Brand' ? b.brand_name : '—',
-        item_name: inv.item_name,
-        item_description: inv.item_description,
-        uom: inv.uom,
-        price: Number(b.selling_price ?? 0),
-        qty: Number(b.qty),
-      }))
-  );
+  const [searchResults, setSearchResults] = useState<Record<number, any[]>>({});
+  const [searchLoading, setSearchLoading] = useState<Record<number, boolean>>({});
+  const searchTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const justSelected = useRef<Record<number, boolean>>({});
 
   useEffect(() => {
     if (orderData) {
       const initialItems = orderData.items && orderData.items.length > 0
-        ? orderData.items.map((i: any) => ({
-            inventory_brand_id: i.inventory_brand_id,
-            inventory_id: i.inventory_id,
-            item: i.item_name || '',
-            itemDescription: i.description || '—',
-            quantity: i.order_quantity || '',
-            amount: i.amount || 0
-          }))
-        : [{ inventory_id: '', item: '', itemDescription: '—', quantity: '1', amount: 0 }];
+        ? orderData.items.map((i: any) => {
+            const qty = Number(i.order_quantity) || 1;
+            const amount = Number(i.amount) || 0;
+            return {
+              inventory_brand_id: i.inventory_brand_id,
+              inventory_id: i.inventory_id,
+              item: i.item_name || '',
+              itemDescription: i.description || '—',
+              uom_name: i.uom || '',
+              quantity: i.order_quantity || '',
+              amount,
+              price: qty > 0 ? amount / qty : 0,
+            };
+          })
+        : [{ inventory_id: '', item: '', itemDescription: '—', uom_name: '', quantity: '1', amount: 0, price: 0 }];
 
       const built = {
         id: orderData.id,
@@ -93,60 +85,90 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     else onClose();
   };
 
+  const fetchSearchResults = async (index: number, q: string) => {
+    setSearchLoading(prev => ({ ...prev, [index]: true }));
+    try {
+      const res = await fetch(`/api/inventory/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) {
+        console.error(`[inventory/search] HTTP ${res.status} ${res.statusText}`);
+        setSearchResults(prev => ({ ...prev, [index]: [] }));
+        return;
+      }
+      const data = await res.json();
+      setSearchResults(prev => ({ ...prev, [index]: Array.isArray(data) ? data : [] }));
+    } catch (err) {
+      console.error('[inventory/search] Network error:', err);
+      setSearchResults(prev => ({ ...prev, [index]: [] }));
+    } finally {
+      setSearchLoading(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  const handleSearchFocus = (index: number) => {
+    setActiveSearchIndex(index);
+    const currentItem = (formData?.items || [])[index];
+    if (!currentItem?.item?.trim() && !(searchResults[index] || []).length) {
+      fetchSearchResults(index, '');
+    }
+  };
+
   const handleItemSelect = (index: number, entry: any) => {
+    justSelected.current[index] = true;
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
     const currentQty = Number(newItems[index].quantity) || 1;
+    const price = entry.item_selling_price ?? 0;
     newItems[index] = {
       ...newItems[index],
       inventory_brand_id: entry.inventory_brand_id,
-      inventory_id: entry.inventory_id,
-      brand_id: entry.brand_id,
-      brand_name: entry.brand_name,
-      item: `${entry.item_name} — ${entry.brand_name} (${entry.uom})`,
-      itemDescription: entry.item_description || 'No Description',
-      uom: entry.uom || '',
+      item: `${entry.item_name} — ${entry.brand_name} (${entry.uom_name})`,
+      itemDescription: entry.item_description || '—',
+      uom_name: entry.uom_name || '',
+      price,
       quantity: currentQty,
-      amount: currentQty * entry.price
+      amount: currentQty * price,
     };
     setFormData({ ...formData, items: newItems });
     setActiveSearchIndex(null);
+    setSearchResults(prev => ({ ...prev, [index]: [] }));
   };
 
   const handleItemTextChange = (index: number, text: string) => {
+    if (justSelected.current[index]) {
+      justSelected.current[index] = false;
+      return;
+    }
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
-    newItems[index].item = text;
-    const match = searchableItems.find((s: any) => s.item_name.toLowerCase().trim() === text.toLowerCase().trim());
-    if (match) {
-      newItems[index].inventory_brand_id = match.inventory_brand_id;
-      newItems[index].inventory_id = match.inventory_id;
-      newItems[index].brand_id = match.brand_id;
-      newItems[index].brand_name = match.brand_name;
-      newItems[index].itemDescription = match.item_description || 'No Description';
-      newItems[index].uom = match.uom || '';
-      const qtyNum = Number(newItems[index].quantity) || 1;
-      newItems[index].amount = qtyNum * match.price;
-    } else {
-      newItems[index].inventory_brand_id = '';
-      newItems[index].inventory_id = '';
-      newItems[index].brand_id = '';
-      newItems[index].brand_name = '—';
-      newItems[index].itemDescription = '—';
-      newItems[index].amount = 0;
-    }
+    newItems[index] = {
+      ...newItems[index],
+      item: text,
+      inventory_brand_id: '',
+      itemDescription: '—',
+      uom_name: '',
+      price: 0,
+      amount: 0,
+    };
     setFormData({ ...formData, items: newItems });
+
+    clearTimeout(searchTimers.current[index]);
+    if (text.trim().length >= 2) {
+      searchTimers.current[index] = setTimeout(() => fetchSearchResults(index, text.trim()), 300);
+    } else if (text.trim().length === 0) {
+      fetchSearchResults(index, '');
+    } else {
+      setSearchResults(prev => ({ ...prev, [index]: [] }));
+      setSearchLoading(prev => ({ ...prev, [index]: false }));
+    }
   };
 
   const handleQtyChange = (index: number, newQty: string) => {
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
     const qtyNum = Number(newQty) || 0;
-    const entry = searchableItems.find((s: any) =>
-      String(s.inventory_brand_id) === String(newItems[index].inventory_brand_id)
-    );
-    const existingPrice = (Number(newItems[index].amount) / (Number(newItems[index].quantity) || 1)) || 0;
-    const price = entry ? entry.price : existingPrice;
+    // Use stored unit price; fall back to deriving from existing amount/qty for pre-loaded items
+    const price = newItems[index].price ||
+      (Number(newItems[index].amount) / (Number(newItems[index].quantity) || 1)) || 0;
     newItems[index] = { ...newItems[index], quantity: newQty, amount: price * qtyNum };
     setFormData({ ...formData, items: newItems });
   };
@@ -314,7 +336,7 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                       className={s.cleanInput}
                       value={item.item || ''}
                       onChange={(e) => handleItemTextChange(index, e.target.value)}
-                      onFocus={() => setActiveSearchIndex(index)}
+                      onFocus={() => handleSearchFocus(index)}
                       onBlur={() => setTimeout(() => { if (activeSearchIndex === index) setActiveSearchIndex(null); }, 200)}
                       disabled={!isPreparing}
                       placeholder="Search items..."
@@ -325,16 +347,14 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                         backgroundColor: (!item.inventory_brand_id && item.item.length > 0) ? '#fff5f5' : '#fff'
                       }}
                     />
-                    {activeSearchIndex === index && isPreparing && (
+                    {activeSearchIndex === index && isPreparing && (item.item.trim().length >= 2 || (searchResults[index] || []).length > 0 || searchLoading[index]) && (
                       <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, backgroundColor: '#fff', border: '1px solid #cbd5e1', borderRadius: '6px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', maxHeight: '250px', overflowY: 'auto', marginTop: '4px' }}>
-                        {searchableItems
-                          .filter((entry: any) =>
-                            entry.item_name.toLowerCase().includes((item.item || '').toLowerCase()) ||
-                            (entry.item_description && entry.item_description.toLowerCase().includes((item.item || '').toLowerCase()))
-                          )
-                          .map((entry: any, i: number) => (
+                        {searchLoading[index] ? (
+                          <div style={{ padding: '10px 12px', fontSize: '0.8rem', color: '#64748b', textAlign: 'center' }}>Searching...</div>
+                        ) : (searchResults[index] || []).length > 0 ? (
+                          (searchResults[index] || []).map((entry: any) => (
                             <div
-                              key={entry.inventory_brand_id ?? `${entry.inventory_id}-${entry.brand_id}-${i}`}
+                              key={entry.inventory_brand_id}
                               onMouseDown={() => handleItemSelect(index, entry)}
                               style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
@@ -342,22 +362,21 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                             >
                               <div style={{ overflow: 'hidden', paddingRight: '10px' }}>
                                 <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {entry.item_name} &mdash; {entry.brand_name} ({entry.uom})
+                                  {entry.item_name} &mdash; {entry.brand_name}
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   Desc: {entry.item_description || 'None'}
                                 </div>
                               </div>
-                              <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#059669' }}>₱{entry.price.toLocaleString()}</div>
-                                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Stock: {entry.qty} {entry.uom || ''}</div>
+                              <div style={{ textAlign: 'right', minWidth: '90px', flexShrink: 0 }}>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#059669' }}>
+                                  ₱{(entry.item_selling_price || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Stock: {entry.total_quantity} {entry.uom_name}</div>
                               </div>
                             </div>
                           ))
-                        }
-                        {searchableItems.filter((entry: any) =>
-                          entry.item_name.toLowerCase().includes((item.item || '').toLowerCase())
-                        ).length === 0 && item.item.length > 0 && (
+                        ) : (
                           <div style={{ padding: '10px 12px', fontSize: '0.8rem', color: '#ef4444', textAlign: 'center', backgroundColor: '#fef2f2' }}>
                             No available items found.
                           </div>

@@ -212,28 +212,35 @@ def search_inventory_variants():
     q = request.args.get('q', '').strip()
     conn = get_connection()
     cur = conn.cursor()
+
+    # Shared SELECT + JOINs + base WHERE (no text filter)
+    BASE_QUERY = """
+        SELECT DISTINCT
+            ib.inventory_brand_id,
+            i.item_name,
+            COALESCE(b.brand_name, 'No Brand')  AS brand_name,
+            u.uom_name,
+            COALESCE(ib.item_description, '')   AS item_description,
+            COALESCE(ib.item_selling_price, 0)  AS item_selling_price,
+            ib.total_quantity
+        FROM inventory_brand ib
+        JOIN inventory        i    ON i.inventory_id    = ib.inventory_id
+        JOIN brand            b    ON b.brand_id        = ib.brand_id
+        JOIN unit_of_measure  u    ON u.uom_id          = ib.uom_id
+        JOIN static_status    s_i  ON s_i.status_id     = i.item_status_id
+                                  AND s_i.status_scope  = 'INVENTORY_STATUS'
+        LEFT JOIN static_status s_b ON s_b.status_id   = ib.item_status_id
+                                   AND s_b.status_scope = 'INVENTORY_STATUS'
+        WHERE ib.total_quantity > 0
+          AND COALESCE(s_b.status_code, '') != 'ARCHIVED'
+          AND s_i.status_code != 'ARCHIVED'
+    """
+
     try:
-        like = f"%{q}%"
-        cur.execute("""
-            SELECT DISTINCT
-                ib.inventory_brand_id,
-                i.item_name,
-                COALESCE(b.brand_name, 'No Brand')  AS brand_name,
-                u.uom_name,
-                COALESCE(ib.item_description, '')   AS item_description,
-                COALESCE(ib.item_selling_price, 0)  AS item_selling_price,
-                ib.total_quantity
-            FROM inventory_brand ib
-            JOIN inventory        i    ON i.inventory_id    = ib.inventory_id
-            JOIN brand            b    ON b.brand_id        = ib.brand_id
-            JOIN unit_of_measure  u    ON u.uom_id          = ib.uom_id
-            JOIN static_status    s_i  ON s_i.status_id     = i.item_status_id
-                                      AND s_i.status_scope  = 'INVENTORY_STATUS'
-            LEFT JOIN static_status s_b ON s_b.status_id   = ib.item_status_id
-                                       AND s_b.status_scope = 'INVENTORY_STATUS'
-            WHERE ib.total_quantity > 0
-              AND COALESCE(s_b.status_code, '') != 'ARCHIVED'
-              AND s_i.status_code != 'ARCHIVED'
+        if q:
+            # Typed search — filter by any relevant text column
+            like = f"%{q}%"
+            cur.execute(BASE_QUERY + """
               AND (
                     i.item_name          ILIKE %s
                  OR b.brand_name         ILIKE %s
@@ -243,7 +250,13 @@ def search_inventory_variants():
               )
             ORDER BY item_name, brand_name
             LIMIT 40
-        """, (like, like, like, like, like))
+            """, (like, like, like, like, like))
+        else:
+            # Empty query (onFocus eager-load) — return first 40 available items
+            cur.execute(BASE_QUERY + """
+            ORDER BY item_name, brand_name
+            LIMIT 40
+            """)
 
         rows = cur.fetchall()
         results = [{

@@ -145,6 +145,36 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
     setSearchResults(prev => ({ ...prev, [index]: [] }));
   };
 
+  const fetchSearchResults = async (index: number, q: string) => {
+    setSearchLoading(prev => ({ ...prev, [index]: true }));
+    try {
+      const res = await fetch(`/api/inventory/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) {
+        console.error(`[inventory/search] HTTP ${res.status} ${res.statusText}`);
+        let errBody: unknown = '(no body)';
+        try { errBody = await res.json(); } catch { /* ignore */ }
+        console.error('[inventory/search] Error body:', errBody);
+        setSearchResults(prev => ({ ...prev, [index]: [] }));
+        return;
+      }
+      const data = await res.json();
+      setSearchResults(prev => ({ ...prev, [index]: Array.isArray(data) ? data : [] }));
+    } catch (err) {
+      console.error('[inventory/search] Network error:', err);
+      setSearchResults(prev => ({ ...prev, [index]: [] }));
+    } finally {
+      setSearchLoading(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  const handleSearchFocus = (index: number) => {
+    setActiveSearchIndex(index);
+    // Eager-load: if the field is empty and we have no cached results yet, fetch immediately
+    if (!items[index].item?.trim() && !(searchResults[index] || []).length) {
+      fetchSearchResults(index, '');
+    }
+  };
+
   const handleItemTextChange = (index: number, text: string) => {
     // If handleItemSelect just ran, this onChange is the React-controlled-input
     // re-render echo — not a real keystroke. Skip it and reset the flag.
@@ -170,35 +200,10 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
     // Debounced fetch — fires 300 ms after the user stops typing
     clearTimeout(searchTimers.current[index]);
     if (text.trim().length >= 2) {
-      setSearchLoading(prev => ({ ...prev, [index]: true }));
-      searchTimers.current[index] = setTimeout(async () => {
-        try {
-          const res = await fetch(`/api/inventory/search?q=${encodeURIComponent(text.trim())}`);
-
-          // ── Step 1: log the HTTP status before touching the body ──────────
-          if (!res.ok) {
-            console.error(
-              `[inventory/search] HTTP ${res.status} ${res.statusText}`,
-              '— check: is the endpoint registered? Did Flask restart?'
-            );
-            // ── Step 2: safe JSON parse — Flask error pages return HTML ──────
-            let errBody: unknown = '(no body)';
-            try { errBody = await res.json(); } catch { /* HTML or empty body — ignore */ }
-            console.error('[inventory/search] Error body:', errBody);
-            setSearchResults(prev => ({ ...prev, [index]: [] }));
-            return;
-          }
-
-          const data = await res.json();
-          setSearchResults(prev => ({ ...prev, [index]: Array.isArray(data) ? data : [] }));
-        } catch (err) {
-          // Network failure (CORS, server down, DNS, etc.)
-          console.error('[inventory/search] Network error:', err);
-          setSearchResults(prev => ({ ...prev, [index]: [] }));
-        } finally {
-          setSearchLoading(prev => ({ ...prev, [index]: false }));
-        }
-      }, 300);
+      searchTimers.current[index] = setTimeout(() => fetchSearchResults(index, text.trim()), 300);
+    } else if (text.trim().length === 0) {
+      // Field was cleared — re-show the default list immediately
+      fetchSearchResults(index, '');
     } else {
       setSearchResults(prev => ({ ...prev, [index]: [] }));
       setSearchLoading(prev => ({ ...prev, [index]: false }));
@@ -383,7 +388,7 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
                       type="text"
                       value={item.item || ''}
                       onChange={(e) => handleItemTextChange(index, e.target.value)}
-                      onFocus={() => setActiveSearchIndex(index)}
+                      onFocus={() => handleSearchFocus(index)}
                       onBlur={() => setTimeout(() => { if (activeSearchIndex === index) setActiveSearchIndex(null); }, 200)}
                       placeholder="Search items..."
                       autoComplete="off"
@@ -394,7 +399,7 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
                       <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Please select a valid item from the list.</p>
                     )}
 
-                    {activeSearchIndex === index && item.item.trim().length >= 2 && (
+                    {activeSearchIndex === index && (item.item.trim().length >= 2 || (searchResults[index] || []).length > 0 || searchLoading[index]) && (
                       <div className={s.searchDropdown}>
                         {searchLoading[index] ? (
                           <div className={s.outOfStockNotice}>Searching...</div>
