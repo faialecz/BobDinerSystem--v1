@@ -48,14 +48,15 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
               inventory_brand_id: i.inventory_brand_id,
               inventory_id: i.inventory_id,
               item: i.item_name || '',
-              itemDescription: i.description || '—',
-              uom_name: i.uom || '',
+              brand_name: i.brand_name || '—',                          
+              itemDescription: i.item_description || i.description || '—',
+              uom_name: i.uom_name || i.uom || '',                      
               quantity: i.order_quantity || '',
               amount,
               price: qty > 0 ? amount / qty : 0,
             };
           })
-        : [{ inventory_id: '', item: '', itemDescription: '—', uom_name: '', quantity: '1', amount: 0, price: 0 }];
+        : [{ inventory_id: '', item: '', brand_name: '—', itemDescription: '—', uom_name: '', quantity: '1', amount: 0, price: 0 }];
 
       const built = {
         id: orderData.id,
@@ -104,24 +105,29 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     }
   };
 
-  const handleSearchFocus = (index: number) => {
+    const handleSearchFocus = (index: number) => {
     setActiveSearchIndex(index);
     const currentItem = (formData?.items || [])[index];
-    if (!currentItem?.item?.trim() && !(searchResults[index] || []).length) {
-      fetchSearchResults(index, '');
+    const currentText = currentItem?.item?.trim() || '';
+    
+    // Always fetch on focus, using current text as query
+    if (!(searchResults[index] || []).length) {
+      fetchSearchResults(index, currentText); // ✅ pass existing text
     }
   };
 
-  const handleItemSelect = (index: number, entry: any) => {
+    const handleItemSelect = (index: number, entry: any) => {
     justSelected.current[index] = true;
     const safeItems = formData.items || [];
     const newItems = [...safeItems];
     const currentQty = Number(newItems[index].quantity) || 1;
     const price = entry.item_selling_price ?? 0;
+
     newItems[index] = {
       ...newItems[index],
       inventory_brand_id: entry.inventory_brand_id,
-      item: `${entry.item_name} — ${entry.brand_name} (${entry.uom_name})`,
+      item: entry.item_name, 
+      brand_name: entry.brand_name, 
       itemDescription: entry.item_description || '—',
       uom_name: entry.uom_name || '',
       price,
@@ -133,7 +139,7 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     setSearchResults(prev => ({ ...prev, [index]: [] }));
   };
 
-  const handleItemTextChange = (index: number, text: string) => {
+    const handleItemTextChange = (index: number, text: string) => {
     if (justSelected.current[index]) {
       justSelected.current[index] = false;
       return;
@@ -144,11 +150,13 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
       ...newItems[index],
       item: text,
       inventory_brand_id: '',
-      itemDescription: '—',
+      brand_name: '—', 
+      itemDescription: '—', 
       uom_name: '',
       price: 0,
       amount: 0,
     };
+  
     setFormData({ ...formData, items: newItems });
 
     clearTimeout(searchTimers.current[index]);
