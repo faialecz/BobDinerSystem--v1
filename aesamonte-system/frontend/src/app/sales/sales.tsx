@@ -256,7 +256,7 @@ export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, in
 
 const totalPages = Math.max(1, Math.ceil(sortedTx.length / itemsPerPage));  const paginatedTx = sortedTx.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-if (isLoading || summary === null) return (
+if (isLoading === null) return (
   <div className={s.container}>
     <TopHeader role={role} onLogout={onLogout} />
     <main className={s.mainContent}>
@@ -565,7 +565,26 @@ if (isLoading || summary === null) return (
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedTx.map((tx, i) => {
+                {isLoading ? (
+                  <>
+                    {[0,1,2,3,4,5,6,7].map(i => (
+                      <tr key={i}>
+                        {[40,110,130,60,30,70,70,55,55].map((w,j) => (
+                          <td key={j}>
+                            <div style={{
+                              height: '12px',
+                              borderRadius: j >= 7 ? '20px' : '4px',
+                              background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
+                              backgroundSize: '600px 100%',
+                              animation: 'shimmer 1.4s infinite linear',
+                              width: `${w}px`,
+                            }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </>
+                ) : paginatedTx.map((tx, i) => {
                     const isBank = tx.paymentMethod?.toLowerCase().includes('bank')
                     return (
                       <tr key={tx.no} className={i % 2 !== 0 ? s.rowOdd : ''} onClick={() => handleOpenView(tx)} style={{ cursor: 'pointer' }}>

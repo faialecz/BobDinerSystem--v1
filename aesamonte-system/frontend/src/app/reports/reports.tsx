@@ -183,6 +183,7 @@ export default function ReportsPage({
       Object.values(r).some(v => String(v ?? '').toLowerCase().includes(q))
     );
   }, [allRows, search]);
+  
 
   const cfg      = TABS.find(t => t.key === activeTab)!;
   const canExport = ['Admin', 'Manager'].includes(role ?? '');
@@ -353,21 +354,38 @@ export default function ReportsPage({
                     <th>Status</th>
                   </tr></thead>
                   <tbody>
-                    {loading ? <LoadingRow cols={8} /> : r.length === 0 ? <EmptyRow cols={8} /> :
-                      r.map((row, i) => (
-                        <tr key={i}>
-                          <td><SkuCell sku={row.sku} /></td>
-                          <td>{row.item_name}</td>
-                          <td>{row.brand_name}</td>
-                          <td>{row.uom}</td>
-                          <td className={styles.numCol}>{num(row.qty_on_hand)}</td>
-                          <td className={styles.numCol}>{peso(row.unit_cost)}</td>
-                          <td className={styles.numCol}>{peso(row.selling_price)}</td>
-                          <td><StockStatusBadge status={row.stock_status} /></td>
-                        </tr>
-                      ))
-                    }
-                  </tbody>
+  {loading ? (
+    // Render 8 skeletal rows to fill the space
+    [1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+      <tr key={`skeleton-${i}`}>
+        {/* We use a div inside the td to apply the skeleton styling */}
+        <td><div className={styles.skeleton} style={{ width: '80%', height: '20px' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '90%', height: '20px' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '70%', height: '20px' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '60%', height: '20px' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '40%', height: '20px', marginLeft: 'auto' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '50%', height: '20px', marginLeft: 'auto' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '50%', height: '20px', marginLeft: 'auto' }} /></td>
+        <td><div className={styles.skeleton} style={{ width: '80%', height: '24px', borderRadius: '12px' }} /></td>
+      </tr>
+    ))
+  ) : rows.length === 0 ? (
+    <EmptyRow cols={8} />
+  ) : (
+    r.map((row, i) => (
+      <tr key={i}>
+        <td><SkuCell sku={row.sku} /></td>
+        <td>{row.item_name}</td>
+        <td>{row.brand_name}</td>
+        <td>{row.uom}</td>
+        <td className={styles.numCol}>{num(row.qty_on_hand)}</td>
+        <td className={styles.numCol}>{peso(row.unit_cost)}</td>
+        <td className={styles.numCol}>{peso(row.selling_price)}</td>
+        <td><StockStatusBadge status={row.stock_status} /></td>
+      </tr>
+    ))
+  )}
+</tbody>
                   {r.length > 0 && (
                     <tfoot><tr>
                       <td colSpan={4} className={styles.totalLabel}>Totals</td>
