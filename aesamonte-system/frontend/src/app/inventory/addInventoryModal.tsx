@@ -6,10 +6,10 @@ import AddBrandModal from './AddBrandModal';
 import { LuPlus, LuTrash2, LuSlidersHorizontal } from "react-icons/lu";
 
 interface Supplier {
-  id: number;
-  supplierName: string;
-  contactPerson?: string;
-  contactNumber?: string;
+  supplier_id: number;
+  supplier_name: string;
+  contact_person?: string;
+  supplier_contact?: string;
 }
 
 interface SupplierEntry {
@@ -123,11 +123,11 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (defaultSupplierName) {
-        const sup = suppliers.find(s => s.supplierName === defaultSupplierName);
+        const sup = suppliers.find(s => s.supplier_name === defaultSupplierName);
         setSupplierEntries([{
           supplierName: defaultSupplierName,
-          contactPerson: sup?.contactPerson || '',
-          contactNumber: sup?.contactNumber || '',
+          contactPerson: sup?.contact_person || '',
+          contactNumber: sup?.supplier_contact || '',
           leadTime: '', minOrder: '',
         }]);
       } else {
@@ -179,9 +179,9 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
       const updated = [...prev];
       const entry = { ...updated[idx], [field]: value };
       if (field === 'supplierName') {
-        const sup = suppliers.find(s => s.supplierName === value);
-        entry.contactPerson = sup?.contactPerson || '';
-        entry.contactNumber = sup?.contactNumber || '';
+        const sup = suppliers.find(s => s.supplier_name === value);
+        entry.contactPerson = sup?.contact_person || '';
+        entry.contactNumber = sup?.supplier_contact || '';
       }
       updated[idx] = entry;
       return updated;
@@ -604,10 +604,10 @@ const AddInventoryModal: React.FC<AddInventoryModalProps> = ({
                       <select style={supplierHasError(idx) ? FIELD_ERROR_STYLE : FIELD_STYLE} value={entry.supplierName} onChange={e => handleSupplierChange(idx, 'supplierName', e.target.value)}>
                         <option value="">Select Supplier</option>
                         {suppliers.map((sup, i) => {
-                          const usedElsewhere = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
+                          const usedElsewhere = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplier_name);
                           return (
-                            <option key={sup.id || i} value={sup.supplierName} disabled={usedElsewhere} style={{ color: usedElsewhere ? '#9ca3af' : '#374151' }}>
-                              {sup.supplierName}
+                            <option key={sup.supplier_id || i} value={sup.supplier_name} disabled={usedElsewhere} style={{ color: usedElsewhere ? '#9ca3af' : '#374151' }}>
+                              {sup.supplier_name}
                             </option>
                           );
                         })}

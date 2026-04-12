@@ -13,12 +13,12 @@ import {
 } from 'react-icons/lu'
 
 export interface Supplier {
-  id: number;
-  supplierName: string;
-  address?: string;        
-  contactPerson?: string;
-  contactNumber?: string;
-  email?: string;
+  supplier_id: number;
+  supplier_name: string;
+  supplier_address?: string;
+  contact_person?: string;
+  supplier_contact?: string;
+  supplier_email?: string;
   paymentTerms?: string;
   is_archived?: boolean;
 }
@@ -42,7 +42,7 @@ export default function ArchiveSupplierTable({ suppliers, onRestore, onBack }: A
 
   const filteredSuppliers = suppliers.filter(sup => {
     if (!sup.is_archived) return false;
-    const searchStr = `${sup.id} ${sup.supplierName} ${sup.contactPerson || ''}`.toLowerCase()
+    const searchStr = `${sup.supplier_id} ${sup.supplier_name} ${sup.contact_person || ''}`.toLowerCase()
     return searchStr.includes(searchTerm.toLowerCase())
   })
 
@@ -90,12 +90,12 @@ export default function ArchiveSupplierTable({ suppliers, onRestore, onBack }: A
   };
 
   const columns: { label: string; key: keyof Supplier }[] = [
-  { label: 'ID',             key: 'id' },
-  { label: 'SUPPLIER NAME',  key: 'supplierName' },
-  { label: 'CONTACT PERSON', key: 'contactPerson' },
-  { label: 'CONTACT NUMBER', key: 'contactNumber' },
-  { label: 'EMAIL',          key: 'email' },
-  { label: 'ADDRESS',        key: 'address' },
+  { label: 'ID',             key: 'supplier_id' },
+  { label: 'SUPPLIER NAME',  key: 'supplier_name' },
+  { label: 'CONTACT PERSON', key: 'contact_person' },
+  { label: 'CONTACT NUMBER', key: 'supplier_contact' },
+  { label: 'EMAIL',          key: 'supplier_email' },
+  { label: 'ADDRESS',        key: 'supplier_address' },
   ]
 
   return (
@@ -148,13 +148,13 @@ export default function ArchiveSupplierTable({ suppliers, onRestore, onBack }: A
           <tbody>
             {paginatedSuppliers.length ? (
               paginatedSuppliers.map((sup, i) => (
-                <tr key={sup.id} className={i % 2 ? s.altRow : ''}>
-                  <td style={{ color: '#94a3b8' }}>{sup.id}</td>
-                  <td style={{ fontWeight: 600, color: '#64748b' }}>{sup.supplierName}</td>
-                  <td style={{ color: '#94a3b8' }}>{sup.contactPerson || '—'}</td>
-                  <td style={{ color: '#94a3b8' }}>{sup.contactNumber || '—'}</td>
-                  <td style={{ color: '#94a3b8' }}>{sup.email || '—'}</td>
-                  <td style={{ color: '#94a3b8' }}>{sup.address || '—'}</td>
+                <tr key={sup.supplier_id} className={i % 2 ? s.altRow : ''}>
+                  <td style={{ color: '#94a3b8' }}>{sup.supplier_id}</td>
+                  <td style={{ fontWeight: 600, color: '#64748b' }}>{sup.supplier_name}</td>
+                  <td style={{ color: '#94a3b8' }}>{sup.contact_person || '—'}</td>
+                  <td style={{ color: '#94a3b8' }}>{sup.supplier_contact || '—'}</td>
+                  <td style={{ color: '#94a3b8' }}>{sup.supplier_email || '—'}</td>
+                  <td style={{ color: '#94a3b8' }}>{sup.supplier_address || '—'}</td>
                   <td style={{ display: 'none' }}>
                       <span style={{ backgroundColor: '#e2e8f0', 
                                      color: '#64748b', 
@@ -171,7 +171,7 @@ export default function ArchiveSupplierTable({ suppliers, onRestore, onBack }: A
                   </td>
                   <td className={s.actionCell}>
                       <div className={s.actionWrapper}>
-                      <button className={s.archiveBtn} onClick={() => onRestore(sup.id)}>
+                      <button className={s.archiveBtn} onClick={() => onRestore(sup.supplier_id)}>
                           <LuArchiveRestore size={14} />
                           <span>Restore</span>
                       </button>

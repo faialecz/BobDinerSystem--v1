@@ -8,7 +8,7 @@ interface AddSupplierModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
-  existingSuppliers?: { supplierName: string }[];
+  existingSuppliers?: { supplier_name: string }[];
 }
 
 const EMPTY_FORM = {
@@ -117,7 +117,7 @@ export default function AddSupplierModal({
 
     const normalize = (str: string) => str.trim().toLowerCase().replace(/\s+/g, ' ');
     const newName = normalize(form.supplierName);
-    const isDuplicate = existingSuppliers.some(s => normalize(s.supplierName) === newName);
+    const isDuplicate = existingSuppliers.some(s => normalize(s.supplier_name) === newName);
     if (isDuplicate) {
       setDupError(`"${form.supplierName.trim()}" already exists. Please use a different supplier name.`);
       return;

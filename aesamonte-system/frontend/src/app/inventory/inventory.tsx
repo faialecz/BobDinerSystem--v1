@@ -40,10 +40,10 @@ interface InventoryProps {
 }
 
 interface Supplier {
-  id: number;
-  supplierName: string;
-  contactPerson?: string;
-  contactNumber?: string;
+  supplier_id: number;
+  supplier_name: string;
+  contact_person?: string;
+  supplier_contact?: string;
 }
 
 interface Brand {
