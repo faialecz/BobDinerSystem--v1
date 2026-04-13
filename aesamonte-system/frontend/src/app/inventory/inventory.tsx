@@ -764,7 +764,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
         isOpen={showExportModal}
         onClose={() => { setShowExportModal(false); setExportType(null); }}
         onSuccess={handleExportSuccess}
-        data={products.filter(p => !p.is_archived)}
+        data={filteredProducts}
         summary={data}
         exportType={exportType}
       />

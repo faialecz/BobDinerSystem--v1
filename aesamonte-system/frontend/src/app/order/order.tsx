@@ -128,13 +128,19 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
   };
 
   const isDateInRange = (txDate: string): boolean => {
-    if (!fromDate && !toDate) return true;
-    const tx = parseDate(txDate);
-    if (!tx) return true;
-    if (fromDate) { const from = parseDate(fromDate); if (from && tx < from) return false; }
-    if (toDate)   { const to   = parseDate(toDate);   if (to   && tx > to)   return false; }
-    return true;
-  };
+  if (!fromDate && !toDate) return true;
+  const tx = parseDate(txDate);
+  if (!tx) return true;
+  if (fromDate) { const from = parseDate(fromDate); if (from && tx < from) return false; }
+  if (toDate) {
+    const to = parseDate(toDate);
+    if (to) {
+      to.setHours(23, 59, 59, 999);
+      if (tx > to) return false;
+    }
+  }
+  return true;
+};
 
   const fetchOrders = async () => {
     try {
@@ -736,7 +742,7 @@ export default function OrderPage({ role, onLogout, initialSearch }: { role: str
 
       <ExportModal isOpen={showExportModal} onClose={() => { setShowExportModal(false); setExportType(null); }} 
                     onSuccess={(msg, type) => { setToastTitle(type === 'error' ? 'Oops!' : 'Success!'); setToastMessage(msg); setIsError(type === 'error'); setShowToast(true); }} 
-                    data={orders.filter(o => !o.is_archived)} 
+                    data={filtered}
                     summary={summary ?? { shippedToday: { current: 0, total: 0 }, cancelled: { current: 0 }, totalOrders: { count: 0 } }}
                     exportType={exportType} />
 
