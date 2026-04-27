@@ -726,7 +726,9 @@ export default function Suppliers({
 
             <div className={s.footer}>
               <div className={s.showDataText}>
-                Showing <span className={s.countBadge}>{paginated.length}</span> of {sorted.length}
+                Showing <span className={s.countBadge}>
+                {Math.min(currentPage * ROWS_PER_PAGE, sorted.length)}
+              </span> of {sorted.length}
               </div>
               <div className={s.pagination}>
                 <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
