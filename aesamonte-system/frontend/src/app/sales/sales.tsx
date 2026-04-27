@@ -621,7 +621,9 @@ if (isLoading === null) return (
 
             <div className={s.footer}>
               <div className={s.showDataText}>
-                Showing <span className={s.countBadge}>{paginatedTx.length}</span> of {filteredTx.length}
+                Showing <span className={s.countBadge}>
+                {Math.min(currentPage * itemsPerPage, filteredTx.length)}
+              </span> of {filteredTx.length}
               </div>
               <div className={s.pagination}>
                 <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><LuChevronLeft /></button>

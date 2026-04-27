@@ -744,7 +744,9 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
 
             <div className={s.footer}>
               <div className={s.footerLeft}>
-                Showing <span className={s.countBadge}>{paginatedProducts.length}</span> of {sortedProducts.length}
+                Showing <span className={s.countBadge}>
+                {Math.min(currentPage * ROWS_PER_PAGE, sortedProducts.length)}
+              </span> of {sortedProducts.length}
               </div>
                 <div className={s.footerRight}>
                   <div className={s.pagination}>
