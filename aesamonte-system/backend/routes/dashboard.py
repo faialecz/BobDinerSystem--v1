@@ -1003,3 +1003,83 @@ def get_sales_revenue():
     finally:
         cur.close()
         conn.close()
+
+
+# ── 9. INVENTORY FORECAST (ADC-based, 14–30 day window) ──────────────────────
+@dashboard_bp.route("/api/dashboard/inventory-forecast", methods=["GET"])
+def get_inventory_forecast():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            WITH sales_30d AS (
+                SELECT
+                    od.inventory_brand_id,
+                    COALESCE(SUM(od.order_quantity), 0)::float AS units_sold
+                FROM order_details od
+                JOIN sales_transaction st ON st.order_id = od.order_id
+                JOIN static_status     ss ON ss.status_id = st.payment_status_id
+                WHERE ss.status_code = 'PAID'
+                  AND st.sales_date >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY od.inventory_brand_id
+            ),
+            item_stats AS (
+                SELECT
+                    i.inventory_id,
+                    i.item_name,
+                    COALESCE(MIN(u.uom_name), 'pcs')           AS uom,
+                    COALESCE(MIN(ib.item_sku), '')             AS sku,
+                    COALESCE(MIN(b.brand_name), '')            AS brand,
+                    COALESCE(SUM(ib.total_quantity), 0)::float AS current_stock,
+                    COALESCE(SUM(s.units_sold), 0)::float      AS units_sold_30d
+                FROM inventory i
+                JOIN inventory_brand    ib ON ib.inventory_id      = i.inventory_id
+                LEFT JOIN brand          b  ON b.brand_id          = ib.brand_id
+                LEFT JOIN sales_30d      s  ON s.inventory_brand_id = ib.inventory_brand_id
+                LEFT JOIN unit_of_measure u  ON u.uom_id            = ib.uom_id
+                JOIN static_status      ss ON ss.status_id          = i.item_status_id
+                WHERE ss.status_code != 'INACTIVE'
+                GROUP BY i.inventory_id, i.item_name
+                HAVING COALESCE(SUM(s.units_sold), 0) > 0
+                   AND COALESCE(SUM(ib.total_quantity), 0) > 0
+            )
+            SELECT
+                item_name,
+                uom,
+                sku,
+                brand,
+                current_stock::int                                            AS current_stock,
+                ROUND((units_sold_30d / 30.0)::numeric, 1)::float            AS daily_rate,
+                (current_stock / (units_sold_30d / 30.0))::int               AS days_until_stockout,
+                GREATEST(0, CEIL((units_sold_30d / 30.0) * 30 - current_stock))::int
+                                                                              AS suggested_reorder_qty
+            FROM item_stats
+            WHERE (current_stock / (units_sold_30d / 30.0)) BETWEEN 14 AND 30
+            ORDER BY days_until_stockout ASC
+        """)
+
+        rows = cur.fetchall()
+        items = []
+        for r in rows:
+            days = int(r[6])
+            stockout_date = (date.today() + timedelta(days=days)).strftime("%B %d, %Y")
+            items.append({
+                "item_name":             r[0],
+                "uom":                   r[1] or "pcs",
+                "sku":                   r[2] or "",
+                "brand":                 r[3] or "",
+                "current_stock":         int(r[4]),
+                "daily_rate":            float(r[5]),
+                "days_until_stockout":   days,
+                "suggested_reorder_qty": int(r[7]),
+                "stockout_date":         stockout_date,
+            })
+        return jsonify(items), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
