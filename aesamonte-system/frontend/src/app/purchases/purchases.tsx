@@ -187,7 +187,7 @@ export default function PurchasesPage({
   const [statusFilter, setStatusFilter]   = useState('All Status');
   const [statusOpen, setStatusOpen]       = useState(false);
 
-  const menuRef   = useRef<HTMLDivElement>(null);
+  const menuRef   = useRef<HTMLTableDataCellElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
