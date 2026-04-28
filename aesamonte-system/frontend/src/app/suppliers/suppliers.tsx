@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import styles from '@/css/suppliers.module.css';
 import TopHeader from '@/components/layout/TopHeader';
+import PageHeader from '@/components/layout/PageHeader';
 import ArchiveSupplierTable from './archiveSupModal';
 import {
   LuSearch,
@@ -627,6 +628,7 @@ export default function Suppliers({
       )}
 
       <div className={s.mainContent}>
+        <PageHeader title="SUPPLIERS" subtitle="Manage vendor relationships and contact information." />
         {isArchiveView ? (
           <ArchiveSupplierTable
             suppliers={suppliers}

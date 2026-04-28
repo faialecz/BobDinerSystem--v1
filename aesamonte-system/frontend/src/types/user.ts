@@ -11,6 +11,7 @@ export interface UserPermissions {
   sales?: ModulePerms;
   inventory?: ModulePerms;
   orders?: ModulePerms;
+  purchases?: ModulePerms;
   supplier?: ModulePerms;
   reports?: ModulePerms;
   settings?: ModulePerms;

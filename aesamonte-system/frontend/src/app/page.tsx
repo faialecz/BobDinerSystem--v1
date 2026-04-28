@@ -11,6 +11,7 @@ import Inventory from "@/app/inventory/inventory";
 import Sales from "@/app/sales/sales";
 import Orders from "@/app/order/order";
 import Suppliers from "@/app/suppliers/suppliers";
+import Purchases from "@/app/purchases/purchases";
 import type { UserInfo } from "@/types/user";
 
 function decodeJwt(token: string): Record<string, unknown> | null {
@@ -123,6 +124,8 @@ export default function Home() {
               <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (
               <Suppliers role={userInfo.roleName} onLogout={handleLogout} />
+            ) : activeTab === "Purchases" ? (
+              <Purchases role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.purchases} />
             ) : null
 
             }
