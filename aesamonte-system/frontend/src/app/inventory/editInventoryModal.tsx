@@ -166,9 +166,9 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
         stockDelta: '',
         uom: b.uom || '',
         reorderPoint: String(b.reorder_point ?? '20'),
-        unitCost: String(b.unit_price ?? ''),
+        unitCost: b.unit_cost > 0 ? String(b.unit_cost) : '',
         sellingPrice: String(b.selling_price ?? ''),
-        shelfLife: b.shelf_life ? b.shelf_life.split('T')[0] : '',
+        shelfLife: b.nearest_expiry ? b.nearest_expiry.split('T')[0] : '',
         isNew: false,
       }));
 
@@ -211,9 +211,9 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
       const updated = [...prev];
       const entry = { ...updated[idx], [field]: value };
       if (field === 'supplierName') {
-        const sup = suppliers.find((s: any) => s.supplierName === value);
-        entry.contactPerson = sup?.contactPerson || '';
-        entry.contactNumber = sup?.contactNumber || '';
+        const sup = suppliers.find((s: any) => s.supplier_name === value);
+        entry.contactPerson = sup?.contact_person || '';
+        entry.contactNumber = sup?.supplier_contact || '';
       }
       updated[idx] = entry;
       return updated;
@@ -652,8 +652,8 @@ const EditInventoryModal: React.FC<EditInventoryModalProps> = ({
                   <select style={supplierHasError(idx) ? FIELD_ERROR_STYLE : FIELD_STYLE} value={entry.supplierName} onChange={e => handleSupplierChange(idx, 'supplierName', e.target.value)}>
                     <option value="">Select Supplier</option>
                     {suppliers.map((sup: any) => {
-                      const used = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplierName);
-                      return <option key={sup.id} value={sup.supplierName} disabled={used} style={{ color: used ? '#9ca3af' : '#374151' }}>{sup.supplierName}</option>;
+                      const used = supplierEntries.some((e, ei) => ei !== idx && e.supplierName === sup.supplier_name);
+                      return <option key={sup.supplier_id} value={sup.supplier_name} disabled={used} style={{ color: used ? '#9ca3af' : '#374151' }}>{sup.supplier_name}</option>;
                     })}
                   </select>
                   {supplierHasError(idx) && (

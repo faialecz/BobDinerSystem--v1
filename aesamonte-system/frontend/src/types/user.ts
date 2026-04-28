@@ -7,6 +7,7 @@ export interface ModulePerms {
 }
 
 export interface UserPermissions {
+  purchases: unknown;
   dashboard?: ModulePerms;
   sales?: ModulePerms;
   inventory?: ModulePerms;

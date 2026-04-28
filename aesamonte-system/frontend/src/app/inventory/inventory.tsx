@@ -27,6 +27,7 @@ import {
   LuPencil,
   LuX,
   LuPackage,
+  LuEye,
 } from "react-icons/lu";
 
 /* ================= TYPES ================= */
@@ -62,11 +63,12 @@ interface BrandVariant {
   brand_id: number;
   brand_name: string;
   sku: string;
-  unit_price: number;
+  unit_cost: number;
   selling_price: number;
   qty: number;
   description?: string;
   item_description?: string;
+  nearest_expiry?: string | null;
 }
 
 interface SupplierInfo {
@@ -103,6 +105,27 @@ const ROWS_PER_PAGE = 10;
 
 const displayBrandName = (name: string) => (!name || name === 'No Brand') ? 'Generic' : name;
 
+function getBatchExpiryBadge(dateStr: string | null | undefined): React.ReactNode {
+  if (!dateStr) return <span style={{ color: '#9ca3af' }}>—</span>;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const expiry = new Date(dateStr); expiry.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((expiry.getTime() - today.getTime()) / 86_400_000);
+  const label = expiry.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+  if (diffDays < 0) return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span>{label}</span>
+      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#991b1b', backgroundColor: '#fee2e2', borderRadius: 4, padding: '1px 6px', width: 'fit-content' }}>EXPIRED</span>
+    </span>
+  );
+  if (diffDays <= 30) return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span>{label}</span>
+      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#b45309', backgroundColor: '#fef3c7', borderRadius: 4, padding: '1px 6px', width: 'fit-content' }}>EXPIRING SOON</span>
+    </span>
+  );
+  return <span>{label}</span>;
+}
+
 const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, initialSearch, permissions }) => {
   const s = styles as Record<string, string>;
   const { guard, denied, dismiss } = usePermissionGuard();
@@ -134,12 +157,18 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
   const [showUomModal, setShowUomModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
+  const [viewModalLoading, setViewModalLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isError, setIsError] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [exportType, setExportType] = useState<'pdf' | 'xlsx' | 'csv' | null>(null);
+
+  // batch quick-view modal
+  const [viewItem, setViewItem]             = useState<any | null>(null);
+  const [viewItemBatches, setViewItemBatches] = useState<any[]>([]);
+  const [viewItemLoading, setViewItemLoading] = useState(false);
 
   // ── UOM FILTER ──
   const [uomFilter, setUomFilter] = useState<string>('All UOM');
@@ -277,6 +306,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
     setViewProduct(product);
     setShowViewModal(true);
     setActiveMenuId(null);
+    setViewModalLoading(true);
     try {
       const res = await fetch(`/api/inventory/${product.id}`);
       if (res.ok) {
@@ -284,6 +314,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
         setViewProduct((prev: any) => prev?.id === product.id ? { ...prev, brands: full.brands, suppliers: full.suppliers } : prev);
       }
     } catch { /* keep list data as fallback */ }
+    finally { setViewModalLoading(false); }
   };
 
   const handleEditClick = async (product: Product) => {
@@ -880,23 +911,36 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                   </span>
                 </div>
 
-                {(viewProduct.brands || []).length === 0 ? (
-                  <p style={{ color: '#9ca3af', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>No brand variants recorded.</p>
-                ) : (
-                  <table className={s.viewItemsTable}>
-                    <thead>
+                <table className={s.viewItemsTable}>
+                  <thead>
+                    <tr>
+                      <th>BRAND</th>
+                      <th>UOM</th>
+                      <th>SKU</th>
+                      <th>DESCRIPTION</th>
+                      <th>QTY</th>
+                      <th>NEAREST EXPIRY</th>
+                      <th>COST PRICE</th>
+                      <th>SELLING PRICE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewModalLoading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <tr key={i}>
+                          {Array.from({ length: 8 }).map((__, j) => (
+                            <td key={j}>
+                              <div style={{ height: '12px', borderRadius: '4px', background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)', backgroundSize: '600px 100%', animation: 'shimmer 1.4s infinite linear' }} />
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : (viewProduct.brands || []).length === 0 ? (
                       <tr>
-                        <th>BRAND</th>
-                        <th>UOM</th>
-                        <th>SKU</th>
-                        <th>DESCRIPTION</th>
-                        <th>QTY</th>
-                        <th>COST PRICE</th>
-                        <th>SELLING PRICE</th>
+                        <td colSpan={8} style={{ color: '#9ca3af', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>No brand variants recorded.</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {viewProduct.brands.map((bv: any, i: number) => (
+                    ) : (
+                      viewProduct.brands.map((bv: any, i: number) => (
                         <tr key={i}>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -908,13 +952,14 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                           <td><span style={{ fontFamily: 'monospace', fontSize: '0.82rem', color: '#64748b' }}>{bv.sku || '—'}</span></td>
                           <td style={{ color: '#6b7280', fontSize: '0.85rem' }}>{bv.description || '—'}</td>
                           <td>{bv.qty}</td>
-                          <td>₱ {bv.unit_price?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
+                          <td style={{ fontSize: '0.82rem' }}>{getBatchExpiryBadge(bv.nearest_expiry)}</td>
+                          <td>{bv.unit_cost > 0 ? `₱ ${Number(bv.unit_cost).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : '₱ —'}</td>
                           <td>₱ {bv.selling_price?.toLocaleString('en-PH', { minimumFractionDigits: 2 }) || '0.00'}</td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
 
             </div>

@@ -420,7 +420,23 @@ def get_inventory():
                 COALESCE(ia.reorder_qty, 0)        AS reorder_qty,
                 COALESCE(ia.low_stock_qty, 0)      AS low_stock_qty,
                 u.uom_name,
-                ib.inventory_brand_id
+                ib.inventory_brand_id,
+                (
+                    SELECT MIN(bat.expiry_date)
+                    FROM   inventory_batch bat
+                    WHERE  bat.inventory_brand_id = ib.inventory_brand_id
+                      AND  bat.quantity_on_hand   > 0
+                      AND  bat.batch_status_id    = 15
+                )                                  AS nearest_expiry,
+                (
+                    SELECT bat.unit_cost
+                    FROM   inventory_batch bat
+                    WHERE  bat.inventory_brand_id = ib.inventory_brand_id
+                      AND  bat.quantity_on_hand   > 0
+                      AND  bat.batch_status_id    = 15
+                    ORDER BY bat.expiry_date ASC NULLS LAST, bat.batch_id ASC
+                    LIMIT 1
+                )                                  AS fefo_cost
             FROM inventory_brand ib
             LEFT JOIN brand b ON ib.brand_id = b.brand_id
             LEFT JOIN inventory_action ia
@@ -460,11 +476,12 @@ def get_inventory():
             "brand_id":          br[1],
             "brand_name":        br[2],
             "sku":               br[3] or "—",
-            "unit_price":        0.0,                   # removed from schema
-            "selling_price":     float(br[4] or 0),    # index 4
-            "qty":               int(br[5] or 0),       # index 5 — from inventory_batch
-            "uom":               br[8] or "—",          # index 8
-            "inventory_brand_id": br[9],                # index 9
+            "unit_cost":         float(br[11]) if br[11] is not None else 0.0,
+            "selling_price":     float(br[4] or 0),
+            "qty":               int(br[5] or 0),
+            "uom":               br[8] or "—",
+            "inventory_brand_id": br[9],
+            "nearest_expiry":    br[10].isoformat() if br[10] else None,
         })
 
     suppliers_map: dict = {}
@@ -554,7 +571,23 @@ def get_inventory_item(id):
                 ib.item_description,
                 u.uom_name,
                 COALESCE(ia.reorder_qty, 0)        AS reorder_qty,
-                ib.inventory_brand_id
+                ib.inventory_brand_id,
+                (
+                    SELECT MIN(bat.expiry_date)
+                    FROM   inventory_batch bat
+                    WHERE  bat.inventory_brand_id = ib.inventory_brand_id
+                      AND  bat.quantity_on_hand   > 0
+                      AND  bat.batch_status_id    = 15
+                )                                  AS nearest_expiry,
+                (
+                    SELECT bat.unit_cost
+                    FROM   inventory_batch bat
+                    WHERE  bat.inventory_brand_id = ib.inventory_brand_id
+                      AND  bat.quantity_on_hand   > 0
+                      AND  bat.batch_status_id    = 15
+                    ORDER BY bat.expiry_date ASC NULLS LAST, bat.batch_id ASC
+                    LIMIT 1
+                )                                  AS fefo_cost
             FROM inventory_brand ib
             LEFT JOIN brand b ON ib.brand_id = b.brand_id
             LEFT JOIN unit_of_measure u ON ib.uom_id = u.uom_id
@@ -569,13 +602,13 @@ def get_inventory_item(id):
                 "brand_id":           row[0],
                 "brand_name":         row[1],
                 "sku":                row[2] or "",
-                "unit_price":         0.0,                   # removed from schema
-                "selling_price":      float(row[3] or 0),   # index 3
-                "qty":                int(row[4] or 0),      # index 4 — from inventory_batch
-                "description":        row[5] or "",          # index 5
-                "uom":                row[6] or "Select",    # index 6
-                "reorder_point":      int(row[7] or 0),      # index 7
-                "shelf_life":         None,                  # removed from schema
+                "unit_cost":          float(row[10]) if row[10] is not None else 0.0,
+                "selling_price":      float(row[3] or 0),
+                "qty":                int(row[4] or 0),
+                "description":        row[5] or "",
+                "uom":                row[6] or "Select",
+                "reorder_point":      int(row[7] or 0),
+                "nearest_expiry":     row[9].isoformat() if row[9] else None,
             }
             for row in cur.fetchall()
         ]
@@ -1388,6 +1421,91 @@ def get_inventory_batches(brand_id):
             }
             for row in rows
         ]), 200
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@inventory_bp.route("/api/inventory/grouped", methods=["GET"])
+def get_inventory_grouped():
+    """
+    Returns every non-archived inventory_brand variant with its active batches
+    nested as an array. Batches are ordered FEFO (soonest expiry first) and
+    only rows where quantity_on_hand > 0 are included.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                ib.inventory_brand_id,
+                i.inventory_id,
+                i.item_name,
+                COALESCE(b.brand_name, 'No Brand')  AS brand_name,
+                COALESCE(ib.item_sku, '')            AS item_sku,
+                COALESCE(ib.item_description, '')    AS item_description,
+                COALESCE(u.uom_name, '')             AS uom_name,
+                bat.batch_id,
+                COALESCE(bat.batch_number, '')       AS batch_number,
+                bat.quantity_on_hand,
+                bat.manufactured_date,
+                bat.expiry_date,
+                bat.unit_cost
+            FROM inventory i
+            JOIN inventory_brand ib ON ib.inventory_id = i.inventory_id
+            LEFT JOIN brand           b ON b.brand_id  = ib.brand_id
+            LEFT JOIN unit_of_measure u ON u.uom_id    = ib.uom_id
+            LEFT JOIN inventory_batch bat
+                ON  bat.inventory_brand_id = ib.inventory_brand_id
+                AND bat.quantity_on_hand   > 0
+                AND bat.batch_status_id    = %s
+            WHERE ib.item_status_id NOT IN (
+                SELECT status_id FROM static_status
+                WHERE  status_scope = 'INVENTORY_STATUS'
+                  AND  status_code  = 'ARCHIVED'
+            )
+            ORDER BY
+                i.item_name                         ASC,
+                COALESCE(b.brand_name, 'No Brand')  ASC,
+                bat.expiry_date                     ASC NULLS LAST
+        """, (BATCH_STATUS_ACTIVE,))
+        rows = cur.fetchall()
+
+        groups: dict = {}
+        order:  list = []
+        for r in rows:
+            ibid = r[0]
+            if ibid not in groups:
+                groups[ibid] = {
+                    "inventory_brand_id": ibid,
+                    "inventory_id":       r[1],
+                    "item_name":          r[2],
+                    "brand_name":         r[3],
+                    "item_sku":           r[4],
+                    "item_description":   r[5],
+                    "uom_name":           r[6],
+                    "total_quantity":     0,
+                    "batches":            [],
+                }
+                order.append(ibid)
+
+            if r[7] is not None:        # batch_id (NULL when no active batches)
+                qty = int(r[9] or 0)
+                groups[ibid]["total_quantity"] += qty
+                groups[ibid]["batches"].append({
+                    "batch_id":          r[7],
+                    "batch_number":      r[8],
+                    "quantity_on_hand":  qty,
+                    "manufactured_date": r[10].isoformat() if r[10] else None,
+                    "expiry_date":       r[11].isoformat() if r[11] else None,
+                    "unit_cost":         float(r[12] or 0),
+                })
+
+        return jsonify([groups[k] for k in order]), 200
 
     except Exception as e:
         import traceback; traceback.print_exc()
