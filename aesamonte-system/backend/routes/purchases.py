@@ -2,6 +2,8 @@ from flask import Blueprint, jsonify, request
 from database.db_config import get_connection
 from datetime import datetime
 from utils.auth import require_purchase_access
+import os
+import jwt
 
 purchases_bp = Blueprint("purchases", __name__)
 
@@ -165,7 +167,7 @@ def get_purchase_orders():
             LEFT JOIN (
                 SELECT
                     purchase_order_id,
-                    COUNT(*)                               AS total_items,
+                    SUM(quantity_ordered)                  AS total_items,
                     SUM(quantity_ordered * unit_cost)      AS total_cost
                 FROM purchase_order_item
                 GROUP BY purchase_order_id
@@ -259,10 +261,14 @@ def create_draft_purchase_order():
     conn = get_connection()
     cur = conn.cursor()
     try:
-        data = request.get_json()
+        # ── Get employee_id from token ──
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "aesamonte_rbac_secret_2025")
+        token_payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        employee_id = token_payload.get("employee_id")
 
+        data = request.get_json()
         supplier_id       = data.get("supplier_id")
-        ordered_by        = data.get("ordered_by")       # employee_id
         notes             = data.get("notes", "")
         expected_delivery = data.get("expected_delivery") or None
         items             = data.get("items", [])
@@ -277,20 +283,20 @@ def create_draft_purchase_order():
         # Insert PO without po_number first so we have the PK for the pattern
         cur.execute("""
             INSERT INTO purchase_order
-                (supplier_id, employee_id, status_id, order_date,
-                 expected_delivery, notes)
-            VALUES (%s, %s, %s, NOW(), %s, %s)
-            RETURNING purchase_order_id, order_date
+                (supplier_id, status_id, po_number, ordered_by,
+                expected_delivery, notes, date_created)
+            VALUES (%s, %s, 'PENDING', %s, %s, %s, NOW())
+            RETURNING purchase_order_id, date_created
         """, (
             int(supplier_id),
-            int(ordered_by) if ordered_by else None,
             draft_status_id,
+            int(employee_id),
             expected_delivery,
             notes,
         ))
         po_id, order_date = cur.fetchone()
 
-        # PO number: PO-YYYYMMDD-<zero-padded PK>
+        # Now update with the real PO number
         po_number = f"PO-{order_date.strftime('%Y%m%d')}-{po_id:04d}"
         cur.execute(
             "UPDATE purchase_order SET po_number = %s WHERE purchase_order_id = %s",
