@@ -8,7 +8,7 @@
 # Install dependencies: 
 
 ```bash
-    pip install Flask flask-cors psycopg2-binary python-dotenv
+    pip install Flask flask-cors psycopg2-binary python-dotenv bcrypt requests pandas pytz
 ```
 # Run app.py
 
