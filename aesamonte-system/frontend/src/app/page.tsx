@@ -140,7 +140,7 @@ export default function Home() {
             ) : activeTab === "Help" ? (
               <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (
-              <Suppliers role={userInfo.roleName} onLogout={handleLogout} />
+              <Suppliers role={userInfo.roleName} onLogout={handleLogout} onNavigate={(tab, id) => { setActiveTabPersisted(tab); if (id) setViewTarget({ tab, id }); }} />
             ) : activeTab === "Purchases" ? (
               <Purchases role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.purchases} initialViewId={viewTarget?.tab === 'Purchases' ? viewTarget.id : undefined} onViewOpened={() => setViewTarget(null)} reorderItem={reorderItem} />
             ) : null}

@@ -237,10 +237,11 @@ export default function AddSupplierModal({
                 value={form.contact}
                 onChange={e => {
                   clearEmpty('contact');
-                  setForm({ ...form, contact: e.target.value.replace(/[^\d]/g, '') });
+                  setForm({ ...form, contact: e.target.value.replace(/[^\d]/g, '').slice(0, 11) });
                 }}
                 style={emptyFields.has('contact') ? errorBorder : {}}
                 placeholder="09XXXXXXXXX"
+                maxLength={11}
               />
             </div>
           </div>
@@ -262,7 +263,7 @@ export default function AddSupplierModal({
               onChange={e => setForm({ ...form, paymentTerms: e.target.value })}
             >
               <option>Cash on Delivery</option>
-              <option>Card</option>
+              <option>Bank Transaction</option>
             </select>
           </div>
 
