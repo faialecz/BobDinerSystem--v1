@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import styles from "@/css/settings.module.css";
 import s from "@/css/backup-restore.module.css";
 import BackSettingsHeader from "@/components/layout/BackSettingsHeader";
@@ -51,7 +51,7 @@ function MinutePicker({ value, onChange, disabled }: { value: string; onChange: 
 }
 
 // ── Modal types ────────────────────────────────────────────────────────────────
-type ModalType = 'success-backup' | 'success-restore' | 'no-changes-backup' | 'no-file-restore' | 'error' | null;
+type ModalType = 'success-backup' | 'success-restore' | 'success-scheduled' | 'no-changes-backup' | 'no-file-restore' | 'error' | null;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function BackupRestore({ onBack }: { onBack: () => void }) {
@@ -78,9 +78,49 @@ export default function BackupRestore({ onBack }: { onBack: () => void }) {
   // Modal
   const [modal, setModal] = useState<ModalType>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [scheduleMsg, setScheduleMsg] = useState('');
 
   // Snapshot of saved state to detect changes
   const savedRef = useRef({ dailyEnabled, weeklyEnabled, dailyHour, dailyMin, dailyAmPm, weeklyHour, weeklyMin, weeklyAmPm, weeklyDay });
+
+  // Poll for scheduled backup completion
+  const lastBackupTimeRef = useRef<string | null>(
+    typeof window !== 'undefined' ? sessionStorage.getItem('lastSeenBackupTime') : null
+  );
+
+  const triggerScheduledDownload = (data: { filename?: string; time: string; status: string; message?: string }) => {
+    sessionStorage.setItem('lastSeenBackupTime', data.time);
+    lastBackupTimeRef.current = data.time;
+    if (data.status === 'success') {
+      if (data.filename) {
+        const a = document.createElement('a');
+        a.href = `${API}/api/backup/download-scheduled/${encodeURIComponent(data.filename)}`;
+        a.download = data.filename;
+        a.click();
+      }
+      setModal('success-scheduled');
+    } else {
+      setErrorMsg(data.message || 'Scheduled backup failed.');
+      setModal('error');
+    }
+  };
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`${API}/api/backup/last-backup`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data?.time) return;
+        if (data.time !== lastBackupTimeRef.current) {
+          triggerScheduledDownload(data);
+        }
+      } catch {}
+    };
+    check();
+    const id = setInterval(check, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   // Load settings on mount
   useEffect(() => {
@@ -96,10 +136,10 @@ export default function BackupRestore({ onBack }: { onBack: () => void }) {
           return String(h).padStart(2, '0');
         };
 
-        const dH = d.ampm ? String(d.hour ?? 12).padStart(2, '0') : to12h(d.hour ?? 12);
+        const dH = to12h(d.hour ?? 12);
         const dM = String(d.minute ?? 0).padStart(2, '0');
         const dA = d.ampm ?? (d.hour >= 12 ? 'PM' : 'AM');
-        const wH = w.ampm ? String(w.hour ?? 12).padStart(2, '0') : to12h(w.hour ?? 12);
+        const wH = to12h(w.hour ?? 12);
         const wM = String(w.minute ?? 0).padStart(2, '0');
         const wA = w.ampm ?? (w.hour >= 12 ? 'PM' : 'AM');
         const wD = w.day ?? 'monday';
@@ -140,6 +180,15 @@ export default function BackupRestore({ onBack }: { onBack: () => void }) {
       });
       if (res.ok) {
         savedRef.current = { dailyEnabled, weeklyEnabled, dailyHour, dailyMin, dailyAmPm, weeklyHour, weeklyMin, weeklyAmPm, weeklyDay };
+        if (!dailyEnabled && !weeklyEnabled) {
+          setScheduleMsg('Automatic backups have been disabled.');
+        } else if (dailyEnabled && weeklyEnabled) {
+          setScheduleMsg('Daily and weekly backups are now scheduled.');
+        } else if (dailyEnabled) {
+          setScheduleMsg(`Daily backups will run automatically at ${dailyHour}:${dailyMin} ${dailyAmPm}.`);
+        } else {
+          setScheduleMsg(`Weekly backups will run every ${weeklyDay.charAt(0).toUpperCase() + weeklyDay.slice(1)} at ${weeklyHour}:${weeklyMin} ${weeklyAmPm}.`);
+        }
         setModal('success-backup');
       } else {
         const data = await res.json();
@@ -205,13 +254,18 @@ export default function BackupRestore({ onBack }: { onBack: () => void }) {
   });
 
   const isWarning = modal === 'no-changes-backup' || modal === 'no-file-restore' || modal === 'error';
-  const modalTitle = isWarning ? (modal === 'error' ? 'Error' : 'No Changes!') : 'Success!';
+  const modalTitle =
+    modal === 'success-backup'    ? 'Schedule Saved!'   :
+    modal === 'success-scheduled' ? 'Backup Complete!'  :
+    modal === 'success-restore'   ? 'Restore Complete!' :
+    modal === 'error'             ? 'Error'             : 'No Changes!';
   const modalMessage =
-    modal === 'success-backup'    ? 'Backup schedule saved successfully!'                        :
-    modal === 'success-restore'   ? 'Data restored successfully!'                                :
-    modal === 'no-changes-backup' ? 'You have not made any changes to the backup schedule.'      :
-    modal === 'no-file-restore'   ? 'Please select a CSV file before restoring.'                 :
-    modal === 'error'             ? errorMsg                                                     : '';
+    modal === 'success-backup'     ? scheduleMsg                                                                             :
+    modal === 'success-scheduled'  ? 'Your scheduled backup has been completed and downloaded to your computer.'            :
+    modal === 'success-restore'    ? 'Data restored successfully!'                                                          :
+    modal === 'no-changes-backup'  ? 'You have not made any changes to the backup schedule.'                                :
+    modal === 'no-file-restore'    ? 'Please select a CSV file before restoring.'                                           :
+    modal === 'error'              ? errorMsg                                                                                : '';
 
   return (
     <div className={styles.settingsCard}>

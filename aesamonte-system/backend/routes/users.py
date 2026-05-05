@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from database.db_config import get_connection
+from datetime import datetime
 import bcrypt
 
 users_bp = Blueprint("users", __name__)
@@ -37,7 +38,7 @@ def get_employees():
             SELECT e.employee_id, e.employee_name, e.employee_email,
                    e.employee_contact, e.role_id, e.employee_status_id,
                    s.status_code, e.is_archived,
-                   e.employee_username
+                   e.employee_username, e.inactivated_at
             FROM employee e
             JOIN static_status s ON e.employee_status_id = s.status_id
             WHERE e.employee_id != 1
@@ -46,15 +47,16 @@ def get_employees():
         rows = cursor.fetchall()
         employees = [
             {
-                "id":          r[0],
-                "name":        r[1],
-                "email":       r[2],
-                "contact":     r[3],
-                "role_id":     r[4],
-                "status_id":   r[5],
-                "status_code": r[6],
-                "is_archived": r[7],
-                "username":    r[8] 
+                "id":             r[0],
+                "name":           r[1],
+                "email":          r[2],
+                "contact":        r[3],
+                "role_id":        r[4],
+                "status_id":      r[5],
+                "status_code":    r[6],
+                "is_archived":    r[7],
+                "username":       r[8],
+                "inactivated_at": r[9].isoformat() if r[9] else None,
             } for r in rows
         ]
         return jsonify(employees)
@@ -87,7 +89,12 @@ def create_employee():
         return jsonify({"message": "Created"}), 201
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        error_msg = str(e)
+        if 'employee_email' in error_msg:
+            return jsonify({"error": "This email address is already in use."}), 400
+        if 'employee_username' in error_msg:
+            return jsonify({"error": "This username is already taken."}), 400
+        return jsonify({"error": "Failed to create employee."}), 500
     finally:
         cursor.close()
         conn.close()
@@ -104,12 +111,12 @@ def update_employee(employee_id):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT role_id FROM employee WHERE employee_id = %s", (employee_id,))
+        cursor.execute("SELECT role_id, employee_status_id FROM employee WHERE employee_id = %s", (employee_id,))
         row = cursor.fetchone()
         if not row:
             return jsonify({"error": "Employee not found"}), 404
 
-        current_role_id = row[0]
+        current_role_id, current_status_id = row[0], row[1]
 
         # Super Admin is immutable
         if current_role_id == SUPER_ADMIN_ROLE_ID:
@@ -125,10 +132,17 @@ def update_employee(employee_id):
             if requester_emp != employee_id:
                 return jsonify({"error": "You can only manage users with a lower role than yours."}), 403
 
+        if status_id == 12 and current_status_id != 12:
+            inactivated_at_clause = ", inactivated_at = NOW()"
+        elif status_id == 11:
+            inactivated_at_clause = ", inactivated_at = NULL"
+        else:
+            inactivated_at_clause = ""
+
         cursor.execute("SET LOCAL app.current_user_id = %s", (1,))
-        cursor.execute("""
+        cursor.execute(f"""
             UPDATE employee SET employee_name=%s, employee_username=%s, employee_email=%s,
-            employee_contact=%s, role_id=%s, employee_status_id=%s
+            employee_contact=%s, role_id=%s, employee_status_id=%s{inactivated_at_clause}
             WHERE employee_id=%s
         """, (data['name'], data['username'], data['email'], data['contact'], new_role_id, status_id, employee_id))
         if data.get("password") and data.get("password").strip():
@@ -138,11 +152,15 @@ def update_employee(employee_id):
         return jsonify({"message": "Updated"}), 200
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
+        error_msg = str(e)
+        if 'employee_email' in error_msg:
+            return jsonify({"error": "This email address is already in use."}), 400
+        if 'employee_username' in error_msg:
+            return jsonify({"error": "This username is already taken."}), 400
+        return jsonify({"error": "Failed to update employee."}), 500
+    finally:        
         cursor.close()
-        conn.close()
-
+        conn.close()    
 
 @users_bp.route("/employees/<int:employee_id>", methods=["DELETE"])
 def delete_employee(employee_id):
@@ -189,14 +207,68 @@ def restore_employee(employee_id):
     try:
         cursor.execute("SET LOCAL app.current_user_id = %s", (1,))
         cursor.execute("""
-            UPDATE employee 
-            SET is_archived = FALSE
+            UPDATE employee
+            SET is_archived = FALSE, inactivated_at = NULL
             WHERE employee_id = %s
         """, (employee_id,))
         if cursor.rowcount == 0:
             return jsonify({"error": "Employee not found"}), 404
         conn.commit()
         return jsonify({"message": "Employee restored successfully"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@users_bp.route("/employees/<int:employee_id>/reactivate", methods=["PUT"])
+def reactivate_employee(employee_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SET LOCAL app.current_user_id = %s", (1,))
+        cursor.execute("""
+            UPDATE employee
+            SET employee_status_id = 11, inactivated_at = NULL
+            WHERE employee_id = %s
+        """, (employee_id,))
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Employee not found"}), 404
+        conn.commit()
+        return jsonify({"message": "Employee reactivated successfully"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@users_bp.route("/employees/<int:employee_id>/permanent", methods=["DELETE"])
+def permanently_delete_employee(employee_id):
+    requester_role = int(request.args.get("requester_role_id", 0))
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT role_id FROM employee WHERE employee_id = %s", (employee_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"error": "Employee not found"}), 404
+
+        role_id = row[0]
+
+        if role_id == SUPER_ADMIN_ROLE_ID:
+            return jsonify({"error": "The Super Admin account cannot be deleted."}), 403
+
+        if requester_role > 0 and not _can_act_on(requester_role, role_id, cursor):
+            return jsonify({"error": "You can only manage users with a lower role than yours."}), 403
+
+        cursor.execute("DELETE FROM employee WHERE employee_id = %s", (employee_id,))
+        conn.commit()
+        return jsonify({"message": "Employee permanently deleted"}), 200
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500

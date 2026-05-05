@@ -3,6 +3,7 @@ import csv
 import json
 import zipfile
 import io
+import threading
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request, send_file
 from database.db_config import get_connection
@@ -18,6 +19,81 @@ DAY_MAP = {
     'thursday': 3, 'friday': 4, 'saturday': 5, 'sunday': 6
 }
 
+# ---------------------------------------------------------------------------
+# User-friendly error messages — hides raw DB / OS details from the frontend
+# ---------------------------------------------------------------------------
+
+def _friendly_error(e: Exception) -> str:
+    msg = str(e).lower()
+    if any(k in msg for k in ("connection", "timeout", "could not connect", "database")):
+        return "Backup failed: unable to reach the database. Please check your connection."
+    if any(k in msg for k in ("permission", "access", "denied")):
+        return "Backup failed: permission denied when saving the file."
+    if any(k in msg for k in ("disk", "space", "no space", "quota")):
+        return "Backup failed: not enough disk space to save the backup."
+    if any(k in msg for k in ("no such file", "directory", "path")):
+        return "Backup failed: the backup folder could not be created."
+    return "Backup failed due to a system error. Please try again or contact support."
+
+
+# ---------------------------------------------------------------------------
+# Background scheduler — checks every 30 s and fires run_backup() at the
+# configured daily / weekly time.  Uses a (date, hour, minute) key so the
+# backup runs at most once per minute even if the thread wakes up twice.
+# ---------------------------------------------------------------------------
+
+_last_backup_key: tuple | None = None
+
+
+def _scheduler_loop():
+    global _last_backup_key
+    import time as _time
+    while True:
+        _time.sleep(10)
+        try:
+            settings = load_settings()
+            now = datetime.now()
+            current_key = (now.date(), now.hour, now.minute)
+            if current_key == _last_backup_key:
+                continue
+
+            should_run = False
+            daily = settings.get("daily", {})
+            if daily.get("enabled"):
+                if now.hour == daily.get("hour", 12) and now.minute == daily.get("minute", 0):
+                    should_run = True
+
+            if not should_run:
+                weekly = settings.get("weekly", {})
+                if weekly.get("enabled"):
+                    target_day = DAY_MAP.get(weekly.get("day", "monday").lower(), 0)
+                    if (now.weekday() == target_day
+                            and now.hour == weekly.get("hour", 12)
+                            and now.minute == weekly.get("minute", 0)):
+                        should_run = True
+
+            if should_run:
+                _last_backup_key = current_key
+                try:
+                    run_backup()
+                except Exception as e:
+                    print(f"[Backup] run_backup() failed: {e}")
+                    try:
+                        _save_last_backup("error", _friendly_error(e))
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[Backup] Scheduler error: {e}")
+
+
+# In Flask debug mode, Werkzeug spawns two processes. Only start the scheduler
+# in the reloader child (WERKZEUG_RUN_MAIN=true) to avoid duplicate backups.
+_is_reloader_child = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+_is_production = os.environ.get("WERKZEUG_RUN_MAIN") is None
+if _is_reloader_child or _is_production:
+    _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True, name="backup-scheduler")
+    _scheduler_thread.start()
+
 
 # ---------------------------------------------------------------------------
 # Supabase Storage helper
@@ -30,8 +106,26 @@ def _supabase():
 
 # ---------------------------------------------------------------------------
 # Settings — stored in the backup_settings DB table (single row, id=1)
-# Run migrations/002_backup_settings_table.sql once to create the table.
+# Table is created automatically on first run if it does not exist yet.
 # ---------------------------------------------------------------------------
+
+def _ensure_backup_table():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS backup_settings (
+                id      INTEGER PRIMARY KEY,
+                settings JSONB NOT NULL DEFAULT '{}'
+            )
+        """)
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+_ensure_backup_table()
+
 
 def load_settings():
     conn = get_connection()
@@ -160,19 +254,50 @@ def _build_zip_bytes():
 
 
 # ---------------------------------------------------------------------------
-# Scheduled backup — uploads ZIP to Supabase Storage
+# Scheduled backup — saves ZIP to local backups/ folder
 # ---------------------------------------------------------------------------
 
+BACKUP_DIR = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "backups")
+
+
+def _save_last_backup(status: str, message: str, filename: str = ""):
+    """Persist last backup result into the settings JSON so the frontend can poll it."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        entry = json.dumps({
+            "last_backup": {
+                "status": status,
+                "message": message,
+                "filename": filename,
+                "time": datetime.now().isoformat(),
+            }
+        })
+        cur.execute(
+            "UPDATE backup_settings SET settings = settings || %s::jsonb WHERE id = 1",
+            (entry,),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
 def run_backup():
-    """Build a backup ZIP and upload it to Supabase Storage."""
-    zip_buffer, date_str = _build_zip_bytes()
+    """Build a backup ZIP and save it to the local backups/ folder."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    date_str = datetime.now().strftime("%m-%d-%y")
     filename = f"Backup_{date_str}.zip"
-    _supabase().storage.from_(STORAGE_BUCKET).upload(
-        path=filename,
-        file=zip_buffer.read(),
-        file_options={"content-type": "application/zip", "upsert": "true"},
-    )
-    print(f"[Backup] Uploaded {filename} to Supabase Storage at {datetime.now()}")
+    filepath = os.path.join(BACKUP_DIR, filename)
+    if os.path.exists(filepath):
+        print(f"[Backup] {filename} already exists, skipping duplicate run")
+        return
+    zip_buffer, _ = _build_zip_bytes()
+    with open(filepath, "wb") as f:
+        f.write(zip_buffer.read())
+    now_str = datetime.now().strftime("%b %d, %Y %I:%M %p")
+    print(f"[Backup] Saved {filename} to {BACKUP_DIR} at {now_str}")
+    _save_last_backup("success", f"Scheduled backup completed on {now_str}", filename)
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +307,21 @@ def run_backup():
 @backup_bp.route("/settings", methods=["GET"])
 def get_settings():
     return jsonify(load_settings())
+
+
+@backup_bp.route("/last-backup", methods=["GET"])
+def last_backup_status():
+    settings = load_settings()
+    return jsonify(settings.get("last_backup", None))
+
+
+@backup_bp.route("/download-scheduled/<filename>", methods=["GET"])
+def download_scheduled(filename):
+    """Serve a previously saved scheduled backup file for browser download."""
+    filepath = os.path.join(BACKUP_DIR, os.path.basename(filename))
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Backup file not found"}), 404
+    return send_file(filepath, mimetype="application/zip", as_attachment=True, download_name=filename)
 
 
 @backup_bp.route("/settings", methods=["POST"])
