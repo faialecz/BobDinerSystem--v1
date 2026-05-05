@@ -67,6 +67,23 @@ const FIELD: React.CSSProperties = {
   fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box',
 };
 
+// ── Date normalizer ────────────────────────────────────────────────────────────
+// Converts any date string the API might return into the strict YYYY-MM-DD
+// format required by <input type="date">.
+function toDateInputValue(raw: string | null | undefined): string {
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(raw)) return raw.slice(0, 10);
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    const y  = d.getFullYear();
+    const m  = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dy}`;
+  }
+  return '';
+}
+
 // ── Blank row factory ──────────────────────────────────────────────────────────
 
 const BLANK = (): ItemRow => ({
@@ -116,7 +133,7 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
     setError('');
     setSubmitAttempted(false);
     setSupplierName(purchaseOrder.supplier_name ?? '');
-    setExpectedDelivery(purchaseOrder.expected_delivery?.slice(0, 10) ?? '');
+    setExpectedDelivery(toDateInputValue(purchaseOrder.expected_delivery));
     setNotes(purchaseOrder.notes ?? '');
     setSearchQuery({});
     setSearchResults({});
@@ -151,7 +168,7 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
           uom_name:           it.uom_name ?? '',
           quantity_ordered:   it.quantity_ordered,
           unit_cost:          it.unit_cost,
-          expiry_date:        it.expiry_date?.slice(0, 10) ?? '',
+          expiry_date:        toDateInputValue(it.expiry_date),
         }));
         setItems(rows);
         // Build search query display for each pre-populated row
@@ -564,16 +581,17 @@ const res = await fetch(`/api/purchases/${purchaseOrder!.purchase_order_id}`, {
                   </div>
 
                   <div>
+                    <label style={LABEL}>Expected Delivery *</label>
                     <input
-                    type="date"
-                    value={expectedDelivery}
-                    onChange={e => setExpectedDelivery(e.target.value)}
-                    style={{ ...FIELD, ...(deliveryHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}) }}
-                  />
-                  {deliveryHasError() && (
-                    <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Expected delivery date is required.</p>
-                  )}
-                </div>
+                      type="date"
+                      value={expectedDelivery}
+                      onChange={e => setExpectedDelivery(e.target.value)}
+                      style={{ ...FIELD, ...(deliveryHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}) }}
+                    />
+                    {deliveryHasError() && (
+                      <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Expected delivery date is required.</p>
+                    )}
+                  </div>
                 </div>
 
                 <div style={{ marginTop: '14px' }}>
