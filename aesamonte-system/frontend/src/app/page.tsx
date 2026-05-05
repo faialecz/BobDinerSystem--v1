@@ -102,9 +102,9 @@ export default function Home() {
   };
 
  return (
-    <main className="min-h-screen bg-linear-to-b from-[#0A2A43] to-[#1a5887]">
-      {!authReady ? null : mustChangePassword && userInfo ? (
-        /* Show Create Password screen after logging in with a temp password */
+ <main className="min-h-screen">
+  <div style={{ minHeight: "100vh" }}>
+    {!authReady ? null : mustChangePassword && userInfo ? (
         <CreatePassword
           userInfo={userInfo}
           onLoginAgain={() => {
@@ -113,10 +113,7 @@ export default function Home() {
           }}
         />
       ) : !isLoggedIn || !userInfo ? (
-        /* Show Login Screen */
-        <div className="flex justify-center items-center h-screen">
-          <Login onLogin={handleLogin} />
-        </div>
+        <Login onLogin={handleLogin} />
       ) : (
         <div className="flex h-screen overflow-hidden bg-[#fefcf6]">
           <Sidebar
@@ -127,11 +124,7 @@ export default function Home() {
             activeTab={activeTab}
             onTabChange={setActiveTabPersisted}
           />
-
-          <div
-            className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#F8F3D9] p-0
-              ${isCollapsed ? "ml-*" : "ml-*"}`}
-          >
+          <div className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#F8F3D9] p-0`}>
             {activeTab === "Dashboard" ? (
               <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTabPersisted} />
             ) : activeTab === "Inventory" ? (
@@ -139,7 +132,6 @@ export default function Home() {
             ) : activeTab === "Sales" ? (
               <Sales role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Sales' ? pendingSearch.term : ''} permissions={userInfo.permissions?.sales} />
             ) : activeTab === "Orders" ? (
-              // ✅ Fix — add permissions
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} permissions={userInfo.permissions?.orders} />
             ) : activeTab === "Reports" ? (
               <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} onNavigate={(tab, item?) => { setActiveTabPersisted(tab); if (item) setReorderItem(item); }} />
@@ -151,13 +143,11 @@ export default function Home() {
               <Suppliers role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Purchases" ? (
               <Purchases role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.purchases} initialViewId={viewTarget?.tab === 'Purchases' ? viewTarget.id : undefined} onViewOpened={() => setViewTarget(null)} reorderItem={reorderItem} />
-            ) : null
-
-            }
-
+            ) : null}
           </div>
         </div>
       )}
-    </main>
-  );
+    </div>
+  </main>
+);
 }
