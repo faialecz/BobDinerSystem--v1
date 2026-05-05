@@ -7,8 +7,8 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  width: 50%;
   min-height: 100vh;
-  width: 100%; /* Changed from 100vw to prevent horizontal scrollbars */
   padding: 20px;
   background: linear-gradient(to bottom, #0A2A43, #0B2B44, #2e6996);
   font-family: Arial, sans-serif;

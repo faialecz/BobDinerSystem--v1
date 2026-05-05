@@ -114,85 +114,63 @@ export default function Login({ onLogin }: LoginProps) {
     setPasswordError(val.length > 0 && val.length < 8 ? "Password must be at least 8 characters." : "");
   };
 
-  return (
+return (
+  <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
+
+    {/* LEFT - Store photo only */}
+    <div style={{
+      flex: 1,
+      backgroundImage: "url('/bg.jpg')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+      filter: "blur(2px)",
+      margin: "-4px"
+    }} />
+
+    {/* RIGHT - Your existing login form, no changes */}
     <div className={styles.loginContainer}>
       <div className={styles.loginLogo}>
-        <Image
-          src="/ae-logo.png"
-          alt="AE Samonte Logo"
-          width={100}
-          height={100}
-          className={styles.loginLogoImg}
-          priority
-        />
+        <Image src="/ae-logo.png" alt="AE Samonte Logo" width={100} height={100} className={styles.loginLogoImg} priority />
         {view === "login" && <h2 className={styles.loginTitle}>Welcome Back!</h2>}
       </div>
-
       <div className={styles.loginFormBox}>
         {view === "login" ? (
-          /* ── LOGIN ── */
           <form onSubmit={handleLogin} className={styles.loginForm}>
             <div className={styles.loginField}>
               <label className={styles.loginLabel}>Username <span style={{ color: "red" }}>*</span></label>
-              <input
-                type="text"
-                value={username}
-                onChange={handleUsernameChange}
-                className={styles.loginInput}
-                autoComplete="username"
-                required
-                suppressHydrationWarning={true}
-              />
+              <input type="text" value={username} onChange={handleUsernameChange} className={styles.loginInput} autoComplete="username" required suppressHydrationWarning={true} />
               {usernameError && <span className={styles.fieldError}>{usernameError}</span>}
             </div>
-
             <div className={styles.loginField}>
               <label className={styles.loginLabel}>Password <span style={{ color: "red" }}>*</span></label>
               <div className={styles.passwordWrapper}>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className={styles.loginInput}
-                  onChange={handlePasswordChange}
-                  autoComplete="current-password"
-                  required
-                />
+                <input type={showPassword ? "text" : "password"} className={styles.loginInput} onChange={handlePasswordChange} autoComplete="current-password" required />
                 <span className={styles.eyeIcon} onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <AiFillEyeInvisible /> : <AiFillEye />}
                 </span>
               </div>
               {passwordError && <span className={styles.fieldError}>{passwordError}</span>}
             </div>
-
             <div className={styles.formOptions}>
               <label className={styles.rememberLabel}>
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => {
+                <input type="checkbox" checked={rememberMe} onChange={(e) => {
                   const checked = e.target.checked;
                   setRememberMe(checked);
                   if (checked) {
                     localStorage.setItem("rememberMe", "true");
                   } else {
                     localStorage.removeItem("rememberMe");
-                    localStorage.removeItem("rememberedUsername"); // ✅ also clear username immediately
+                    localStorage.removeItem("rememberedUsername");
                   }
-                }}
-                />
+                }} />
                 <span>Remember Me</span>
               </label>
-              <a href="#" className={styles.forgotLink} onClick={() => setView("forgot")}>
-                Forgot Password?
-              </a>
+              <a href="#" className={styles.forgotLink} onClick={() => setView("forgot")}>Forgot Password?</a>
             </div>
-
-            <button suppressHydrationWarning={true} type="submit" className={styles.loginSubmit}>
-              LOGIN
-            </button>
+            <button suppressHydrationWarning={true} type="submit" className={styles.loginSubmit}>LOGIN</button>
           </form>
-
         ) : (
-          /* ── FORGOT PASSWORD ── */
           <ForgotPassword
             employeeId={username}
             employeeIdError={usernameError}
@@ -202,27 +180,26 @@ export default function Login({ onLogin }: LoginProps) {
           />
         )}
       </div>
+    </div>
 
-      {/* ALERT MODAL */}
-      {toast && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.alertModal}>
-            <div className={`${styles.alertModalBand} ${styles[`alertBand_${toast.type}`]}`} />
-            <div className={`${styles.alertModalCircle} ${styles[`alertCircle_${toast.type}`]}`}>
-              {toast.type === "error" ? "✕" : toast.type === "success" ? "✓" : "ℹ"}
-            </div>
-            <div className={styles.alertModalBody}>
-              <h2 className={styles.alertModalTitle}>
-                {toast.type === "error" ? "Error" : toast.type === "success" ? "Success" : "Notice"}
-              </h2>
-              <p className={styles.alertModalMessage}>{toast.message}</p>
-              <button className={`${styles.alertModalOkBtn} ${styles[`alertOkBtn_${toast.type}`]}`} onClick={() => setToast(null)}>
-                OK
-              </button>
-            </div>
+    {/* ALERT MODAL */}
+    {toast && (
+      <div className={styles.modalOverlay}>
+        <div className={styles.alertModal}>
+          <div className={`${styles.alertModalBand} ${styles[`alertBand_${toast.type}`]}`} />
+          <div className={`${styles.alertModalCircle} ${styles[`alertCircle_${toast.type}`]}`}>
+            {toast.type === "error" ? "✕" : toast.type === "success" ? "✓" : "ℹ"}
+          </div>
+          <div className={styles.alertModalBody}>
+            <h2 className={styles.alertModalTitle}>
+              {toast.type === "error" ? "Error" : toast.type === "success" ? "Success" : "Notice"}
+            </h2>
+            <p className={styles.alertModalMessage}>{toast.message}</p>
+            <button className={`${styles.alertModalOkBtn} ${styles[`alertOkBtn_${toast.type}`]}`} onClick={() => setToast(null)}>OK</button>
           </div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 }
