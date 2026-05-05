@@ -492,14 +492,17 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
 
               {/* + Add New Item to Inventory */}
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px' }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>Items *</span>
-              <button
-              type="button"
-              onClick={openNewItemModal}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, marginBottom: '12px', padding: '4px 0' }}
-            >
-              <PackagePlus size={14} /> + Add New Item to Inventory
-            </button>
+              <div className="flex justify-between items-center mb-4">
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>Items *</span>
+                <button
+                  type="button"
+                  onClick={openNewItemModal}
+                  className="flex items-center gap-1"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, padding: '4px 0' }}
+                >
+                  <PackagePlus size={14} /> + Add New Item to Inventory
+                </button>
+              </div>
 
                 {/* Table */}
                 <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
@@ -740,7 +743,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                 onMouseOver={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#2563eb'; }}
                 onMouseOut={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#4b5563'; }}
               >
-                <LuPlus size={15} /> Add Row
+                <LuPlus size={15} /> Add Purchase Item
               </button>
             </div>
             </div>
