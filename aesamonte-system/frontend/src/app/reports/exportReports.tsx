@@ -1,28 +1,8 @@
 'use client';
 
-/**
- * ExportReportsModal
- * ──────────────────────────────────────────────────────────────────────
- * Reusable export modal for the Reports module (AE Samonte Merchandise).
- * Accepts the live row data already loaded in Reports.tsx and lets the
- * user download it as  PDF  |  Excel (.xlsx)  |  CSV.
- *
- * Props
- *   isOpen    – controls visibility
- *   onClose   – called when the modal should close
- *   onSuccess – (message, type) callback → drives the parent toast
- *   activeTab – which of the 7 reports is currently displayed
- *   tabLabel  – human-readable tab name (e.g. "Stock on Hand")
- *   rows      – the raw JSON array fetched from Flask
- *   startDate – ISO date string used in filename / PDF subtitle
- *   endDate   – ISO date string used in filename / PDF subtitle
- * ──────────────────────────────────────────────────────────────────────
- */
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styles from '../../css/exportReports.module.css';
 
-// ─── Tab key union (must match Reports.tsx) ────────────────────────────────────
 export type TabKey =
   | 'stock-on-hand'
   | 'product-performance'
@@ -44,16 +24,10 @@ export interface ExportReportsProps {
   endDate:    string;
 }
 
-// ─── Brand constants ──────────────────────────────────────────────────────────
 const BRAND_NAME    = 'AE Samonte Merchandise';
 const BRAND_SUB     = 'ALAIN E. SAMONTE — Prop.  |  VAT Reg. TIN: 263-884-036-00000';
 const HEADER_COLOR: [number, number, number] = [22, 65, 99];   // #164163
 const ALT_ROW:      [number, number, number] = [248, 249, 250];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COLUMN DEFINITIONS
-// Each entry maps a TabKey → { headers[], rowMapper(row) → string[] }
-// ─────────────────────────────────────────────────────────────────────────────
 
 type RowMapper = (r: Record<string, unknown>) => (string | number | null)[];
 
@@ -128,26 +102,36 @@ const COL_DEFS: Record<TabKey, ColDef> = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CSV EXPORT
-// ─────────────────────────────────────────────────────────────────────────────
-
 export function exportCSV(
-  tab:      TabKey,
-  rows:     Record<string, unknown>[],
-  tabLabel: string,
-  dateRange: string,
-  fileDate:  string,
+  tab:          TabKey,
+  rows:         Record<string, unknown>[],
+  tabLabel:     string,
+  dateRange:    string,
+  fileDate:     string,
+  showDateAdded = false,
+  overrideHeaders?: string[],
+  overrideRows?: string[][],
 ) {
-  const def  = COL_DEFS[tab];
-  const body = [def.headers, ...rows.map(def.mapRow)];
+  const def     = COL_DEFS[tab];
+  const headers = overrideHeaders ?? (showDateAdded && ['product-performance','inventory-valuation'].includes(tab)
+    ? [...def.headers, 'Date Added'] : def.headers);
+  const mapRow  = overrideRows
+    ? null
+    : (r: Record<string, unknown>) => {
+        const base = def.mapRow(r);
+        if (showDateAdded && ['product-performance','inventory-valuation'].includes(tab))
+          base.push(String(r.date_added_fmt ?? r.date_added ?? '—'));
+        return base;
+      };
+  const body = overrideRows
+    ? [headers, ...overrideRows]
+    : [headers, ...rows.map(mapRow!)];
   const meta = [
     [`Report: ${tabLabel}`],
-    [`Period: ${dateRange}`],
-    [`Generated: ${new Date().toLocaleString('en-PH')}`],
+    [`Date Range: ${dateRange}`],
+    [`Downloaded: ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`],
     [],
-  ];
-  const all  = [...meta, ...body];
+  ];  const all  = [...meta, ...body];
   const csv  = all.map(row =>
     row.map(v => {
       const s = String(v ?? '');
@@ -166,30 +150,38 @@ export function exportCSV(
   URL.revokeObjectURL(url);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EXCEL EXPORT  (dynamic import — keeps bundle lean for users who don't export)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function exportExcel(
-  tab:       TabKey,
-  rows:      Record<string, unknown>[],
-  tabLabel:  string,
-  dateRange: string,
-  fileDate:  string,
+  tab:          TabKey,
+  rows:         Record<string, unknown>[],
+  tabLabel:     string,
+  dateRange:    string,
+  fileDate:     string,
+  showDateAdded = false,
+  overrideHeaders?: string[],
+  overrideRows?: string[][],
 ) {
   const XLSX = await import('xlsx');
   const def  = COL_DEFS[tab];
 
+  const headers = overrideHeaders ?? (showDateAdded && ['product-performance','inventory-valuation'].includes(tab)
+    ? [...def.headers, 'Date Added'] : def.headers);
+  const mapRow = (r: Record<string, unknown>) => {
+    const base = def.mapRow(r);
+    if (showDateAdded && ['product-performance','inventory-valuation'].includes(tab))
+      base.push(String(r.date_added_fmt ?? r.date_added ?? '—'));
+    return base;
+  };
+
   const metaRows: (string | number | null)[][] = [
     [BRAND_NAME],
     [`Report: ${tabLabel}`],
-    [`Period: ${dateRange}`],
-    [`Generated: ${new Date().toLocaleString('en-PH')}`],
+    [`Date Range: ${dateRange}`],
+    [`Downloaded: ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`],
     [],
   ];
 
-  const dataRows = rows.map(def.mapRow);
-  const aoa      = [...metaRows, def.headers, ...dataRows];
+  const dataRows = overrideRows ?? rows.map(mapRow);
+  const aoa      = [...metaRows, headers, ...dataRows];
   const ws       = XLSX.utils.aoa_to_sheet(aoa);
 
   // Auto-fit column widths
@@ -204,25 +196,31 @@ export async function exportExcel(
   XLSX.writeFile(wb, `${def.filename}_${fileDate}.xlsx`);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PDF EXPORT  (dynamic import of jsPDF + jspdf-autotable)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function exportPDF(
-  tab:       TabKey,
-  rows:      Record<string, unknown>[],
-  tabLabel:  string,
-  dateRange: string,
-  fileDate:  string,
+  tab:          TabKey,
+  rows:         Record<string, unknown>[],
+  tabLabel:     string,
+  dateRange:    string,
+  fileDate:     string,
+  showDateAdded = false,
+  overrideHeaders?: string[],
+  overrideRows?: string[][],
 ) {
   const { default: jsPDF } = await import('jspdf');
   const { default: autoTable } = await import('jspdf-autotable');
 
   const def = COL_DEFS[tab];
+  const headers = overrideHeaders ?? (showDateAdded && ['product-performance','inventory-valuation'].includes(tab)
+    ? [...def.headers, 'Date Added'] : def.headers);
+  const mapRow = (r: Record<string, unknown>) => {
+    const base = def.mapRow(r);
+    if (showDateAdded && ['product-performance','inventory-valuation'].includes(tab))
+      base.push(String(r.date_added_fmt ?? r.date_added ?? '—'));
+    return base;
+  };
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pw  = doc.internal.pageSize.getWidth();
 
-  // ── Branded header ──
   doc.setFillColor(...HEADER_COLOR);
   doc.rect(0, 0, pw, 38, 'F');
   doc.setTextColor(255, 255, 255);
@@ -232,7 +230,7 @@ export async function exportPDF(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   doc.text(BRAND_SUB, 14, 22);
-  // Report title block
+
   doc.setTextColor(30, 30, 30);
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
@@ -240,15 +238,14 @@ export async function exportPDF(
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
-  doc.text(`Period: ${dateRange}`, 14, 55);
-  doc.text(`Generated: ${new Date().toLocaleString('en-PH')}`, 14, 61);
+  doc.text(`Date Range: ${dateRange}`, 14, 55);
+  doc.text(`Downloaded: ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`, 14, 61);
 
-  // ── Data table ──
-  const body = rows.map(def.mapRow).map(r => r.map(v => String(v ?? '—')));
+  const body = (overrideRows ?? rows.map(mapRow)).map(r => r.map(v => String(v ?? '—')));
 
   autoTable(doc, {
     startY: 67,
-    head:   [def.headers],
+    head:   [headers],
     body,
     headStyles: {
       fillColor:  HEADER_COLOR,
@@ -265,7 +262,7 @@ export async function exportPDF(
     columnStyles: { 0: { cellWidth: 'auto' } },
     margin: { left: 14, right: 14 },
     theme:  'grid',
-    // Page number footer
+
     didDrawPage: (data) => {
       const pageCount = (doc as unknown as { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
       doc.setFontSize(7);
@@ -281,10 +278,6 @@ export async function exportPDF(
 
   doc.save(`${def.filename}_${fileDate}.pdf`);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DROPDOWN COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface DropdownProps<T extends string> {
   value:        T;
@@ -332,10 +325,6 @@ function Dropdown<T extends string>({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FORMAT ICONS
-// ─────────────────────────────────────────────────────────────────────────────
-
 function FormatIcon({ format }: { format: ExportFormat }) {
   if (format === 'PDF') return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -356,10 +345,6 @@ function FormatIcon({ format }: { format: ExportFormat }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODAL COMPONENT  (default export)
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function ExportReportsModal({
   isOpen, onClose, onSuccess,
   activeTab, tabLabel, rows,
@@ -371,7 +356,6 @@ export default function ExportReportsModal({
 
   const fmtRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (fmtRef.current && !fmtRef.current.contains(e.target as Node)) setFmtOpen(false);
@@ -380,7 +364,6 @@ export default function ExportReportsModal({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     if (isOpen) document.addEventListener('keydown', handler);
@@ -452,7 +435,7 @@ export default function ExportReportsModal({
           ))}
         </div>
 
-        {/* Format dropdown — hidden, using cards above; keep for accessibility fallback */}
+        {/* Format dropdown */}
         <div style={{ display: 'none' }}>
           <Dropdown<ExportFormat>
             containerRef={fmtRef}
