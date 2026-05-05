@@ -135,7 +135,11 @@ export default function Home() {
             ) : activeTab === "Orders" ? (
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} permissions={userInfo.permissions?.orders} />
             ) : activeTab === "Reports" ? (
-              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} onNavigate={(tab, item?) => { setActiveTabPersisted(tab); if (item) setReorderItem(item); }} />
+              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} onNavigate={(tab, item?) => {
+                setActiveTabPersisted(tab);
+                if (typeof item === 'string') setViewTarget({ tab, id: item });
+                else if (item) setReorderItem(item);
+              }} />
             ) : activeTab === "Settings" ? (
             <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} isSystem={userInfo.isSystem} permissions={userInfo.permissions} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (

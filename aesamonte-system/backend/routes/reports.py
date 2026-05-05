@@ -7,15 +7,16 @@ reports_bp = Blueprint("reports", __name__)
 def parse_dates():
     """
     Pull start_date / end_date from query-string.
-    Defaults: first day of current month → today.
+    start_date: if missing, no lower bound (use 2000-01-01 as floor).
+    end_date:   if missing, defaults to today (open-ended).
     """
     today     = date.today()
     start_str = request.args.get("start_date")
     end_str   = request.args.get("end_date")
     try:
-        start = date.fromisoformat(start_str) if start_str else today.replace(day=1)
+        start = date.fromisoformat(start_str) if start_str else date(2000, 1, 1)
     except ValueError:
-        start = today.replace(day=1)
+        start = date(2000, 1, 1)
     try:
         end = date.fromisoformat(end_str) if end_str else today
     except ValueError:
@@ -248,118 +249,6 @@ def get_dashboard_extra():
     finally:
         cur.close(); conn.close()
 
-@reports_bp.route("/api/reports/stock-on-hand", methods=["GET"])
-def report_stock_on_hand():
-    conn = get_connection()
-    cur  = conn.cursor()
-    try:
-        search = (request.args.get("search") or "").strip().lower()
-
-        cur.execute("""
-            SELECT
-                COALESCE(ib.item_sku, '—')                                          AS sku,
-                i.item_name,
-                COALESCE(b.brand_name, 'Generic')                                    AS brand_name,
-                COALESCE(u.uom_name,  '—')                                           AS uom,
-                COALESCE(SUM(bat.quantity_on_hand), 0)                               AS qty_on_hand,
-                COALESCE(fefo.unit_cost, 0)                                          AS unit_cost,
-                COALESCE(ib.item_selling_price, 0)                                   AS selling_price,
-                ss_i.status_code                                                      AS item_status,
-                i.inventory_id,
-                ib.inventory_brand_id,
-                MIN(bat.expiry_date)                                                  AS shelf_life,
-                ss_b.status_code                                                      AS brand_status
-            FROM inventory_brand ib
-            JOIN inventory         i    ON i.inventory_id   = ib.inventory_id
-            LEFT JOIN brand        b    ON b.brand_id       = ib.brand_id
-            LEFT JOIN unit_of_measure u ON u.uom_id         = ib.uom_id
-            JOIN static_status     ss_i ON ss_i.status_id  = i.item_status_id
-            JOIN static_status     ss_b ON ss_b.status_id  = ib.item_status_id
-            LEFT JOIN inventory_batch bat ON bat.inventory_brand_id = ib.inventory_brand_id
-                AND bat.expiry_date > CURRENT_DATE
-                AND bat.batch_status_id != (
-                    SELECT status_id FROM static_status
-                    WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'ARCHIVED'
-                )
-            LEFT JOIN LATERAL (
-                SELECT unit_cost FROM inventory_batch
-                WHERE inventory_brand_id = ib.inventory_brand_id
-                  AND expiry_date > CURRENT_DATE
-                  AND batch_status_id != (
-                      SELECT status_id FROM static_status
-                      WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'ARCHIVED'
-                  )
-                ORDER BY expiry_date ASC
-                LIMIT 1
-            ) fefo ON TRUE
-            WHERE ss_i.status_code != 'INACTIVE'
-            GROUP BY ib.inventory_brand_id, i.item_name, b.brand_name,
-                     ib.item_sku, u.uom_name, ib.item_selling_price,
-                     ss_i.status_code, i.inventory_id, ss_b.status_code, fefo.unit_cost
-            ORDER BY i.item_name, b.brand_name
-        """)
-        rows = cur.fetchall()
-
-        action_map = _fetch_action_map(cur)
-
-        result = []
-        for r in rows:
-            item_name  = r[1] or ""
-            brand_name = r[2] or ""
-            sku        = r[0] or ""
-
-            if search and search not in item_name.lower() and search not in brand_name.lower() and search not in sku.lower():
-                continue
-
-            qty          = int(r[4] or 0)
-            status_code  = r[7]    # parent inventory status (ss_i)
-            brand_status = r[11]   # brand-level status (ss_b = ib.item_status_id)
-
-            shelf_life = r[10]
-            if shelf_life is None:
-                expiry_date = None
-            elif hasattr(shelf_life, 'date'):
-                expiry_date = shelf_life.date()
-            else:
-                expiry_date = shelf_life
-            days_to_expiry = (expiry_date - date.today()).days if expiry_date else None
-
-            # Archived always wins — driven by parent inventory status (ss_i)
-            if status_code == 'ARCHIVED':
-                stock_status = 'Archived'
-            elif qty == 0 or brand_status == 'OUT_OF_STOCK':
-                stock_status = 'Out of Stock'
-            elif days_to_expiry is not None and days_to_expiry <= 30:
-                stock_status = 'Expiring Soon'
-            elif brand_status == 'LOW_STOCK':
-                stock_status = 'Low Stock'
-            else:
-                stock_status = 'Available'
-
-            result.append({
-                "sku":            sku,
-                "item_name":      item_name,
-                "brand_name":     brand_name,
-                "uom":            r[3],
-                "qty_on_hand":    qty,
-                "unit_cost":      float(r[5] or 0),
-                "selling_price":  float(r[6] or 0),
-                "stock_status":   stock_status,
-                "shelf_life":     expiry_date.isoformat() if expiry_date else None,
-                "days_to_expiry": days_to_expiry,
-            })
-
-        # Sort: Out of Stock first, then Low Stock, then Expiring Soon, then Available
-        STATUS_PRIORITY = {'Out of Stock': 0, 'Low Stock': 1, 'Expiring Soon': 2, 'Available': 3, 'Archived': 4}
-        result.sort(key=lambda x: (STATUS_PRIORITY.get(x['stock_status'], 9), x['item_name']))
-
-        return jsonify(result), 200
-    except Exception as e:
-        print("[reports/stock-on-hand] error:", e)
-        return err(e)
-    finally:
-        cur.close(); conn.close()
-
 @reports_bp.route("/api/reports/product-performance", methods=["GET"])
 def report_product_performance():
     conn = get_connection()
@@ -367,14 +256,14 @@ def report_product_performance():
     try:
         start_str = request.args.get("start_date")
         end_str   = request.args.get("end_date")
-        use_dates = bool(start_str or end_str)
-        if use_dates:
+        if start_str or end_str:
             start, end = parse_dates()
             date_filter = "AND st.sales_date BETWEEN %s AND %s"
-            params: tuple = (start, end)
+            # date_added subquery params (start, start, end, end) + sales filter params (start, end)
+            params: tuple = (start, start, end, end, start, end)
         else:
             date_filter = ""
-            params = ()
+            params = (None, None, None, None)
 
         # Diagnostic: check what's in order_details
         cur.execute("""
@@ -394,7 +283,13 @@ def report_product_performance():
                 COALESCE(sales.qty_sold, 0) * COALESCE(ib.item_selling_price, 0)      AS gross_sales,
                 COALESCE(sales.cogs, 0)                                               AS cogs,
                 (COALESCE(sales.qty_sold, 0) * COALESCE(ib.item_selling_price, 0))
-                    - COALESCE(sales.cogs, 0)                                         AS net_profit
+                    - COALESCE(sales.cogs, 0)                                         AS net_profit,
+                (SELECT MIN(b2.date_created) FROM inventory_batch b2
+                 WHERE b2.inventory_brand_id = ib.inventory_brand_id
+                   AND (%s IS NULL OR b2.date_created >= %s)
+                   AND (%s IS NULL OR b2.date_created <= %s))                         AS date_added,
+                i.inventory_id                                                        AS inventory_id,
+                ib.inventory_brand_id                                                 AS inventory_brand_id
             FROM inventory_brand ib
             JOIN  inventory        i   ON i.inventory_id  = ib.inventory_id
             LEFT JOIN brand        b   ON b.brand_id      = ib.brand_id
@@ -416,8 +311,9 @@ def report_product_performance():
             ) sales ON sales.inventory_brand_id = ib.inventory_brand_id
             WHERE ss_i.status_code != 'INACTIVE'
               AND ss_b.status_code != 'ARCHIVED'
+              AND COALESCE(sales.qty_sold, 0) > 0
             GROUP BY i.item_name, b.brand_name, ib.item_sku, u.uom_name,
-                     sales.qty_sold, sales.cogs, ib.item_selling_price
+                     sales.qty_sold, sales.cogs, ib.item_selling_price, i.inventory_id, ib.inventory_brand_id
             ORDER BY net_profit DESC
         """, params)
         rows = cur.fetchall()
@@ -429,6 +325,9 @@ def report_product_performance():
         for r in rows:
             gross_sales  = float(r[5] or 0)
             net_profit   = float(r[7] or 0)
+            date_added   = r[8]
+            if date_added and hasattr(date_added, 'date'):
+                date_added = date_added.date()
             contribution = round((gross_sales / total_revenue * 100), 2) if total_revenue > 0 else 0.0
             result.append({
                 "item_name":    r[0],
@@ -440,6 +339,9 @@ def report_product_performance():
                 "cogs":         float(r[6] or 0),
                 "gross_profit": net_profit,
                 "margin_pct":   contribution,
+                "date_added":          date_added.isoformat() if date_added else None,
+                "inventory_id":        r[9],
+                "inventory_brand_id":  r[10],
             })
         return jsonify(result), 200
     except Exception as e:
@@ -453,7 +355,28 @@ def report_inventory_valuation():
     conn = get_connection()
     cur  = conn.cursor()
     try:
-        cur.execute("""
+        start_str = request.args.get("start_date")
+        end_str   = request.args.get("end_date")
+        if start_str or end_str:
+            start, end = parse_dates()
+            val_params: tuple = (start, end)
+        else:
+            val_params = ()
+
+        # Build WHERE clause and date_added subquery based on date range
+        date_where = ""
+        date_added_subquery = """(SELECT MIN(b2.date_created) FROM inventory_batch b2
+                 WHERE b2.inventory_brand_id = ib.inventory_brand_id)"""
+        if val_params:
+            date_where = """
+              AND (SELECT MIN(b2.date_created) FROM inventory_batch b2
+                   WHERE b2.inventory_brand_id = ib.inventory_brand_id) BETWEEN %s AND %s
+            """
+            date_added_subquery = f"""(SELECT MIN(b2.date_created) FROM inventory_batch b2
+                 WHERE b2.inventory_brand_id = ib.inventory_brand_id
+                   AND b2.date_created BETWEEN %s AND %s)"""
+
+        cur.execute(f"""
             SELECT
                 COALESCE(ib.item_sku, '—')                                                   AS sku,
                 i.item_name,
@@ -461,11 +384,14 @@ def report_inventory_valuation():
                 COALESCE(u.uom_name, '—')                                                     AS uom,
                 COALESCE(SUM(bat.quantity_on_hand), 0)                                        AS qty_on_hand,
                 COALESCE(fefo.unit_cost, 0)                                                   AS unit_cost,
-                COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(fefo.unit_cost, 0)          AS total_cost_value,
                 COALESCE(ib.item_selling_price, 0)                                            AS selling_price,
-                COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(ib.item_selling_price, 0)   AS total_retail_value,
                 (COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(ib.item_selling_price, 0))
-                    - (COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(fefo.unit_cost, 0))  AS potential_profit
+                    - (COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(fefo.unit_cost, 0))  AS potential_profit,
+                ss_b.status_code                                                               AS brand_status,
+                MIN(bat.expiry_date)                                                           AS expiry_date,
+                {date_added_subquery}                                                          AS date_added,
+                i.inventory_id                                                                 AS inventory_id,
+                ib.inventory_brand_id                                                          AS inventory_brand_id
             FROM inventory_brand ib
             JOIN inventory       i    ON i.inventory_id  = ib.inventory_id
             LEFT JOIN brand      b    ON b.brand_id       = ib.brand_id
@@ -491,29 +417,70 @@ def report_inventory_valuation():
             ) fefo ON TRUE
             WHERE ss_i.status_code != 'INACTIVE'
               AND ss_b.status_code != 'ARCHIVED'
+              {date_where}
             GROUP BY ib.inventory_brand_id, i.item_name, b.brand_name,
-                     ib.item_sku, u.uom_name, ib.item_selling_price, fefo.unit_cost
-            ORDER BY potential_profit DESC
-        """)
+                     ib.item_sku, u.uom_name, ib.item_selling_price, fefo.unit_cost, ss_b.status_code, i.inventory_id
+            HAVING COALESCE(SUM(bat.quantity_on_hand), 0) > 0
+            ORDER BY (COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(ib.item_selling_price, 0))
+                    - (COALESCE(SUM(bat.quantity_on_hand), 0) * COALESCE(fefo.unit_cost, 0)) DESC
+        """, val_params * 2 if val_params else val_params)
         rows = cur.fetchall()
         result = []
         for r in rows:
-            potential_profit = float(r[9] or 0)
-            if potential_profit > 0:
+            qty           = int(r[4] or 0)
+            unit_cost     = float(r[5] or 0)
+            selling_price = float(r[6] or 0)
+            brand_status  = r[8] or ''
+            expiry_raw    = r[9]
+            date_added_raw = r[10]
+            if expiry_raw and hasattr(expiry_raw, 'date'):
+                expiry_raw = expiry_raw.date()
+            if date_added_raw and hasattr(date_added_raw, 'date'):
+                date_added_raw = date_added_raw.date()
+            days_to_expiry = (expiry_raw - date.today()).days if expiry_raw else None
+
+            # Stock status
+            if brand_status == 'ARCHIVED':
+                stock_status = 'Archived'
+            elif qty == 0 or brand_status == 'OUT_OF_STOCK':
+                stock_status = 'Out of Stock'
+            elif days_to_expiry is not None and days_to_expiry <= 30:
+                stock_status = 'Expiring Soon'
+            elif brand_status == 'LOW_STOCK':
+                stock_status = 'Low Stock'
+            else:
+                stock_status = 'Available'
+
+            total_cost_value = round(qty * unit_cost, 2)
+            potential_profit = round(qty * (selling_price - unit_cost), 2)
+
+            # Margin-based profit status: ≥20% = Profitable, 0–20% = Break-even, <0% = Loss
+            if selling_price > 0:
+                margin_pct = (selling_price - unit_cost) / selling_price * 100
+            else:
+                margin_pct = 0.0
+
+            if margin_pct >= 20:
                 profit_status = 'Profitable'
-            elif potential_profit < 0:
+            elif margin_pct < 0:
                 profit_status = 'Loss'
             else:
                 profit_status = 'Break-even'
+
             result.append({
-                "sku":              r[0], "item_name": r[1], "brand_name": r[2], "uom": r[3],
-                "qty_on_hand":      int(r[4] or 0),
-                "unit_cost":        float(r[5] or 0),
-                "total_cost_value": float(r[6] or 0),
-                "selling_price":    float(r[7] or 0),
-                "total_retail_value": float(r[8] or 0),
-                "potential_profit": potential_profit,
-                "profit_status":    profit_status,
+                "sku":               r[0], "item_name": r[1], "brand_name": r[2], "uom": r[3],
+                "qty_on_hand":       qty,
+                "unit_cost":         unit_cost,
+                "selling_price":     selling_price,
+                "total_cost_value":  total_cost_value,
+                "potential_profit":  potential_profit,
+                "margin_pct":        round(margin_pct, 1),
+                "profit_status":     profit_status,
+                "stock_status":        stock_status,
+                "expiry_date":         expiry_raw.isoformat() if expiry_raw else None,
+                "date_added":          date_added_raw.isoformat() if date_added_raw else None,
+                "inventory_id":        r[11],
+                "inventory_brand_id":  r[12],
             })
         return jsonify(result), 200
     except Exception as e:
@@ -528,18 +495,43 @@ def report_stock_ageing():
     cur  = conn.cursor()
     try:
         today = date.today()
-        cur.execute("""
+        start_str = request.args.get("start_date")
+        end_str   = request.args.get("end_date")
+        date_filter = ""
+        params: tuple = ()
+        if start_str or end_str:
+            try:
+                start = date.fromisoformat(start_str) if start_str else date(2000, 1, 1)
+                end   = date.fromisoformat(end_str)   if end_str   else today
+            except ValueError:
+                start, end = date(2000, 1, 1), today
+            date_filter = "AND bat.date_created BETWEEN %s AND %s"
+            params = (start, end)
+
+        cur.execute(f"""
             SELECT
                 i.item_name,
-                COALESCE(b.brand_name, 'Generic')              AS brand_name,
-                COALESCE(u.uom_name, '—')                      AS uom,
-                COALESCE(SUM(bat.quantity_on_hand), 0)         AS qty_on_hand,
-                MAX(bat.date_created)                          AS last_received_date,
-                COALESCE(fefo.unit_cost, 0)                    AS unit_cost
+                STRING_AGG(DISTINCT COALESCE(b.brand_name, 'Generic'), ', ') AS brand_names,
+                COALESCE(ib.item_sku, '-')                                    AS sku,
+                (
+                    SELECT STRING_AGG(b2.batch_id::text, ', ' ORDER BY b2.batch_id)
+                    FROM inventory_batch b2
+                    WHERE b2.inventory_brand_id = ib.inventory_brand_id
+                      AND b2.quantity_on_hand > 0
+                      AND b2.batch_status_id != (
+                          SELECT status_id FROM static_status
+                          WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'ARCHIVED'
+                      )
+                )                                                             AS batch_ids,
+                COALESCE(SUM(bat.quantity_on_hand), 0)                        AS qty_on_hand,
+                MAX(bat.date_created)                                         AS last_received_date,
+                COALESCE(fefo.unit_cost, 0)                                   AS unit_cost,
+                MAX(st.sales_date)                                            AS last_sale_date,
+                MIN(bat.expiry_date)                                          AS earliest_expiry,
+                ib.inventory_brand_id                                         AS inventory_brand_id
             FROM inventory_brand ib
             JOIN inventory       i    ON i.inventory_id   = ib.inventory_id
             LEFT JOIN brand      b    ON b.brand_id        = ib.brand_id
-            LEFT JOIN unit_of_measure u ON u.uom_id        = ib.uom_id
             JOIN static_status   ss_i ON ss_i.status_id   = i.item_status_id
             JOIN static_status   ss_b ON ss_b.status_id   = ib.item_status_id
             LEFT JOIN inventory_batch bat ON bat.inventory_brand_id = ib.inventory_brand_id
@@ -548,6 +540,7 @@ def report_stock_ageing():
                     SELECT status_id FROM static_status
                     WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'ARCHIVED'
                 )
+                {date_filter}
             LEFT JOIN LATERAL (
                 SELECT unit_cost FROM inventory_batch
                 WHERE inventory_brand_id = ib.inventory_brand_id
@@ -559,58 +552,110 @@ def report_stock_ageing():
                 ORDER BY expiry_date ASC
                 LIMIT 1
             ) fefo ON TRUE
+            LEFT JOIN order_details od ON od.batch_id IN (
+                SELECT batch_id FROM inventory_batch
+                WHERE inventory_brand_id = ib.inventory_brand_id
+            ) AND od.is_archived = FALSE
+            LEFT JOIN order_transaction ot ON ot.order_id = od.order_id
+            LEFT JOIN sales_transaction st ON st.order_id = ot.order_id
             WHERE ss_i.status_code != 'INACTIVE'
               AND ss_b.status_code != 'ARCHIVED'
-            GROUP BY ib.inventory_brand_id, i.item_name, b.brand_name,
-                     ib.item_sku, u.uom_name, fefo.unit_cost
+            GROUP BY ib.inventory_brand_id, i.item_name, ib.item_sku, fefo.unit_cost
             ORDER BY last_received_date ASC NULLS FIRST, i.item_name
-        """)
+        """, params)
         rows = cur.fetchall()
+        HOLDING_RATE = 0.025
+
         result = []
         for r in rows:
-            qty              = int(r[3] or 0)
-            last_received    = r[4]
-            unit_cost        = float(r[5] or 0)
+            qty           = int(r[4] or 0)
+            last_received = r[5]
+            unit_cost     = float(r[6] or 0)
+            last_sale     = r[7]
+            earliest_expiry = r[8]
 
-            if last_received:
-                if hasattr(last_received, 'date'):
-                    last_received = last_received.date()
-                days_in = (today - last_received).days
-            else:
-                days_in = None
+            if qty == 0:
+                continue
 
-            if days_in is None:
-                ageing_category = '—'
-                ageing_status   = 'Fresh'
-            elif days_in <= 30:
-                ageing_category = '0–30 days'
-                ageing_status   = 'Fresh'
+            if last_received and hasattr(last_received, 'date'):
+                last_received = last_received.date()
+            if last_sale and hasattr(last_sale, 'date'):
+                last_sale = last_sale.date()
+            if earliest_expiry and hasattr(earliest_expiry, 'date'):
+                earliest_expiry = earliest_expiry.date()
+
+            days_in = (today - last_received).days if last_received else None
+            days_since_sale = (today - last_sale).days if last_sale else None
+            never_sold = last_sale is None
+
+            if days_in is None or days_in <= 30:
+                ageing_label       = 'Active Stock'
+                recommended_action = 'Maintain'
             elif days_in <= 60:
-                ageing_category = '31–60 days'
-                ageing_status   = 'Ageing'
+                ageing_label       = 'Slow-Moving'
+                recommended_action = 'Maintain'
             elif days_in <= 90:
-                ageing_category = '61–90 days'
-                ageing_status   = 'Old'
+                ageing_label       = 'Stagnant'
+                recommended_action = 'Promote / Bundle'
             else:
-                ageing_category = '90+ days'
-                ageing_status   = 'Critical'
+                if never_sold:
+                    ageing_label       = 'Non-Mover'
+                    recommended_action = 'Liquidate / Discount'
+                elif days_since_sale is not None and days_since_sale <= 60:
+                    ageing_label       = 'Stagnant'
+                    recommended_action = 'Promote / Bundle'
+                else:
+                    ageing_label       = 'Dead Stock'
+                    recommended_action = 'Liquidate / Discount'
 
-            value_of_aged_stock = qty * unit_cost
+            total_cost_value = qty * unit_cost
+            holding_cost     = round(total_cost_value * HOLDING_RATE, 2)
+
+            if earliest_expiry:
+                days_to_expiry = (earliest_expiry - today).days
+                if days_to_expiry < 0:
+                    expiry_status = 'Expired'
+                elif days_to_expiry < 30:
+                    expiry_status = 'Critical'
+                elif days_to_expiry <= 90:
+                    expiry_status = 'Near Expiry'
+                elif days_to_expiry <= 1095:
+                    expiry_status = 'Stable'
+                else:
+                    expiry_status = 'Stable'
+            else:
+                days_to_expiry = None
+                expiry_status  = ''
+
+            if expiry_status == 'Expired':
+                recommended_action = 'Dispose / Write-off'
 
             result.append({
                 "item_name":           r[0],
-                "brand_name":          r[1],
-                "uom":                 r[2],
+                "brand_name":          r[1] or "—",
+                "sku":                 r[2] or "—",
+                "batch_ids":           r[3] or "—",
                 "qty_on_hand":         qty,
                 "last_received_date":  last_received.isoformat() if last_received else None,
+                "last_sale_date":      last_sale.isoformat() if last_sale else None,
+                "earliest_expiry":     earliest_expiry.isoformat() if earliest_expiry else None,
+                "expiry_status":       expiry_status,
+                "days_to_expiry":      days_to_expiry,
                 "days_in_inventory":   days_in,
-                "ageing_category":     ageing_category,
-                "value_of_aged_stock": round(value_of_aged_stock, 2),
-                "ageing_status":       ageing_status,
+                "ageing_label":        ageing_label,
+                "value_of_aged_stock": round(total_cost_value, 2),
+                "holding_cost":        holding_cost,
+                "recommended_action":  recommended_action,
+                "inventory_brand_id":  r[9],
             })
 
-        AGEING_PRIORITY = {'Critical': 0, 'Old': 1, 'Ageing': 2, 'Fresh': 3}
-        result.sort(key=lambda x: (AGEING_PRIORITY.get(x['ageing_status'], 9), -(x['days_in_inventory'] or 0)))
+        EXPIRY_PRIORITY = {'Critical': 0, 'Near Expiry': 1, 'Expired': 2, '': 3, 'Stable': 4}
+        AGEING_PRIORITY = {'Dead Stock': 0, 'Non-Mover': 1, 'Stagnant': 2, 'Slow-Moving': 3, 'Active Stock': 4}
+        result.sort(key=lambda x: (
+            EXPIRY_PRIORITY.get(x['expiry_status'], 3),
+            AGEING_PRIORITY.get(x['ageing_label'], 9),
+            x['days_to_expiry'] if x['days_to_expiry'] is not None else 9999,
+        ))
 
         return jsonify(result), 200
     except Exception as e:
@@ -759,12 +804,10 @@ def report_customer_sales():
             days_inactive = (date.today() - last_date).days if last_date else None
             if days_inactive is None:
                 activity_status = 'Unknown'
-            elif days_inactive <= 7:
+            elif days_inactive <= 14:
                 activity_status = 'Active'
-            elif days_inactive <= 30:
+            elif days_inactive <= 50:
                 activity_status = 'Inactive'
-            elif days_inactive <= 90:
-                activity_status = 'At Risk'
             else:
                 activity_status = 'Dormant'
 
