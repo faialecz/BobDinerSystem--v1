@@ -33,6 +33,8 @@ type Supplier = {
   supplier_address: string;
   paymentTerms?: string;
   is_archived?: boolean;
+  created_at?: string;
+  date_added?: string | null;
 };
 
 type SortKey = keyof Supplier;
@@ -84,10 +86,12 @@ const LABEL_STYLE: React.CSSProperties = {
 
 export default function Suppliers({
   role,
-  onLogout
+  onLogout,
+  onNavigate,
 }: {
   role: string;
   onLogout: () => void;
+  onNavigate?: (tab: string, id?: string) => void;
 }) {
   const s = styles as Record<string, string>;
 
@@ -106,6 +110,9 @@ export default function Suppliers({
   // View modal state
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedSupplierForView, setSelectedSupplierForView] = useState<Supplier | null>(null);
+  const [showSupplierItems, setShowSupplierItems] = useState(false);
+  const [supplierItems, setSupplierItems] = useState<{ item_name: string; brand_name: string; sku: string; inventory_id: number }[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
 
   // --- CREATE MODAL STATE ---
   const [showModal, setShowModal] = useState(false);
@@ -132,15 +139,19 @@ export default function Suppliers({
     direction: 'asc' | 'desc' | null;
   }>({ key: null, direction: null });
 
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo,   setDateTo]   = useState('');
+
   /* ================= FETCH ================= */
 
   const fetchSuppliers = async () => {
     try {
       const res = await fetch('/api/suppliers');
       const data = await res.json();
-      setSuppliers(data);
+      setSuppliers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch Suppliers', err);
+      setSuppliers([]);
     } finally {
       setIsLoading(false);
     }
@@ -205,7 +216,8 @@ export default function Suppliers({
         editFormData.supplier_address !== editOriginalData.supplier_address ||
         editFormData.contact_person   !== editOriginalData.contact_person   ||
         editFormData.supplier_contact !== editOriginalData.supplier_contact ||
-        editFormData.supplier_email   !== editOriginalData.supplier_email
+        editFormData.supplier_email   !== editOriginalData.supplier_email   ||
+        (editFormData.paymentTerms    !== editOriginalData.paymentTerms)
       );
     };
 
@@ -337,6 +349,7 @@ export default function Suppliers({
           contactPerson: editFormData.contact_person,
           contactNumber: editFormData.supplier_contact,
           email: editFormData.supplier_email,
+          paymentTerms: editFormData.paymentTerms,
         })
       });
       const data = await response.json();
@@ -391,15 +404,50 @@ export default function Suppliers({
   const handleOpenView = (supplier: Supplier) => {
     setSelectedSupplierForView(supplier);
     setShowViewModal(true);
+    setShowSupplierItems(false);
+    setSupplierItems([]);
   };
 
   const closeViewModal = () => {
     setShowViewModal(false);
     setSelectedSupplierForView(null);
+    setShowSupplierItems(false);
+    setSupplierItems([]);
   };
+
+  const handleToggleSupplierItems = async () => {
+    if (showSupplierItems) { setShowSupplierItems(false); return; }
+    if (!selectedSupplierForView) return;
+    setLoadingItems(true);
+    setShowSupplierItems(true);
+    try {
+      const res = await fetch(`/api/suppliers/${selectedSupplierForView.supplier_id}/items`);
+      const data = await res.json();
+      setSupplierItems(Array.isArray(data) ? data : []);
+    } catch { setSupplierItems([]); }
+    finally { setLoadingItems(false); }
+  };
+
+  const [showPrintConfirm, setShowPrintConfirm] = useState(false);
 
   const handlePrint = () => {
     if (!selectedSupplierForView) return;
+    setShowPrintConfirm(true);
+  };
+
+  const executePrint = async (includeItems: boolean) => {
+    setShowPrintConfirm(false);
+    if (!selectedSupplierForView) return;
+
+    let items: { item_name: string; brand_name: string; uom: string }[] = [];
+    if (includeItems) {
+      try {
+        const res = await fetch(`/api/suppliers/${selectedSupplierForView.supplier_id}/items`);
+        const data = await res.json();
+        items = Array.isArray(data) ? data : [];
+      } catch { items = []; }
+    }
+
     const pw = window.open('', '_blank');
     if (!pw) {
       alert('Pop-up blocked. Please allow pop-ups for this site in your browser settings, then try again.');
@@ -446,7 +494,8 @@ export default function Suppliers({
       <div class="receipt-title">SUPPLIER PROFILE</div>
       <div class="receipt-no"><span>S-</span>${String(selectedSupplierForView.supplier_id).padStart(4, '0')}</div>
       <div style="margin-top:6px; font-size:10px;">Printed: ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-      <div style="margin-top:4px;"><span class="status-badge">${selectedSupplierForView.is_archived ? 'ARCHIVED' : 'ACTIVE'}</span></div>
+      ${selectedSupplierForView.date_added ? `<div style="margin-top:2px; font-size:10px; color:#666;">Date Added: ${selectedSupplierForView.date_added}</div>` : ''}
+      <div style="margin-top:4px;"><span class="status-badge">${selectedSupplierForView.is_archived ? 'INACTIVE' : 'ACTIVE'}</span></div>
     </div>
   </div>
   <div class="section">
@@ -486,6 +535,31 @@ export default function Suppliers({
     </div>
   </div>
   ` : ''}
+  ${includeItems ? `
+  <div class="section">
+    <div class="section-title">Inventory Items</div>
+    ${items.length === 0
+      ? '<p style="font-size:10px;color:#94a3b8;">No items linked to this supplier.</p>'
+      : `<table style="width:100%;border-collapse:collapse;font-size:10px;">
+          <thead>
+            <tr style="border-bottom:1px solid #ccc;">
+              <th style="text-align:left;padding:4px 6px;color:#666;font-size:9px;text-transform:uppercase;">Item</th>
+              <th style="text-align:left;padding:4px 6px;color:#666;font-size:9px;text-transform:uppercase;">Brand</th>
+              <th style="text-align:left;padding:4px 6px;color:#666;font-size:9px;text-transform:uppercase;">SKU</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(it => `
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:4px 6px;font-weight:600;">${it.item_name}</td>
+                <td style="padding:4px 6px;color:#475569;">${it.brand_name}</td>
+                <td style="padding:4px 6px;color:#475569;font-family:monospace;">${(it as any).sku ?? '—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`
+    }
+  </div>
+  ` : ''}
   <div class="print-footer">
     <div>AE Samonte Merchandise — Supplier Management System</div>
     <div>Document generated on ${new Date().toLocaleString('en-PH')}</div>
@@ -504,7 +578,15 @@ export default function Suppliers({
     const term = searchTerm.trim().toLowerCase();
     return suppliers.filter(sup => {
       const matchesArchiveView = isArchiveView ? Boolean(sup.is_archived) : !sup.is_archived;
-      return matchesArchiveView && (
+      const matchesDate = (() => {
+        if (!dateFrom && !dateTo) return true;
+        const d = sup.created_at ? sup.created_at.slice(0, 10) : '';
+        if (!d) return false;
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo   && d > dateTo)   return false;
+        return true;
+      })();
+      return matchesArchiveView && matchesDate && (
         sup.supplier_id.toString().includes(term) ||
         (sup.supplier_name || '').toLowerCase().includes(term) ||
         (sup.contact_person || '').toLowerCase().includes(term) ||
@@ -513,7 +595,7 @@ export default function Suppliers({
         (sup.supplier_address || '').toLowerCase().includes(term)
       );
     });
-  }, [suppliers, searchTerm, isArchiveView]);
+  }, [suppliers, searchTerm, isArchiveView, dateFrom, dateTo]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -640,6 +722,21 @@ export default function Suppliers({
                 <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives">
                   <LuArchive size={20} />
                 </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="date" value={dateFrom} max={dateTo || undefined}
+                    onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', color: '#1e293b', background: '#f8fafc', cursor: 'pointer' }} />
+                  <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>–</span>
+                  <input type="date" value={dateTo} min={dateFrom || undefined}
+                    onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }}
+                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', color: '#1e293b', background: '#f8fafc', cursor: 'pointer' }} />
+                  {(dateFrom || dateTo) && (
+                    <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+                      style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 7, padding: '6px 10px', fontSize: '0.75rem', color: '#94a3b8', cursor: 'pointer' }}>
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <div className={s.searchWrapper}>
                   <input
                     className={s.searchInput}
@@ -725,7 +822,7 @@ export default function Suppliers({
                                 <LuPencil size={14} /> Edit
                               </button>
                               <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.supplier_id)}>
-                                <LuArchive size={14} /> Archive
+                                <LuArchive size={14} /> Mark as Inactive
                               </button>
                               <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
                             </div>
@@ -849,9 +946,10 @@ export default function Suppliers({
                   <input
                     name="contact"
                     value={supplierFormData.contact}
-                    onChange={e => { clearCreateEmpty('contact'); setSupplierFormData({ ...supplierFormData, contact: e.target.value.replace(/[^\d]/g, '') }); }}
+                    onChange={e => { clearCreateEmpty('contact'); setSupplierFormData({ ...supplierFormData, contact: e.target.value.replace(/[^\d]/g, '').slice(0, 11) }); }}
                     style={createEmptyFields.has('contact') ? errStyle : {}}
                     placeholder="09XXXXXXXXX"
+                    maxLength={11}
                   />
                   {/* ── ADDED ── */}
                   {createSubmitAttempted && createEmptyFields.has('contact') && (
@@ -879,7 +977,7 @@ export default function Suppliers({
                   onChange={e => setSupplierFormData({ ...supplierFormData, paymentTerms: e.target.value })}
                 >
                   <option>Cash on Delivery</option>
-                  <option>Card</option>
+                  <option>Bank Transaction</option>
                 </select>
               </div>
 
@@ -995,8 +1093,9 @@ export default function Suppliers({
                   </label>
                   <input
                     value={editFormData.supplier_contact}
-                    onChange={e => { clearEditEmpty('supplier_contact'); setEditFormData({ ...editFormData, supplier_contact: e.target.value.replace(/[^\d]/g, '') }); }}
+                    onChange={e => { clearEditEmpty('supplier_contact'); setEditFormData({ ...editFormData, supplier_contact: e.target.value.replace(/[^\d]/g, '').slice(0, 11) }); }}
                     style={editEmptyFields.has('supplier_contact') ? { borderColor: '#f87171', backgroundColor: '#fff5f5' } : {}}
+                    maxLength={11}
                   />
                   {/* ── ADDED ── */}
                   {editSubmitAttempted && editEmptyFields.has('supplier_contact') && (
@@ -1011,6 +1110,18 @@ export default function Suppliers({
                   value={editFormData.supplier_email}
                   onChange={e => setEditFormData({ ...editFormData, supplier_email: e.target.value })}
                 />
+              </div>
+
+              <h4 className={s.sectionTitle}>Terms</h4>
+              <div className={s.formGroup}>
+                <label style={{ ...LABEL_STYLE }}>Payment Terms</label>
+                <select
+                  value={editFormData.paymentTerms || 'Cash on Delivery'}
+                  onChange={e => setEditFormData({ ...editFormData, paymentTerms: e.target.value })}
+                >
+                  <option>Cash on Delivery</option>
+                  <option>Bank Transaction</option>
+                </select>
               </div>
 
               {editFormError && (
@@ -1051,6 +1162,11 @@ export default function Suppliers({
               <div>
                 <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
                 <p className={s.viewOrderNumber}>S-{String(selectedSupplierForView.supplier_id).padStart(4, '0')}</p>
+                {selectedSupplierForView.date_added && (
+                  <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: 2 }}>
+                    Date Added: {selectedSupplierForView.date_added}
+                  </p>
+                )}
               </div>
               <div className={s.viewHeaderRight}>
                 <button className={s.viewCloseBtn} onClick={closeViewModal}><LuX size={20} /></button>
@@ -1093,7 +1209,7 @@ export default function Suppliers({
                 </div>
               </div>
 
-              {selectedSupplierForView.paymentTerms && (
+              {selectedSupplierForView.paymentTerms && selectedSupplierForView.paymentTerms !== '—' && (
                 <div className={s.viewCustomerSection}>
                   <p className={s.viewSectionTitle}>Terms</p>
                   <div className={s.viewTotalsWrapper}>
@@ -1106,10 +1222,81 @@ export default function Suppliers({
                   </div>
                 </div>
               )}
+
+              {/* Collapsible inventory items */}
+              <div className={s.viewCustomerSection}>
+                <button
+                  onClick={handleToggleSupplierItems}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <p className={s.viewSectionTitle} style={{ margin: 0 }}>Inventory Items</p>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"
+                    style={{ transform: showSupplierItems ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                {showSupplierItems && (
+                  <div style={{ marginTop: 10 }}>
+                    {loadingItems ? (
+                      <p style={{ fontSize: '0.82rem', color: '#94a3b8' }}>Loading...</p>
+                    ) : supplierItems.length === 0 ? (
+                      <p style={{ fontSize: '0.82rem', color: '#94a3b8' }}>No items linked to this supplier.</p>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#64748b', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase' }}>Item</th>
+                            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#64748b', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase' }}>Brand</th>
+                            <th style={{ textAlign: 'left', padding: '6px 8px', color: '#64748b', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase' }}>SKU</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {supplierItems.map((item, i) => (
+                            <tr key={i}
+                              onClick={() => { if (onNavigate) { closeViewModal(); onNavigate('Inventory', String(item.inventory_id)); } }}
+                              style={{ borderBottom: '1px solid #f1f5f9', cursor: onNavigate ? 'pointer' : undefined }}
+                              title={onNavigate ? `View ${item.item_name} in Inventory` : undefined}
+                            >
+                              <td style={{ padding: '7px 8px', color: '#1e293b', fontWeight: 500 }}>{item.item_name}</td>
+                              <td style={{ padding: '7px 8px', color: '#475569' }}>{item.brand_name}</td>
+                              <td style={{ padding: '7px 8px', color: '#475569', fontFamily: 'monospace', fontSize: '0.78rem' }}>{item.sku}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className={s.viewModalFooter}>
               <button className={s.viewBtnPrint} onClick={handlePrint}><LuPrinter size={14} /> Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print confirm dialog */}
+      {showPrintConfirm && selectedSupplierForView && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowPrintConfirm(false)}>
+          <div style={{ background: '#fff', borderRadius: 20, padding: '36px 32px', width: 360, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🖨️</div>
+            <p style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 8, color: '#111' }}>Include Inventory Items?</p>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: 24 }}>
+              Do you want to include the list of items supplied by <strong>{selectedSupplierForView.supplier_name}</strong> in the printout?
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => executePrint(false)}
+                style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #e2e8f0', background: '#fff', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', color: '#334155' }}>
+                No, Skip
+              </button>
+              <button onClick={() => executePrint(true)}
+                style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#1a4263', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', color: '#fff' }}>
+                Yes, Include
+              </button>
             </div>
           </div>
         </div>
