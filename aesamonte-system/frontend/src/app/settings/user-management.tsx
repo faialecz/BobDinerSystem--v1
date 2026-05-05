@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "@/css/settings.module.css";
 import { AiOutlineUser } from "react-icons/ai";
 import { FiEdit3 } from "react-icons/fi";
@@ -20,6 +20,7 @@ interface User {
   status_id: number;
   status_code: string;
   is_archived: boolean;
+  inactivated_at?: string | null;
 }
 
 export default function UserManagement({ onBack, currentRoleId, currentEmployeeId }: {
@@ -37,6 +38,8 @@ export default function UserManagement({ onBack, currentRoleId, currentEmployeeI
   const [userToArchive, setUserToArchive] = useState<number | null>(null);
   const [orderedRoleIds, setOrderedRoleIds] = useState<number[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [expiredQueue, setExpiredQueue] = useState<User[]>([]);
+  const [showExpiredModal, setShowExpiredModal] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -63,7 +66,8 @@ export default function UserManagement({ onBack, currentRoleId, currentEmployeeI
   const canArchive = (user: User): boolean => {
     const myId    = Number(currentEmployeeId);
     const theirId = Number(user.id);
-    if (myId === theirId) return false;          // can't archive yourself
+    if (myId === theirId) return false;
+    if (user.status_code === 'ACTIVE') return false; 
     return canEdit(user);
   };
 
@@ -105,6 +109,16 @@ export default function UserManagement({ onBack, currentRoleId, currentEmployeeI
 
       setUsers(active);
       setArchivedUsers(archived);
+
+      const now = Date.now();
+      const expired = active.filter((u: User) => {
+        if (!u.inactivated_at || u.status_code === 'ACTIVE') return false;
+        const days = (now - new Date(u.inactivated_at).getTime()) / (1000 * 60 * 60 * 24);
+        return days >= 30;
+      });
+
+setExpiredQueue(expired);
+setShowExpiredModal(expired.length > 0);
     } catch (error) {
       console.error("Error fetching users:", error);
     } finally {
@@ -140,6 +154,46 @@ export default function UserManagement({ onBack, currentRoleId, currentEmployeeI
     } finally {
       setIsConfirmOpen(false);
       setUserToArchive(null);
+    }
+  };
+
+  const removeFromExpiredQueue = (handledId: number) => {
+    setExpiredQueue(prev => {
+      const remaining = prev.filter(u => u.id !== handledId);
+      if (remaining.length === 0) setShowExpiredModal(false);
+      return remaining;
+    });
+  };
+
+  const handleExpiredDelete = async (user: User) => {
+    try {
+      const url = `/api/employees/${user.id}/permanent?requester_role_id=${currentRoleId ?? 0}`;
+      const response = await fetch(url, { method: "DELETE" });
+      const data = await response.json();
+      if (response.ok) {
+        removeFromExpiredQueue(user.id);
+        await fetchUsers();
+        showToast(`${user.name}'s account has been permanently deleted.`, 'success');
+      } else {
+        showToast(data.error || 'Failed to delete employee.', 'error');
+      }
+    } catch {
+      showToast('Failed to delete employee.', 'error');
+    }
+  };
+
+  const handleExpiredRestore = async (user: User) => {
+    try {
+      const response = await fetch(`/api/employees/${user.id}/reactivate`, { method: "PUT" });
+      if (response.ok) {
+        removeFromExpiredQueue(user.id);
+        await fetchUsers();
+        showToast(`${user.name}'s account has been reactivated.`, 'success');
+      } else {
+        showToast('Failed to reactivate employee.', 'error');
+      }
+    } catch {
+      showToast('Failed to reactivate employee.', 'error');
     }
   };
 
@@ -229,7 +283,13 @@ export default function UserManagement({ onBack, currentRoleId, currentEmployeeI
                       className={styles.archBtn}
                       onClick={() => initiateArchive(user.id)}
                       disabled={!archivable}
-                      title={!archivable ? 'Insufficient permissions' : user.status_code === 'ACTIVE' ? 'Set to Inactive before archiving' : 'Archive employee'}
+                     title={
+                            user.status_code === 'ACTIVE'
+                              ? 'Set employee to Inactive before archiving'
+                              : !archivable
+                              ? 'Insufficient permissions'
+                              : 'Archive employee'
+                          }
                       style={!archivable ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
                     >
                       <LuArchive />
@@ -288,6 +348,74 @@ export default function UserManagement({ onBack, currentRoleId, currentEmployeeI
         headerColor="#475569"
         confirmBtnColor="#475569"
       />
+
+      {showExpiredModal && expiredQueue.length > 0 && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9998,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '520px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18)', overflow: 'hidden',
+          }}>
+            <div style={{ background: '#b91c1c', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '50%', width: '2.5rem', height: '2.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <LuArchive style={{ color: '#fff', fontSize: '1.25rem' }} />
+              </div>
+              <div>
+                <span style={{ color: '#fff', fontWeight: 700, fontSize: '1rem', display: 'block' }}>Accounts Pending Deletion</span>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.8rem' }}>
+                  {expiredQueue.length} account{expiredQueue.length > 1 ? 's have' : ' has'} been inactive for 30+ days
+                </span>
+              </div>
+            </div>
+
+            <div style={{ maxHeight: '320px', overflowY: 'auto', padding: '0.5rem 0' }}>
+              {expiredQueue.map((user, idx) => (
+                <div key={user.id} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '0.85rem 1.5rem',
+                  borderBottom: idx < expiredQueue.length - 1 ? '1px solid #f1f5f9' : 'none',
+                }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>{user.name}</p>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8' }}>{user.role} · ID {user.id}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                    <button
+                      onClick={() => handleExpiredRestore(user)}
+                      style={{
+                        padding: '0.4rem 0.9rem', borderRadius: '6px', border: '1.5px solid #16a34a',
+                        background: '#fff', color: '#16a34a', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+                      }}>
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => handleExpiredDelete(user)}
+                      style={{
+                        padding: '0.4rem 0.9rem', borderRadius: '6px', border: 'none',
+                        background: '#b91c1c', color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+                      }}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowExpiredModal(false)}
+                style={{
+                  padding: '0.45rem 1.1rem', borderRadius: '6px', border: '1.5px solid #cbd5e1',
+                  background: '#fff', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                }}>
+                Remind me later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ export interface UserInfo {
   employeeUsername: string;
   roleName:         string;
   roleId:           number;
+  isSystem:         boolean;
   permissions:      UserPermissions;
   token:            string;
 }

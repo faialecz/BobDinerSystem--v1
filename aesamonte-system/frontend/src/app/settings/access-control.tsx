@@ -14,6 +14,7 @@ import AddRoleModal from "./AddRoleModal";
 interface Role {
   role_id: number;
   role_name: string;
+  is_system: boolean;
   is_active: boolean;
   sales_permissions: boolean;
   inventory_permissions: boolean;
@@ -180,23 +181,22 @@ const restoreRole = async (id: number) => {
                   <button
                     className={styles.editBtn}
                     onClick={() => setEditRoleId(role.role_id)}
-                    disabled={role.role_id === 1 || role.role_id === 2}
-                    title={role.role_id === 1 ? 'Super Admin cannot be edited' : role.role_id === 2 ? 'Admin cannot be edited' : undefined}
-                    style={role.role_id === 1 || role.role_id === 2 ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
+                    disabled={role.is_system}
+                    title={role.is_system ? 'System role cannot be edited' : undefined}
+                    style={role.is_system ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
                   >
                     <FiEdit3 size={13} /> Edit
                   </button>
                   <button
                   className={styles.deleteBtn}
                   onClick={() => setArchiveRoleId(role.role_id)}
-                  disabled={role.role_id === 1 || role.role_id === 2 || role.user_count > 0}
+                  disabled={role.is_system || role.user_count > 0}
                   title={
-                    role.role_id === 1 ? 'Super Admin cannot be archived' :
-                    role.role_id === 2 ? 'Admin cannot be archived' :
+                    role.is_system ? 'System role cannot be archived' :
                     role.user_count > 0 ? 'Cannot archive: role has active employees' :
                     undefined
                   }
-                  style={role.role_id === 1 || role.role_id === 2 || role.user_count > 0 ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
+                  style={role.is_system || role.user_count > 0 ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
                 >
                   <LuArchive size={13} /> Archive
                 </button>

@@ -23,25 +23,26 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
   const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  // Password visibility
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Error states
   const [usernameError, setUsernameError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [emailError, setEmailError] = useState("");
 
-  // Toast
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null);
   const showToast = (message: string, type: 'error' | 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   // Field error helpers
   const nameHasError = () => submitAttempted && !name.trim();
-  const emailHasError = () => submitAttempted && !email.trim();
+  // ✅ Fixed: also flags when format is invalid
+  const emailHasError = () => submitAttempted && (!email.trim() || !!emailError);
   const usernameHasError = () => submitAttempted && !username.trim();
   const contactHasError = () => submitAttempted && !contact.trim();
   const passwordHasError = () => submitAttempted && !employee && !password;
@@ -50,7 +51,6 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
     fetch('/api/roles')
       .then(r => r.json())
       .then((data: RoleOption[]) => {
-        // Super Admin (role_id 1) must never appear as a selectable option
         const filtered = Array.isArray(data) ? data.filter(r => r.role_id !== 1) : [];
         setRoleOptions(filtered);
         if (!employee && filtered.length > 0) {
@@ -74,10 +74,7 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (/\s/.test(val)) return;
-    if (val.length > 25) {
-      setUsernameError("Username must be 25 characters or fewer.");
-      return;
-    }
+    if (val.length > 25) { setUsernameError("Username must be 25 characters or fewer."); return; }
     setUsername(val);
     if (val.length > 0 && val.length < 8) {
       setUsernameError("Username must be at least 8 characters.");
@@ -91,10 +88,7 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     if (/\s/.test(val)) return;
-    if (val.length > 25) {
-      setPasswordError("Password must be 25 characters or fewer.");
-      return;
-    }
+    if (val.length > 25) { setPasswordError("Password must be 25 characters or fewer."); return; }
     setPassword(val);
     if (val.length > 0 && val.length < 8) {
       setPasswordError("Password must be at least 8 characters.");
@@ -132,19 +126,32 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
     }
   };
 
+  // ✅ Fixed: removed the stale duplicate block at the bottom
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setEmail(val);
+    if (val.length > 0 && !EMAIL_REGEX.test(val)) {
+      setEmailError("Please enter a valid email address.");
+    } else {
+      setEmailError("");
+    }
+  };
+
   const handleSubmit = async () => {
     setSubmitAttempted(true);
     if (!name || !username || !email || !contact) {
       showToast("Please fill in all required fields.", "error");
       return;
     }
-    if (usernameError || passwordError || confirmPasswordError) return;
-    if (username.length < 8) { setUsernameError("Username must be at least 8 characters."); return; }
-    if (!/^[a-zA-Z0-9._@]+$/.test(username)) { setUsernameError("Username may only contain letters, numbers, and ( _ . @ )"); return; }
-    if (!employee && !password) {
-      showToast("Password is required for new accounts.", "error");
+    // ✅ Fixed: blocks submit if email format is invalid
+    if (!EMAIL_REGEX.test(email)) {
+      setEmailError("Please enter a valid email address.");
       return;
     }
+    if (emailError || usernameError || passwordError || confirmPasswordError) return;
+    if (username.length < 8) { setUsernameError("Username must be at least 8 characters."); return; }
+    if (!/^[a-zA-Z0-9._@]+$/.test(username)) { setUsernameError("Username may only contain letters, numbers, and ( _ . @ )"); return; }
+    if (!employee && !password) { showToast("Password is required for new accounts.", "error"); return; }
     if (password && password.length < 8) { setPasswordError("Password must be at least 8 characters."); return; }
     if (password && password !== confirmPassword) { setConfirmPasswordError("Passwords do not match."); return; }
     if (contactError) return;
@@ -163,30 +170,40 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
       requester_employee_id: requesterEmployeeId ?? 0,
     };
 
-    try {
-      const url = employee ? `/api/employees/${employee.id}` : `/api/employees`;
-      const response = await fetch(url, {
-        method: employee ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        onAdd();
-        onClose();
+   try {
+  const url = employee ? `/api/employees/${employee.id}` : `/api/employees`;
+  const response = await fetch(url, {
+    method: employee ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (response.ok) {
+    if (!employee) {
+      showToast("Employee registered successfully!", "success");
+    } else {
+      const wasInactive = parseInt(status) === 12 && employee.status_id !== 12;
+      if (wasInactive) {
+        showToast("Employee account set to Inactive. This account will be automatically deleted in 30 days.", "success");
       } else {
-        const err = await response.json();
-        showToast(`Error: ${err.error}`, "error");
+        showToast("Employee profile updated successfully!", "success");
       }
-    } catch {
-      showToast("Server connection failed.", "error");
     }
-  };
+    setTimeout(() => {
+      onAdd();
+      onClose();
+    }, 1500);
+  } else {
+    const err = await response.json();
+    showToast(`Error: ${err.error}`, "error");
+  }
+} catch {
+    showToast("Server connection failed.", "error");
+  }
+};
 
   return (
     <div className={styles.modalOverlay}>
 
-      {/* Toast */}
       {toast && (
         <div style={{
           position: 'fixed', top: '1.5rem', right: '1.5rem',
@@ -218,40 +235,37 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
                 Full Name <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={nameHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}}
-              />
+              value={name}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (/\d/.test(val)) return;
+                setName(val);
+              }}
+              style={nameHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}}
+            />
               {nameHasError() && <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>Full name is required.</span>}
             </div>
 
-           {/* Username */}
-<div className={styles.formGroupFull}>
-  <label style={{ color: usernameHasError() ? '#dc2626' : undefined }}>
-    Username <span style={{ color: '#ef4444' }}>*</span>
-  </label>
-  <input
-    value={username}
-    onChange={handleUsernameChange}
-    /* Lock the field if we are editing an existing employee */
-    readOnly={!!employee} 
-    style={{
-      ...(usernameHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}),
-      /* When 'employee' exists, apply a 'saved/locked' look */
-      ...(employee ? { 
-        backgroundColor: '#f1f5f9', 
-        cursor: 'not-allowed', 
-        color: '#64748b',
-        borderColor: '#e2e8f0'
-      } : {})
-    }}
-  />
-  {/* Error messages */}
-  {usernameError && <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>{usernameError}</span>}
-  {usernameHasError() && !usernameError && (
-    <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>Username is required.</span>
-  )}
-</div>
+            {/* Username */}
+            <div className={styles.formGroupFull}>
+              <label style={{ color: usernameHasError() ? '#dc2626' : undefined }}>
+                Username <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input
+                value={username}
+                onChange={handleUsernameChange}
+                readOnly={!!employee}
+                style={{
+                  ...(usernameHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}),
+                  ...(employee ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b', borderColor: '#e2e8f0' } : {})
+                }}
+              />
+              {usernameError && <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>{usernameError}</span>}
+              {usernameHasError() && !usernameError && (
+                <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>Username is required.</span>
+              )}
+            </div>
+
             <div className={styles.formGridTwo}>
               {/* Email */}
               <div className={styles.formGroup}>
@@ -261,10 +275,16 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={handleEmailChange}
                   style={emailHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}}
                 />
-                {emailHasError() && <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>Email is required.</span>}
+                {/* ✅ Fixed: proper braces, shows format error OR empty error */}
+                {emailError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>{emailError}</span>
+                )}
+                {submitAttempted && !email.trim() && !emailError && (
+                  <span style={{ color: '#dc2626', fontSize: '0.75rem' }}>Email is required.</span>
+                )}
               </div>
 
               {/* Contact */}
@@ -300,12 +320,9 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
                       ...(passwordHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}),
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
+                  <button type="button" onClick={() => setShowPassword(v => !v)}
                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex' }}
-                    tabIndex={-1}
-                  >
+                    tabIndex={-1}>
                     {showPassword ? <LuEyeOff size={16} /> : <LuEye size={16} />}
                   </button>
                 </div>
@@ -322,12 +339,9 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
                     onChange={handleConfirmPasswordChange}
                     style={{ width: '100%', paddingRight: '38px' }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(v => !v)}
+                  <button type="button" onClick={() => setShowConfirmPassword(v => !v)}
                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex' }}
-                    tabIndex={-1}
-                  >
+                    tabIndex={-1}>
                     {showConfirmPassword ? <LuEyeOff size={16} /> : <LuEye size={16} />}
                   </button>
                 </div>
@@ -339,7 +353,6 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
           <div className={`${styles.formSection} ${styles.sectionDivider}`}>
             <p className={styles.sectionLabel}>SYSTEM CREDENTIALS</p>
             <div className={styles.formGridTwo}>
-              {/* Role */}
               <div className={styles.formGroup}>
                 <label>Designated Role</label>
                 <select value={role} onChange={(e) => setRole(e.target.value)} disabled={!!isSelf}
@@ -350,8 +363,6 @@ export default function AddEmployeeModal({ onClose, onAdd, employee, requesterRo
                 </select>
                 {isSelf && <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>You cannot change your own role.</span>}
               </div>
-
-              {/* Status */}
               <div className={styles.formGroup}>
                 <label>Account Status</label>
                 <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={!!isSelf}

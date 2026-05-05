@@ -27,7 +27,7 @@ def get_roles():
         where = "" if include_inactive else "WHERE COALESCE(r.is_active, TRUE) = TRUE AND r.role_id != 1"
 
         cur.execute(f"""
-            SELECT r.role_id, r.role_name,
+            SELECT r.role_id, r.role_name, r.is_system,
                    COALESCE(r.is_active, TRUE) AS is_active,
                    r.sales_permissions, r.inventory_permissions, r.order_permissions,
                    r.supplier_permissions, r.reports_permissions, r.settings_permissions,
@@ -57,7 +57,7 @@ def get_archived_roles():
     cur = conn.cursor(cursor_factory=RealDictCursor)
     try:
         cur.execute("""
-            SELECT r.role_id, r.role_name,
+            SELECT r.role_id, r.role_name, r.is_system,
                    COALESCE(r.is_active, TRUE) AS is_active,
                    r.sales_permissions, r.inventory_permissions, r.order_permissions,
                    r.supplier_permissions, r.reports_permissions, r.settings_permissions,
