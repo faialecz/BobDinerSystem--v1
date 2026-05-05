@@ -709,14 +709,15 @@ export default function PurchasesPage({
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
               <div>
-                <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '2px' }}>
-                  Purchase Order Details
+                <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
+                  AE Samonte Merchandise
                 </p>
-                <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>
-                  {selectedPO.po_number}
+                <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                  No. {selectedPO.po_number}
                 </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <StatusBadge status={selectedPO.status} />
                 <button
                   onClick={() => setSelectedPO(null)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px', display: 'flex', borderRadius: '6px' }}
@@ -728,34 +729,6 @@ export default function PurchasesPage({
 
             {/* Body */}
             <div className="overflow-y-auto p-6" style={{ flex: 1 }}>
-
-              {/* Status select */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <p style={{ margin: '0 0 6px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8' }}>Status</p>
-                <select
-                  value={selectedPO.status.toUpperCase()}
-                  disabled={statusChanging || !NEXT_STATUSES[selectedPO.status.toUpperCase()]?.length}
-                  onChange={async e => {
-                    const newStatus = e.target.value;
-                    setStatusChanging(true);
-                    await handleStatusChange(selectedPO.purchase_order_id, newStatus);
-                    setSelectedPO(prev => prev ? { ...prev, status: newStatus } : prev);
-                    setStatusChanging(false);
-                  }}
-                  style={{
-                    width: '100%', height: '42px', padding: '0 12px',
-                    borderRadius: '8px', border: '1.5px solid #e2e8f0',
-                    fontSize: '0.9rem', fontWeight: 600, color: '#1e293b',
-                    background: '#fff', cursor: NEXT_STATUSES[selectedPO.status.toUpperCase()]?.length ? 'pointer' : 'not-allowed',
-                    outline: 'none', appearance: 'auto',
-                  }}
-                >
-                  <option value={selectedPO.status.toUpperCase()}>{selectedPO.status}</option>
-                  {(NEXT_STATUSES[selectedPO.status.toUpperCase()] ?? []).map(st => (
-                    <option key={st} value={st}>{st}</option>
-                  ))}
-                </select>
-              </div>
 
               {/* Supplier / Dates info box */}
               <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
@@ -842,15 +815,9 @@ export default function PurchasesPage({
             </div>
 
             {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9' }}>
               <button
-                onClick={() => setSelectedPO(null)}
-                style={{ padding: '8px 20px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.875rem', fontWeight: 600, color: '#374151', cursor: 'pointer' }}
-              >
-                Close
-              </button>
-              <button
-                style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#1a4263', color: '#fff', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer' }}
+                style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#1a4263', color: '#fff', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 Print PO
               </button>
