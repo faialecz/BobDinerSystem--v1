@@ -145,6 +145,9 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
   const [newItemError, setNewItemError]           = useState('');
   const [confirmingNewItem, setConfirmingNewItem] = useState(false);
 
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
   // sub-modals
   const [showBrandModal, setShowBrandModal]       = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -173,6 +176,8 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
     setShowNewItemModal(false);
     setNewItemForm(BLANK_NEW_ITEM());
     setNewItemError('');
+    setSubmitAttempted(false);
+    setShowCancelConfirm(false);
     setSearchQuery({});
     setSearchResults({});
     setSearchOpen({});
@@ -371,6 +376,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
   async function handleSubmit() {
     setError('');
     setSupplierError('');
+    setSubmitAttempted(true);
 
     const primarySupplier = supplierEntries[0];
     if (!primarySupplier?.supplier_id) return setError('Please select a primary supplier.');
@@ -408,6 +414,19 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
       setSubmitting(false);
     }
   }
+
+  const supplierHasError = () => submitAttempted && !supplierEntries[0]?.supplier_id;
+  const deliveryHasError = () => submitAttempted && !expectedDelivery;
+  const rowQtyHasError   = (idx: number) => submitAttempted && (!items[idx]?.quantity_ordered || Number(items[idx]?.quantity_ordered) <= 0);
+  const rowCostHasError  = (idx: number) => submitAttempted && (!items[idx]?.unit_cost || Number(items[idx]?.unit_cost) <= 0);
+
+  const handleCancelClick = () => {
+  if (supplierEntries[0]?.supplierName || expectedDelivery || notes || items.some(r => r.inventory_brand_id)) {
+    setShowCancelConfirm(true);
+  } else {
+    onClose();
+  }
+};
 
   if (!isOpen) return null;
 
@@ -597,7 +616,11 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                               type="number" min={1} placeholder="0"
                               value={row.quantity_ordered}
                               onChange={e => updateRow(idx, 'quantity_ordered', e.target.value === '' ? '' : Number(e.target.value))}
-                              style={{ ...FIELD_STYLE, height: '34px', padding: '4px 8px', fontSize: '0.875rem', textAlign: 'center' }}
+                              style={{ ...FIELD_STYLE, 
+                                height: '34px', 
+                                padding: '4px 8px', 
+                                fontSize: '0.875rem', 
+                                textAlign: 'center', ...(rowQtyHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
                             />
                           </td>
 
@@ -607,7 +630,11 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                               type="number" min={0} step="0.01" placeholder="0.00"
                               value={row.unit_cost}
                               onChange={e => updateRow(idx, 'unit_cost', e.target.value === '' ? '' : Number(e.target.value))}
-                              style={{ ...FIELD_STYLE, height: '34px', padding: '4px 8px', fontSize: '0.875rem', textAlign: 'center' }}
+                              style={{ ...FIELD_STYLE, 
+                                height: '34px', 
+                                padding: '4px 8px', 
+                                fontSize: '0.875rem', 
+                                textAlign: 'center', ...(rowCostHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
                             />
                           </td>
 
@@ -726,7 +753,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                           <select
                             value={entry.supplierName}
                             onChange={e => handleSupplierEntryChange(idx, 'supplierName', e.target.value)}
-                            style={FIELD_STYLE}
+                            style={{ ...FIELD_STYLE, ...(supplierHasError() && idx === 0 ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}) }}
                           >
                             <option value="">Select Supplier</option>
                             {suppliers.map(sup => {
@@ -743,6 +770,9 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                               );
                             })}
                           </select>
+                          {supplierHasError() && idx === 0 && (
+                            <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Please select a primary supplier.</p>
+                          )}
                         </div>
 
                         <div>
@@ -784,8 +814,11 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                       type="date"
                       value={expectedDelivery}
                       onChange={e => setExpectedDelivery(e.target.value)}
-                      style={FIELD_STYLE}
+                      style={{ ...FIELD_STYLE, ...(deliveryHasError() ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' } : {}) }}
                     />
+                    {deliveryHasError() && (
+                      <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#dc2626' }}>Expected delivery date is required.</p>
+                    )}
                   </div>
 
                   {/* Notes */}
@@ -813,7 +846,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
 
           {/* Footer */}
           <div className={s.modalFooter} style={{ padding: '16px 24px', borderTop: '1px solid #eaeaea', backgroundColor: '#fff', flexShrink: 0 }}>
-            <button type="button" onClick={onClose} className={s.cancelBtn}>Cancel</button>
+            <button type="button" onClick={handleCancelClick} className={s.cancelBtn}>Cancel</button>
             <button
               type="button"
               onClick={handleSubmit}
@@ -1033,7 +1066,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
         />
       )}
 
-      {/* ── Add Supplier Modal ── */}
+     {/* ── Add Supplier Modal ── */}
       {showSupplierModal && (
         <AddSupplierModal
           isOpen={showSupplierModal}
@@ -1041,6 +1074,37 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
           onSuccess={() => { fetchSuppliers(); setShowSupplierModal(false); }}
           existingSuppliers={suppliers}
         />
+      )}
+
+      {/* ── Cancel Confirm Dialog ── */}
+      {showCancelConfirm && (
+        <div
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}
+          onClick={() => setShowCancelConfirm(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: '16px', padding: '32px 28px', width: '360px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⚠️</div>
+            <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>Discard Changes?</p>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: '0 0 24px' }}>All entered information will be lost.</p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', color: '#374151' }}
+              >
+                Keep Editing
+              </button>
+              <button
+                onClick={() => { setShowCancelConfirm(false); onClose(); }}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#ef4444', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', color: '#fff' }}
+              >
+                Yes, Discard
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

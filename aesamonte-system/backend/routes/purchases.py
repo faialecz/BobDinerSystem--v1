@@ -378,6 +378,51 @@ def update_purchase_order_status(po_id):
             "UPDATE purchase_order SET status_id = %s WHERE purchase_order_id = %s",
             (new_status_id, po_id),
         )
+
+        if new_status == "COMPLETED":
+            cur.execute("""
+                SELECT inventory_brand_id, quantity_ordered, unit_cost,
+                       expiry_date, manufactured_date
+                FROM   purchase_order_item
+                WHERE  purchase_order_id = %s
+            """, (po_id,))
+            items = cur.fetchall()
+            if not items:
+                raise Exception(f"Purchase order {po_id} has no line items to receive.")
+
+            available_status_id = _get_status_id(cur, "AVAILABLE", "INVENTORY_STATUS")
+            yymm = datetime.now().strftime("%y%m")
+
+            for brand_id, qty_ordered, unit_cost, expiry_date, manufactured_date in items:
+                cur.execute(
+                    "SELECT COALESCE(MAX(batch_id), 0) + 1 FROM inventory_batch"
+                )
+                batch_id = cur.fetchone()[0]
+                batch_number = f"BTCH-{yymm}-{batch_id:04d}"
+                cur.execute("""
+                    INSERT INTO inventory_batch
+                        (batch_id, batch_number, inventory_brand_id,
+                         quantity_received, quantity_on_hand,
+                         unit_cost, expiry_date, manufactured_date, batch_status_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    batch_id,
+                    batch_number,
+                    int(brand_id),
+                    int(qty_ordered),
+                    int(qty_ordered),
+                    float(unit_cost) if unit_cost is not None else 0.0,
+                    expiry_date,
+                    manufactured_date,
+                    available_status_id,
+                ))
+
+            cur.execute("""
+                UPDATE purchase_order_item
+                SET    quantity_received = quantity_ordered
+                WHERE  purchase_order_id = %s
+            """, (po_id,))
+
         conn.commit()
         return jsonify({"message": f"Status updated to {new_status}.", "status": new_status}), 200
 
