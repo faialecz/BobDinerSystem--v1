@@ -117,24 +117,31 @@ export default function Login({ onLogin }: LoginProps) {
 return (
   <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
 
-    {/* LEFT - Store photo only */}
-    <div style={{
-      flex: 1,
-      backgroundImage: "url('/bg.jpg')",
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat",
-      filter: "blur(2px)",
-      margin: "-4px"
-    }} />
+    {/* LEFT - Store photo with dark overlay */}
+    <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div style={{
+        position: "absolute", inset: 0,
+        backgroundImage: "url('/bg.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        filter: "blur(2px)",
+        margin: "-4px",
+      }} />
+      <div style={{
+        position: "absolute", inset: 0,
+        backgroundColor: "rgba(15, 23, 42, 0.40)",
+      }} />
+    </div>
 
-    {/* RIGHT - Your existing login form, no changes */}
+    {/* RIGHT - Login form */}
     <div className={styles.loginContainer}>
-      <div className={styles.loginLogo}>
-        <Image src="/ae-logo.png" alt="AE Samonte Logo" width={100} height={100} className={styles.loginLogoImg} priority />
-        {view === "login" && <h2 className={styles.loginTitle}>Welcome Back!</h2>}
-      </div>
       <div className={styles.loginFormBox}>
+        {/* Logo anchored inside the card */}
+        <div className={styles.loginLogo}>
+          <Image src="/ae-logo.png" alt="AE Samonte Logo" width={108} height={108} className={styles.loginLogoImg} priority />
+          {view === "login" && <h2 className={styles.loginTitle}>Welcome Back!</h2>}
+        </div>
         {view === "login" ? (
           <form onSubmit={handleLogin} className={styles.loginForm}>
             <div className={styles.loginField}>

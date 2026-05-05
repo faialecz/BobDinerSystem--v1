@@ -113,9 +113,7 @@ export default function Home() {
           }}
         />
       ) : !isLoggedIn || !userInfo ? (
-        <div className="flex justify-center items-center h-screen">
-          <Login onLogin={handleLogin} />
-        </div>
+        <Login onLogin={handleLogin} />
       ) : (
         <div className="flex h-screen overflow-hidden bg-[#fefcf6]">
           <Sidebar
