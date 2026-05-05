@@ -219,7 +219,8 @@ def get_purchase_order_items(po_id):
                 poi.quantity_received,
                 poi.unit_cost,
                 poi.expiry_date,
-                poi.manufactured_date
+                poi.manufactured_date,
+                poi.selling_price
             FROM purchase_order_item poi
             JOIN inventory_brand  ib ON ib.inventory_brand_id = poi.inventory_brand_id
             JOIN inventory         i ON i.inventory_id        = ib.inventory_id
@@ -241,6 +242,7 @@ def get_purchase_order_items(po_id):
                 "unit_cost":           float(r[7]),
                 "expiry_date":         r[8].isoformat() if r[8] else None,
                 "manufactured_date":   r[9].isoformat() if r[9] else None,
+                "selling_price":       float(r[10]) if r[10] is not None else None,
             }
             for r in rows
         ]
@@ -314,6 +316,7 @@ def create_draft_purchase_order():
             unit_cost     = float(item.get("unit_cost", 0))
             expiry_date   = item.get("expiry_date") or None
             mfg_date      = item.get("manufactured_date") or None
+            selling_price = float(item.get("selling_price")) if item.get("selling_price") is not None else None
 
             if not brand_id or qty_ordered <= 0:
                 raise Exception("Each item requires inventory_brand_id and quantity_ordered > 0.")
@@ -321,9 +324,9 @@ def create_draft_purchase_order():
             cur.execute("""
                 INSERT INTO purchase_order_item
                     (purchase_order_id, inventory_brand_id, quantity_ordered,
-                     quantity_received, unit_cost, expiry_date, manufactured_date)
-                VALUES (%s, %s, %s, 0, %s, %s, %s)
-            """, (po_id, int(brand_id), qty_ordered, unit_cost, expiry_date, mfg_date))
+                     quantity_received, unit_cost, expiry_date, manufactured_date, selling_price)
+                VALUES (%s, %s, %s, 0, %s, %s, %s, %s)
+            """, (po_id, int(brand_id), qty_ordered, unit_cost, expiry_date, mfg_date, selling_price))
 
         conn.commit()
         return jsonify({
@@ -476,10 +479,11 @@ def update_purchase_order(po_id):
         cur.execute("DELETE FROM purchase_order_item WHERE purchase_order_id = %s", (po_id,))
 
         for item in items:
-            brand_id    = item.get("inventory_brand_id")
-            qty_ordered = int(item.get("quantity_ordered", 0))
-            unit_cost   = float(item.get("unit_cost", 0))
-            expiry_date = item.get("expiry_date") or None
+            brand_id      = item.get("inventory_brand_id")
+            qty_ordered   = int(item.get("quantity_ordered", 0))
+            unit_cost     = float(item.get("unit_cost", 0))
+            expiry_date   = item.get("expiry_date") or None
+            selling_price = float(item.get("selling_price")) if item.get("selling_price") is not None else None
 
             if not brand_id or qty_ordered <= 0:
                 raise Exception("Each item requires inventory_brand_id and quantity_ordered > 0.")
@@ -487,9 +491,9 @@ def update_purchase_order(po_id):
             cur.execute("""
                 INSERT INTO purchase_order_item
                     (purchase_order_id, inventory_brand_id, quantity_ordered,
-                     quantity_received, unit_cost, expiry_date)
-                VALUES (%s, %s, %s, 0, %s, %s)
-            """, (po_id, int(brand_id), qty_ordered, unit_cost, expiry_date))
+                     quantity_received, unit_cost, expiry_date, selling_price)
+                VALUES (%s, %s, %s, 0, %s, %s, %s)
+            """, (po_id, int(brand_id), qty_ordered, unit_cost, expiry_date, selling_price))
 
         conn.commit()
         return jsonify({"message": "Purchase order updated.", "purchase_order_id": po_id}), 200
