@@ -66,11 +66,13 @@ interface BrandVariant {
   brand_name: string;
   sku: string;
   unit_cost: number;
+  unit_price: number;
   selling_price: number;
   qty: number;
   description?: string;
   item_description?: string;
   nearest_expiry?: string | null;
+  inventory_brand_id?: number;
 }
 
 interface SupplierInfo {
@@ -160,6 +162,7 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewProduct, setViewProduct] = useState<Product | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
+  const [highlightBrandId, setHighlightBrandId] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isError, setIsError] = useState(false);
@@ -267,7 +270,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
   useEffect(() => {
     if (!initialViewId || products.length === 0) return;
     const numId = Number(initialViewId);
-    // Match by inventory_id OR by any brand's inventory_brand_id (backend may send either)
     const product = products.find(p =>
       Number(p.id) === numId ||
       (p.brands || []).some((b: any) => Number(b.inventory_brand_id) === numId)
@@ -275,6 +277,8 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
     if (!product) return;
     setSearchTerm(product.item_name);
     setCurrentPage(1);
+    const matchedByBrand = (product.brands || []).some((b: any) => Number(b.inventory_brand_id) === numId);
+    setHighlightBrandId(matchedByBrand ? numId : null);
     handleViewClick(product);
     onViewOpened?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -882,7 +886,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
 
       {/* VIEW MODAL */}
       {showViewModal && viewProduct && (
-        <div className={s.viewBackdrop} onClick={() => setShowViewModal(false)}>
+        <div className={s.viewBackdrop} onClick={() => { setShowViewModal(false); setHighlightBrandId(null); }}>
           <div className={s.viewModal} onClick={e => e.stopPropagation()} style={{ maxWidth: '780px', width: '95vw' }}>
             <div className={s.viewModalHeader}>
               <div className={s.viewModalHeaderLeft}>
@@ -891,7 +895,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
               </div>
               <div className={s.viewModalHeaderRight}>
                 <span className={getStatusClass(viewProduct.status)}>{viewProduct.status}</span>
-                <button className={s.viewCloseBtn} onClick={() => setShowViewModal(false)}><LuX size={20} /></button>
+                <button className={s.viewCloseBtn} onClick={() => { setShowViewModal(false); setHighlightBrandId(null); }}><LuX size={20} /></button>
               </div>
             </div>
 
@@ -961,7 +965,11 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                       </tr>
                     ) : (
                       viewProduct.brands.map((bv: any, i: number) => (
-                        <tr key={i}>
+                        <tr key={i} style={
+                          highlightBrandId && Number(bv.inventory_brand_id) === highlightBrandId
+                            ? { background: '#eff6ff', outline: '2px solid #3b82f6', outlineOffset: '-2px' }
+                            : undefined
+                        }>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <LuPackage size={13} style={{ color: '#94a3b8' }} />

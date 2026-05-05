@@ -601,6 +601,7 @@
 /* ─── STOCK STATUS BADGES ────────────────────────────────────────────────── */
 .statusAvailable { background: #dcfce7; color: #15803d; }
 .statusLow       { background: #fef9c3; color: #854d0e; }
+.statusExp       { background:#9ccbfa; color: #1b446c; }
 .statusOut       { background: #fee2e2; color: #b91c1c; }
 .statusArchived  { background: #f1f5f9; color: #64748b; }
 
@@ -621,24 +622,21 @@
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
 }
 
-/* This ensures the skeletal bars are centered or aligned like your text */
 .reportTable td .skeleton {
   display: block;
   border-radius: 4px;
 }
 
-/* Match your numCol alignment for the price skeletons */
 .reportTable td:nth-child(5) .skeleton,
 .reportTable td:nth-child(6) .skeleton,
 .reportTable td:nth-child(7) .skeleton {
   margin-left: auto;
 }
 
-/* ─── REPORT FILTER BAR (matches orders/sales style) ────────────────────── */
 .reportControls {
   display: flex;
   align-items: center;
@@ -721,3 +719,52 @@
 .statusFilterMenuItem:hover { background: #f8fafc; }
 .statusFilterMenuItemActive { background: #eff6ff !important; color: #2563eb; }
 .statusFilterCheckmark { margin-left: auto; color: #2563eb; }
+
+/* ─── RESPONSIVE ─────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .mainContent { padding: 6px 16px 24px; }
+
+  .tabBar { flex-wrap: wrap; gap: 2px; }
+  .tabBtn  { padding: 8px 14px; font-size: 0.8rem; }
+
+  .filterBar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .filterBar > div { width: 100%; }
+
+  .headerActions { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
+
+@media (max-width: 768px) {
+  .mainContent { padding: 4px 10px 20px; }
+
+  .tabBar { gap: 2px; }
+  .tabBtn  { padding: 7px 10px; font-size: 0.75rem; }
+
+  .reportPanel { padding: 12px 10px 20px; }
+
+  /* Stack filter bar vertically */
+  .filterBar { flex-direction: column; align-items: stretch; }
+
+  /* Date inputs full width */
+  .dateInput { width: 100% !important; box-sizing: border-box; }
+
+  /* Table: allow horizontal scroll, prevent layout break */
+  .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .reportTable  { min-width: 600px; font-size: 0.78rem; }
+  .reportTable th,
+  .reportTable td { padding: 8px 10px; }
+
+  /* Count badge smaller */
+  .tableCount { font-size: 0.72rem; }
+
+  /* Status filter full width */
+  .statusFilterContainer { width: 100%; }
+  .statusFilterTrigger   { width: 100%; justify-content: space-between; }
+}
+
+@media (max-width: 480px) {
+  .mainContent { padding: 4px 6px 16px; }
+  .tabBtn      { padding: 6px 8px; font-size: 0.72rem; }
+  .reportTable { font-size: 0.72rem; }
+  .reportTable th,
+  .reportTable td { padding: 6px 8px; }
+}
