@@ -121,26 +121,49 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
   };
 
   const handleItemSelect = (index: number, entry: any) => {
-    // Set the flag BEFORE the state update so the onChange that React fires
-    // when the controlled input re-renders with the new display string is ignored.
     justSelected.current[index] = true;
+    const incomingId = String(entry.inventory_brand_id);
 
-    const newItems = [...items];
-    const currentQty = Number(newItems[index].quantity) || 1;
-    const price = entry.item_selling_price ?? 0;
-    newItems[index] = {
-      ...newItems[index],
-      inventory_brand_id: entry.inventory_brand_id,
-      brand_name: entry.brand_name,
-      item: `${entry.item_name} — ${entry.brand_name} (${entry.uom_name})`,
-      itemDescription: entry.item_description || '—',
-      uom_name: entry.uom_name,
-      price,
-      total_quantity: entry.total_quantity,
-      quantity: currentQty,
-      amount: currentQty * price,
-    };
-    setItems(newItems);
+    setItems(prevItems => {
+      const newItems = [...prevItems];
+
+      // Auto-merge: scan latest state for an existing row with the same ID.
+      // String-coerce both sides so integer/string mismatches never break the check.
+      const existingIndex = newItems.findIndex(
+        (item, i) => i !== index && String(item.inventory_brand_id) === incomingId
+      );
+
+      if (existingIndex !== -1) {
+        const addedQty   = Number(newItems[index].quantity) || 1;
+        const mergedQty  = (Number(newItems[existingIndex].quantity) || 0) + addedQty;
+        const mergedQtyC = Math.min(mergedQty, newItems[existingIndex].total_quantity ?? mergedQty);
+        const price      = newItems[existingIndex].price || 0;
+        newItems[existingIndex] = {
+          ...newItems[existingIndex],
+          quantity: mergedQtyC,
+          amount:   mergedQtyC * price,
+        };
+        return newItems.filter((_, i) => i !== index);
+      }
+
+      // Normal selection — overwrite this row with the chosen entry.
+      const currentQty = Number(newItems[index].quantity) || 1;
+      const price = entry.item_selling_price ?? 0;
+      newItems[index] = {
+        ...newItems[index],
+        inventory_brand_id: entry.inventory_brand_id,
+        brand_name:         entry.brand_name,
+        item:               `${entry.item_name} — ${entry.brand_name} (${entry.uom_name})`,
+        itemDescription:    entry.item_description || '—',
+        uom_name:           entry.uom_name,
+        price,
+        total_quantity:     entry.total_quantity,
+        quantity:           currentQty,
+        amount:             currentQty * price,
+      };
+      return newItems;
+    });
+
     setActiveSearchIndex(null);
     setSearchResults(prev => ({ ...prev, [index]: [] }));
   };
@@ -177,14 +200,15 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
 };
 
   const handleItemTextChange = (index: number, text: string) => {
-    // If handleItemSelect just ran, this onChange is the React-controlled-input
-    // re-render echo — not a real keystroke. Skip it and reset the flag.
+    // Absorb the React controlled-input echo that fires immediately after
+    // handleItemSelect writes a new display string.
     if (justSelected.current[index]) {
       justSelected.current[index] = false;
       return;
     }
 
-    // Real user keystroke — clear the locked selection so the row is searchable again.
+    // Ruthless ID clearing: any text change by the user invalidates the selection.
+    // There is no bypass — the row must re-confirm via the dropdown.
     const newItems = [...items];
     newItems[index] = {
       ...newItems[index],
@@ -282,6 +306,9 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
 
   const totalQty = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const totalAmt = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const hasInvalidQuantities = items.some(
+    item => item.inventory_brand_id && item.total_quantity != null && Number(item.quantity) > item.total_quantity
+  );
 
   // ── ERROR HELPERS ──
   const customerNameHasError = () => submitAttempted && !customerData.customerName.trim();
@@ -474,7 +501,25 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
                 <div className={s.itemBottomGrid}>
                   <div className={s.formGroup}>
                     <label style={{ ...LABEL_STYLE }}>Quantity <span style={{ color: '#ef4444' }}>*</span></label>
-                    <input type="number" className={s.cleanInput} value={item.quantity || ''} onChange={(e) => handleQtyChange(index, e.target.value)} style={{ height: '38px' }} />
+                    <input
+                      type="number"
+                      className={s.cleanInput}
+                      value={item.quantity || ''}
+                      min="1"
+                      max={item.total_quantity ?? undefined}
+                      onChange={(e) => handleQtyChange(index, e.target.value)}
+                      style={{
+                        height: '38px',
+                        ...(item.inventory_brand_id && item.total_quantity != null && Number(item.quantity) > item.total_quantity
+                          ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' }
+                          : {})
+                      }}
+                    />
+                    {item.inventory_brand_id && item.total_quantity != null && Number(item.quantity) > item.total_quantity && (
+                      <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: '#dc2626' }}>
+                        Only {item.total_quantity} in stock!
+                      </p>
+                    )}
                   </div>
                   <div className={s.formGroup}>
                     <label style={{ ...LABEL_STYLE }}>Amount (₱)</label>
@@ -517,7 +562,7 @@ const AddOrderModal: React.FC<AddOrderModalProps> = ({
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button type="button" onClick={handleCancelClick} className={s.cancelBtn}>Cancel</button>
-              <button type="submit" className={s.saveBtn}>Save Order</button>
+              <button type="submit" className={s.saveBtn} disabled={hasInvalidQuantities}>Save Order</button>
             </div>
           </div>
         </form>

@@ -50,7 +50,7 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
               ? `${i.item_name} — ${i.brand_name} (${i.uom})`
               : i.item_name || '';
             return {
-              inventory_brand_id: i.inventory_brand_id,
+              inventory_brand_id: i.inventory_brand_id || i.inventory_id || '',
               inventory_id: i.inventory_id,
               item: displayName,
               brand_name: i.brand_name || '',
@@ -69,6 +69,10 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
         contact: orderData.contact || '',
         address: orderData.address || '',
         status: orderData.status || 'Preparing',
+        payment_status_id: orderData.payment_status_id || 30,
+        amount_paid: orderData.amount_paid || 0,
+        deposit_date: orderData.deposit_date || '',
+        final_payment_date: orderData.final_payment_date || '',
         paymentMethod: orderData.paymentMethod || 'Cash',
         items: initialItems
       };
@@ -122,38 +126,64 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
 
     const handleItemSelect = (index: number, entry: any) => {
     justSelected.current[index] = true;
-    const safeItems = formData.items || [];
-    const newItems = [...safeItems];
-    const currentQty = Number(newItems[index].quantity) || 1;
-    const price = entry.item_selling_price ?? 0;
+    const incomingId = String(entry.inventory_brand_id);
 
-    newItems[index] = {
-      ...newItems[index],
-      inventory_brand_id: entry.inventory_brand_id,
-      item: entry.item_name, 
-      brand_name: entry.brand_name, 
-      itemDescription: entry.item_description || '—',
-      uom_name: entry.uom_name || '',
-      price,
-      quantity: currentQty,
-      amount: currentQty * price,
-    };
-    setFormData({ ...formData, items: newItems });
+    setFormData((prev: any) => {
+      const prevItems = prev.items || [];
+      const newItems  = [...prevItems];
+
+      // Auto-merge: scan latest state for an existing row with the same ID.
+      // String-coerce both sides so integer/string mismatches never break the check.
+      const existingIndex = newItems.findIndex(
+        (item: any, i: number) =>
+          i !== index &&
+          (String(item.inventory_brand_id) === incomingId || item.item === entry.item_name)
+      );
+
+      if (existingIndex !== -1) {
+        const addedQty   = Number(newItems[index].quantity) || 1;
+        const mergedQty  = (Number(newItems[existingIndex].quantity) || 0) + addedQty;
+        const mergedQtyC = Math.min(mergedQty, newItems[existingIndex].total_quantity ?? mergedQty);
+        const price      = newItems[existingIndex].price || 0;
+        newItems[existingIndex] = {
+          ...newItems[existingIndex],
+          quantity: mergedQtyC,
+          amount:   mergedQtyC * price,
+        };
+        return { ...prev, items: newItems.filter((_: any, i: number) => i !== index) };
+      }
+
+      // Normal selection — overwrite this row with the chosen entry.
+      const currentQty = Number(newItems[index].quantity) || 1;
+      const price = entry.item_selling_price ?? 0;
+      newItems[index] = {
+        ...newItems[index],
+        inventory_brand_id: entry.inventory_brand_id,
+        item:               entry.item_name,
+        brand_name:         entry.brand_name,
+        itemDescription:    entry.item_description || '—',
+        uom_name:           entry.uom_name || '',
+        price,
+        total_quantity:     entry.total_quantity,
+        quantity:           currentQty,
+        amount:             currentQty * price,
+      };
+      return { ...prev, items: newItems };
+    });
+
     setActiveSearchIndex(null);
     setSearchResults(prev => ({ ...prev, [index]: [] }));
   };
 
     const handleItemTextChange = (index: number, text: string) => {
+    // Absorb the React controlled-input echo that fires immediately after
+    // handleItemSelect writes a new display string.
     if (justSelected.current[index]) {
       justSelected.current[index] = false;
       return;
     }
+    // Ruthless ID clearing: any text change by the user invalidates the selection.
     const safeItems = formData.items || [];
-    const currentItem = safeItems[index];
-    // Bypass: text hasn't deviated from the already-selected item's display string
-    if (currentItem?.inventory_brand_id && text === currentItem.item) {
-      return;
-    }
     const newItems = [...safeItems];
     newItems[index] = {
       ...newItems[index],
@@ -206,6 +236,59 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     }
   };
 
+  const handleAmountPaidChange = (newAmountPaid: number) => {
+    let newPaymentStatusId = 30; // Default to Unpaid
+    let newDepositDate = formData.deposit_date;
+
+    if (newAmountPaid === 0) {
+      // Unpaid
+      newPaymentStatusId = 30;
+    } else if (newAmountPaid > 0 && newAmountPaid < totalAmt) {
+      // Partial - auto-stamp deposit_date to today if empty
+      newPaymentStatusId = 31;
+      if (!newDepositDate) {
+        newDepositDate = new Date().toISOString().split('T')[0];
+      }
+    } else if (newAmountPaid >= totalAmt) {
+      // Paid
+      newPaymentStatusId = 29;
+    }
+
+    setFormData({
+      ...formData,
+      amount_paid: newAmountPaid,
+      payment_status_id: newPaymentStatusId,
+      deposit_date: newDepositDate
+    });
+  };
+
+  const handlePaymentStatusChange = (newStatusId: number) => {
+    // Manual override protection and smart toggle logic
+    if (newStatusId === 30) {
+      // Unpaid: reset amount_paid to 0
+      setFormData({
+        ...formData,
+        payment_status_id: newStatusId,
+        amount_paid: 0
+      });
+    } else if (newStatusId === 29) {
+      // Paid: auto-fill amount_paid with totalAmt, stamp today, clear deposit
+      setFormData({
+        ...formData,
+        payment_status_id: newStatusId,
+        amount_paid: totalAmt,
+        final_payment_date: new Date().toISOString().split('T')[0],
+        deposit_date: '',
+      });
+    } else {
+      // Partial or other statuses
+      setFormData({
+        ...formData,
+        payment_status_id: newStatusId
+      });
+    }
+  };
+
   if (!isOpen || !formData) return null;
 
   const safeItems = formData.items || [];
@@ -213,11 +296,16 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
   const isLocked = originalData?.status?.trim().toLowerCase() === 'received' || originalData?.status?.trim().toLowerCase() === 'cancelled';
   const NO_CANCEL_STATUSES = ['PACKED', 'SHIPPING', 'RECEIVED'];
   const canCancel = !NO_CANCEL_STATUSES.includes(originalData?.status?.trim().toUpperCase() ?? '');
+  const PAST_PREPARING = ['PACKED', 'SHIPPING', 'RECEIVED'];
+  const isPastPreparing = PAST_PREPARING.includes(originalData?.status?.trim().toUpperCase() ?? '');
   const safePayment = formData.paymentMethod || 'Cash';
   const isPreparing = safeStatus.trim().toLowerCase() === 'preparing';
 
   const totalQty = safeItems.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0), 0);
   const totalAmt = safeItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+  const hasInvalidQuantities = safeItems.some(
+    (item: any) => item.inventory_brand_id && item.total_quantity != null && Number(item.quantity) > item.total_quantity
+  );
 
   const customerNameHasError = () => submitAttempted && !formData.customerName?.trim();
   const addressHasError = () => submitAttempted && !formData.address?.trim();
@@ -325,17 +413,18 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
           {/* Fulfillment & Payment */}
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)', marginBottom: '20px' }}>
             <h4 style={{ margin: '0 0 15px 0', fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>Fulfillment & Payment</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
               <div className={s.formGroup}>
                 <label style={{ ...LABEL_STYLE }}>Status</label>
-                <select className={s.cleanInput} value={safeStatus.trim()} disabled={isLocked} onChange={(e) => setFormData({...formData, status: e.target.value})}>
+                <select className={s.cleanInput} value={safeStatus.trim()} disabled={isLocked} onChange={(e) => setFormData({...formData, status: e.target.value})}
+                >
                   {statuses.length === 0 && <option value={safeStatus.trim()}>{safeStatus.trim()}</option>}
                   {statuses.map((st: any) => {
-                    const isCancel = st.status_name.trim().toUpperCase() === 'CANCELLED';
-                    if (isCancel && !canCancel) return null;
-                    return (
-                      <option key={st.status_id} value={st.status_name.trim()}>{st.status_name.trim()}</option>
-                    );
+                    const name = st.status_name.trim();
+                    const upper = name.toUpperCase();
+                    if (upper === 'CANCELLED'  && !canCancel)      return null;
+                    if (upper === 'PREPARING'  && isPastPreparing) return null;
+                    return <option key={st.status_id} value={name}>{name}</option>;
                   })}
                 </select>
               </div>
@@ -348,6 +437,68 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                   ))}
                 </select>
               </div>
+              <div className={s.formGroup}>
+                <label style={{ ...LABEL_STYLE }}>Payment Status</label>
+                <select className={s.cleanInput} value={formData.payment_status_id || 30} disabled={isLocked} onChange={(e) => handlePaymentStatusChange(Number(e.target.value))}>
+                  <option value={29}>Paid</option>
+                  <option value={30}>Unpaid</option>
+                  <option value={31}>Partial</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Amount Paid and Conditional Date Fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: (formData.payment_status_id === 31 || formData.payment_status_id === 29) ? '1fr 1fr' : '1fr', gap: '15px', marginTop: '15px' }}>
+              <div className={s.formGroup}>
+                <label style={{ ...LABEL_STYLE }}>Amount Paid (₱)</label>
+                <input
+                  type="number"
+                  className={s.cleanInput}
+                  value={formData.amount_paid || ''}
+                  min="0"
+                  disabled={isLocked || formData.payment_status_id === 29}
+                  onChange={(e) => handleAmountPaidChange(Number(e.target.value) || 0)}
+                  placeholder="0"
+                  style={{
+                    height: '38px',
+                    padding: '8px 12px',
+                    fontSize: '0.9rem',
+                    borderColor: formData.payment_status_id === 29 ? '#16a34a' : (formData.payment_status_id === 30 && !formData.amount_paid ? '#d1d5db' : 'inherit'),
+                    backgroundColor: formData.payment_status_id === 29 ? '#f0fdf4' : (formData.payment_status_id === 30 && !formData.amount_paid ? '#fafafa' : 'inherit'),
+                    fontWeight: formData.payment_status_id === 29 ? 600 : 'inherit'
+                  }}
+                />
+              </div>
+
+              {/* Conditional Deposit Date Field - shown when payment_status_id is 31 (PARTIAL) */}
+              {formData.payment_status_id === 31 && (
+                <div className={s.formGroup}>
+                  <label style={{ ...LABEL_STYLE }}>Deposit Date</label>
+                  <input
+                    type="date"
+                    className={s.cleanInput}
+                    value={formData.deposit_date || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setFormData({...formData, deposit_date: e.target.value})}
+                    style={{ height: '38px', padding: '8px 12px', fontSize: '0.9rem' }}
+                  />
+                </div>
+              )}
+
+              {/* Final Payment Date Field - shown when payment_status_id is 29 (PAID) */}
+              {formData.payment_status_id === 29 && (
+                <div className={s.formGroup}>
+                  <label style={{ ...LABEL_STYLE }}>Final Payment Date</label>
+                  <input
+                    type="date"
+                    className={s.cleanInput}
+                    value={formData.final_payment_date || ''}
+                    disabled={isLocked}
+                    onChange={(e) => setFormData({...formData, final_payment_date: e.target.value})}
+                    style={{ height: '38px', padding: '8px 12px', fontSize: '0.9rem' }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -401,7 +552,8 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                           const isUsedElsewhere = safeItems.some(
                             (other: any, otherIndex: number) =>
                               otherIndex !== index &&
-                              other.inventory_brand_id === entry.inventory_brand_id
+                              (other.inventory_brand_id === entry.inventory_brand_id ||
+                               other.item === entry.item_name)
                           );
                           if (isUsedElsewhere) return null;
 
@@ -462,10 +614,22 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                       type="number"
                       className={s.cleanInput}
                       value={item.quantity || ''}
+                      min="1"
+                      max={item.total_quantity ?? undefined}
                       onChange={(e) => handleQtyChange(index, e.target.value)}
                       disabled={!isPreparing}
-                      style={{ height: '38px', padding: '8px 12px', fontSize: '0.9rem', width: '100%' }}
+                      style={{
+                        height: '38px', padding: '8px 12px', fontSize: '0.9rem', width: '100%',
+                        ...(item.inventory_brand_id && item.total_quantity != null && Number(item.quantity) > item.total_quantity
+                          ? { border: '1px solid #f87171', backgroundColor: '#fff5f5' }
+                          : {})
+                      }}
                     />
+                    {item.inventory_brand_id && item.total_quantity != null && Number(item.quantity) > item.total_quantity && (
+                      <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: '#dc2626' }}>
+                        Only {item.total_quantity} in stock!
+                      </p>
+                    )}
                   </div>
 
                   {/* Amount */}
@@ -498,8 +662,8 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
             <button className={s.cancelBtn} onClick={handleCancelClick}>Cancel</button>
-            {!isLocked && ( 
-              <button className={s.saveBtn} onClick={handleSubmit}>Save Changes</button>
+            {!isLocked && (
+              <button className={s.saveBtn} onClick={handleSubmit} disabled={hasInvalidQuantities}>Save Changes</button>
             )}
           </div>
         </div>
