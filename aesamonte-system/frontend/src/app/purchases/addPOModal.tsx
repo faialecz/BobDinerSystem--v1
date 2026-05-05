@@ -601,7 +601,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                                                 {r.item_name} — {r.brand_name} ({r.uom_name})
                                               </div>
                                               <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                                                Desc: {r.description || 'No description'}
+                                                Desc: {r.item_description || 'No description'}
                                               </div>
                                             </div>
                                             <div style={{ textAlign: 'right', flexShrink: 0, paddingLeft: '12px' }}>
@@ -609,7 +609,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                                                 ₱{Number(r.item_selling_price || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                                               </div>
                                               <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                                                Stock: {r.stock_quantity ?? 0}
+                                                Stock: {r.total_quantity ?? 0}
                                               </div>
                                             </div>
                                           </button>

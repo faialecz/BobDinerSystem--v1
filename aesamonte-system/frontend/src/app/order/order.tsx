@@ -11,6 +11,7 @@ import ExportModal from './exportModal';
 import OrderEditModal from './editOrderModal';
 import AddOrderModal from './addOrderModal';
 import ArchiveTable from './archiveOrderModal';
+import Modal from '@/components/ui/Modal';
 import { 
   LuSearch, LuChevronUp, LuChevronDown, LuEllipsisVertical,
   LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX, LuPrinter
@@ -70,6 +71,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<any>(null);
+  const [archiveConfirmId, setArchiveConfirmId] = useState<number | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedOrderForView, setSelectedOrderForView] = useState<Order | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
@@ -758,8 +760,12 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                         <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)} />
                         {openMenuId === o.id && (
                           <div className={s.popupMenu}>
-                            <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
-                            <button className={s.popBtnArchive} onClick={() => handleToggleArchive(o.id)}><LuArchive size={14} /> Archive</button>
+                            {o.status?.toUpperCase() !== 'RECEIVED' && (
+                              <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
+                            )}
+                            {['RECEIVED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
+                              <button className={s.popBtnArchive} onClick={() => { setArchiveConfirmId(o.id); setOpenMenuId(null); }}><LuArchive size={14} /> Archive</button>
+                            )}
                             <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
                           </div>
                         )}
@@ -876,6 +882,17 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={archiveConfirmId !== null}
+        onClose={() => setArchiveConfirmId(null)}
+        onConfirm={() => { if (archiveConfirmId !== null) handleToggleArchive(archiveConfirmId); }}
+        type="warning"
+        mode="confirm"
+        title="Archive Record"
+        message="Are you sure you want to archive this order?"
+        confirmLabel="Archive"
+      />
 
     </div>
   );

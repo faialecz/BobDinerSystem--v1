@@ -1,8 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useRef, useState } from 'react';
-import styles from "@/css/order.module.css"; 
+import styles from "@/css/order.module.css";
 import { LuX, LuPlus, LuTrash2, LuSearch} from "react-icons/lu";
+import Modal from '@/components/ui/Modal';
 
 interface OrderEditModalProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
   const [formData, setFormData] = useState<any>(null);
   const [originalData, setOriginalData] = useState<any>(null);
   const [submitError, setSubmitError] = useState('');
+  const [isConfirmEditOpen, setIsConfirmEditOpen] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
@@ -209,6 +211,8 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
   const safeItems = formData.items || [];
   const safeStatus = formData.status || 'Preparing';
   const isLocked = originalData?.status?.trim().toLowerCase() === 'received' || originalData?.status?.trim().toLowerCase() === 'cancelled';
+  const NO_CANCEL_STATUSES = ['PACKED', 'SHIPPING', 'RECEIVED'];
+  const canCancel = !NO_CANCEL_STATUSES.includes(originalData?.status?.trim().toUpperCase() ?? '');
   const safePayment = formData.paymentMethod || 'Cash';
   const isPreparing = safeStatus.trim().toLowerCase() === 'preparing';
 
@@ -227,6 +231,10 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
     if (!formData.contact?.trim()) { setSubmitError('Contact number is required.'); return; }
     if (!hasChanges()) { setSubmitError('No changes detected. Please modify at least one field before updating.'); return; }
     setSubmitError('');
+    setIsConfirmEditOpen(true);
+  };
+
+  const handleConfirmSave = () => {
     onSave({ ...formData, totalQty, totalAmt });
   };
 
@@ -322,9 +330,13 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
                 <label style={{ ...LABEL_STYLE }}>Status</label>
                 <select className={s.cleanInput} value={safeStatus.trim()} disabled={isLocked} onChange={(e) => setFormData({...formData, status: e.target.value})}>
                   {statuses.length === 0 && <option value={safeStatus.trim()}>{safeStatus.trim()}</option>}
-                  {statuses.map((st: any) => (
-                    <option key={st.status_id} value={st.status_name.trim()}>{st.status_name.trim()}</option>
-                  ))}
+                  {statuses.map((st: any) => {
+                    const isCancel = st.status_name.trim().toUpperCase() === 'CANCELLED';
+                    if (isCancel && !canCancel) return null;
+                    return (
+                      <option key={st.status_id} value={st.status_name.trim()}>{st.status_name.trim()}</option>
+                    );
+                  })}
                 </select>
               </div>
               <div className={s.formGroup}>
@@ -510,6 +522,17 @@ const OrderEditModal = ({ isOpen, onClose, orderData, onSave, statuses = [], pay
           </div>
         </div>
       )}
+
+      <Modal
+        isOpen={isConfirmEditOpen}
+        onClose={() => setIsConfirmEditOpen(false)}
+        onConfirm={handleConfirmSave}
+        type="info"
+        mode="confirm"
+        title="Save Changes"
+        message="Are you sure you want to apply these changes to the record?"
+        confirmLabel="Save Changes"
+      />
 
     </div>
   );
