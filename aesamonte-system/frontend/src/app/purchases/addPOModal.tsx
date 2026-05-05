@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef} from 'react';
 import { X, Search, PackagePlus } from 'lucide-react';
 import { LuPlus, LuTrash2, LuSlidersHorizontal } from 'react-icons/lu';
 import AddBrandModal from '@/app/inventory/AddBrandModal';
@@ -33,6 +33,7 @@ interface ItemRow {
   uom_name:           string;
   quantity_ordered:   number | '';
   unit_cost:          number | '';
+  selling_price:      number | '';
   expiry_date:        string;
 }
 
@@ -92,15 +93,21 @@ const FIELD_STYLE: React.CSSProperties = {
 
 // ── Factories ─────────────────────────────────────────────────────────────────
 
-const BLANK_ITEM = (): ItemRow => ({
-  inventory_brand_id: '',
-  brand_name:         '',
-  item_name:          '',
-  uom_name:           '',
-  quantity_ordered:   '',
-  unit_cost:          '',
-  expiry_date:        '',
-});
+const BLANK_ITEM = (): ItemRow => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  const expiry = d.toISOString().slice(0, 10);
+  return {
+    inventory_brand_id: '',
+    brand_name:         '',
+    item_name:          '',
+    uom_name:           '',
+    quantity_ordered:   '',
+    unit_cost:          '',
+    selling_price:      '',
+    expiry_date:        expiry,
+  };
+};
 
 const BLANK_NEW_ITEM = (): NewItemFormState => ({
   item_name:     '',
@@ -160,6 +167,10 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
   const searchTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const justPicked   = useRef<Record<number, boolean>>({});
 
+  const [qtyExceeded, setQtyExceeded]         = useState<Record<number, boolean>>({});
+  const [costExceeded, setCostExceeded]       = useState<Record<number, boolean>>({});
+  const [sellingExceeded, setSellingExceeded] = useState<Record<number, boolean>>({});
+
   // dropdown refs
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const searchInputRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -181,6 +192,9 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
     setSearchQuery({});
     setSearchResults({});
     setSearchOpen({});
+    setQtyExceeded({});
+    setCostExceeded({});
+    setSellingExceeded({});
     // Pre-fill items from reorder if provided, otherwise start blank
     if (initialItems && initialItems.length > 0) {
       setItems(initialItems.map(it => ({
@@ -190,6 +204,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
         uom_name:           it.uom_name,
         quantity_ordered:   it.quantity_ordered,
         unit_cost:          it.unit_cost,
+        selling_price:      '',
         expiry_date:        '',
       })));
       const qMap: Record<number, string> = {};
@@ -296,6 +311,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
       item_name:          result.item_name,
       uom_name:           result.uom_name,
       unit_cost:          result.item_selling_price ?? '',
+      selling_price:      result.item_selling_price ?? '',
     }));
   }
 
@@ -344,6 +360,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
         uom_name:           data.uom_name,
         quantity_ordered:   '',
         unit_cost:          Number(newItemForm.unit_cost) || '',
+        selling_price:      Number(newItemForm.selling_price) || '',
         expiry_date:        newItemForm.expiry_date || '',
       }]);
       setSearchQuery(prev => ({ ...prev, [newIdx]: `${data.item_name} — ${data.brand_name}` }));
@@ -386,7 +403,10 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
     for (const [i, row] of items.entries()) {
       if (!row.inventory_brand_id)                                    return setError(`Row ${i + 1}: select an item.`);
       if (!row.quantity_ordered || Number(row.quantity_ordered) <= 0) return setError(`Row ${i + 1}: quantity must be > 0.`);
+      if (Number(row.quantity_ordered) > 99999)                       return setError(`Row ${i + 1}: quantity cannot exceed 99,999.`);
       if (!row.unit_cost        || Number(row.unit_cost)        <= 0) return setError(`Row ${i + 1}: unit cost must be > 0.`);
+      if (Number(row.unit_cost) > 300000)                             return setError(`Row ${i + 1}: unit cost cannot exceed ₱300,000.`);
+      if (Number(row.selling_price) > 500000)                         return setError(`Row ${i + 1}: selling price cannot exceed ₱500,000.`);
     }
 
     setSubmitting(true);
@@ -401,6 +421,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
             inventory_brand_id: r.inventory_brand_id,
             quantity_ordered:   Number(r.quantity_ordered),
             unit_cost:          Number(r.unit_cost),
+            selling_price:      r.selling_price !== '' ? Number(r.selling_price) : null,
             expiry_date:        r.expiry_date || null,
           })),
         }),
@@ -415,18 +436,20 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
     }
   }
 
+  const today = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10); })();
+
   const supplierHasError = () => submitAttempted && !supplierEntries[0]?.supplier_id;
   const deliveryHasError = () => submitAttempted && !expectedDelivery;
   const rowQtyHasError   = (idx: number) => submitAttempted && (!items[idx]?.quantity_ordered || Number(items[idx]?.quantity_ordered) <= 0);
   const rowCostHasError  = (idx: number) => submitAttempted && (!items[idx]?.unit_cost || Number(items[idx]?.unit_cost) <= 0);
 
   const handleCancelClick = () => {
-  if (supplierEntries[0]?.supplierName || expectedDelivery || notes || items.some(r => r.inventory_brand_id)) {
-    setShowCancelConfirm(true);
-  } else {
-    onClose();
-  }
-};
+    if (supplierEntries[0]?.supplier_id || supplierEntries[0]?.supplierName || expectedDelivery || notes || items.some(r => r.inventory_brand_id)) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -447,7 +470,6 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
           borderRadius: '12px', overflow: 'hidden',
         }}>
 
-          {/* Header */}
           <div className={s.modalHeader} style={{
             padding: '20px 24px', backgroundColor: '#fff',
             borderBottom: '1px solid #eaeaea', flexShrink: 0,
@@ -456,31 +478,38 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
               <h2 className={s.title} style={{ fontSize: '1.2rem', marginBottom: '2px' }}>Create Purchase Order</h2>
               <p className={s.subText}>Select items, then assign a supplier and delivery date below.</p>
             </div>
+            <button
+              onClick={handleCancelClick}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: '4px', display: 'flex' }}
+            >
+              <X size={20} />
+            </button>
           </div>
 
           {/* ── Single scrollable body ── */}
           <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f9fafb', minHeight: 0 }}>
             <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-              {/* ── ITEMS CARD ── */}
+              {/* + Add New Item to Inventory */}
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px' }}>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
-                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>Items *</span>
-                  <button
-                    onClick={addRow}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600 }}
-                  >
-                    <LuPlus size={14} /> Add Row
-                  </button>
-                </div>
+              <div className="flex justify-between items-center mb-4">
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>Items *</span>
+                <button
+                  type="button"
+                  onClick={openNewItemModal}
+                  className="flex items-center gap-1"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600, padding: '4px 0' }}
+                >
+                  <PackagePlus size={14} /> + Add New Item to Inventory
+                </button>
+              </div>
 
                 {/* Table */}
-                <div style={{ overflowY: 'visible' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+                  <table style={{ width: '100%', minWidth: '860px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <thead>
                       <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                        {['Item / Brand', 'UOM', 'Qty Ordered', 'Unit Cost (₱)', 'Expiry Date', 'Subtotal', ''].map(h => (
+                        {['Item / Brand', 'UOM', 'Qty Ordered', 'Unit Cost (₱)', 'Selling Price (₱)', 'Expiry Date', 'Subtotal', ''].map(h => (
                           <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#6b7280', whiteSpace: 'nowrap' }}>
                             {h}
                           </th>
@@ -492,7 +521,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                         <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
 
                           {/* Item search */}
-                          <td style={{ padding: '8px 10px', minWidth: '220px' }}>
+                           <td style={{ padding: '8px 10px', minWidth: '220px' }}>
                             {row.inventory_brand_id ? (
                               // ── Selected state: show a pill with a clear button ──
                               <div style={{
@@ -533,20 +562,20 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                                     style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', padding: '6px 0', width: '100%', color: '#374151' }}
                                   />
                                 </div>
-                                {searchOpen[idx] && searchQuery[idx]?.trim() && (
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: 'calc(100% + 4px)',
-                                    left: 0,
-                                    minWidth: '400px',
-                                    background: '#fff',
-                                    border: '1px solid #e5e7eb',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
-                                    zIndex: 9999,          // ← high enough to escape table stacking
-                                    maxHeight: '200px',
-                                    overflowY: 'auto',
-                                  }}>
+                                {searchOpen[idx] && searchQuery[idx]?.trim() && dropdownPos && (
+                                <div style={{
+                                  position: 'fixed',      // ← was 'absolute'
+                                  top: dropdownPos.top,   // ← was 'calc(100% + 4px)'
+                                  left: dropdownPos.left, // ← was 0
+                                  width: '400px',
+                                  background: '#fff',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
+                                  zIndex: 9999,
+                                  maxHeight: '200px',
+                                  overflowY: 'auto',
+                                }}>
                                     {(() => {
                                       const pickedIds = new Set(items.map(r => r.inventory_brand_id).filter(Boolean));
                                       const filtered  = (searchResults[idx] ?? []).filter((r: any) => !pickedIds.has(r.inventory_brand_id));
@@ -613,44 +642,70 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                           {/* Qty */}
                           <td style={{ padding: '8px 10px', width: '100px' }}>
                             <input
-                              type="number" min={1} placeholder="0"
+                              type="number" min={1} max={99999} placeholder="0"
                               value={row.quantity_ordered}
-                              onChange={e => updateRow(idx, 'quantity_ordered', e.target.value === '' ? '' : Number(e.target.value))}
-                              style={{ ...FIELD_STYLE, 
-                                height: '34px', 
-                                padding: '4px 8px', 
-                                fontSize: '0.875rem', 
+                              onChange={e => {
+                                const val = e.target.value === '' ? '' : Number(e.target.value);
+                                if (val !== '' && val > 99999) {
+                                  setQtyExceeded(prev => ({ ...prev, [idx]: true }));
+                                  return;
+                                }
+                                setQtyExceeded(prev => ({ ...prev, [idx]: false }));
+                                updateRow(idx, 'quantity_ordered', val);
+                              }}
+                              style={{ ...FIELD_STYLE,
+                                height: '34px',
+                                padding: '4px 8px',
+                                fontSize: '0.875rem',
                                 textAlign: 'center', ...(rowQtyHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
                             />
+                            {qtyExceeded[idx] && (
+                              <div style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '2px', textAlign: 'center' }}>Maximum is 99,999</div>
+                            )}
                           </td>
 
-                          {/* Unit Cost */}
-                          <td style={{ padding: '8px 10px', width: '120px' }}>
-                            <input
-                              type="number" min={0} step="0.01" placeholder="0.00"
-                              value={row.unit_cost}
-                              onChange={e => updateRow(idx, 'unit_cost', e.target.value === '' ? '' : Number(e.target.value))}
-                              style={{ ...FIELD_STYLE, 
-                                height: '34px', 
-                                padding: '4px 8px', 
-                                fontSize: '0.875rem', 
-                                textAlign: 'center', ...(rowCostHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
-                            />
-                          </td>
+                             {/* ← MOVE Unit Cost here from sub-row */}
+                              <td style={{ padding: '8px 10px', width: '120px' }}>
+                                <input
+                                  type="number" min={0} max={300000} step="0.01" placeholder="0.00"
+                                  value={row.unit_cost}
+                                  onChange={e => {
+                                    const val = e.target.value === '' ? '' : Number(e.target.value);
+                                    if (val !== '' && val > 300000) { setCostExceeded(prev => ({ ...prev, [idx]: true })); return; }
+                                    setCostExceeded(prev => ({ ...prev, [idx]: false }));
+                                    updateRow(idx, 'unit_cost', val);
+                                  }}
+                                  style={{ ...FIELD_STYLE, height: '34px', padding: '4px 8px', fontSize: '0.875rem',
+                                    textAlign: 'center', ...(rowCostHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
+                                />
+                                {costExceeded[idx] && <div style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '2px', textAlign: 'center' }}>Maximum is ₱300,000</div>}
+                              </td>
+
+                              {/* ← MOVE Selling Price here from sub-row */}
+                              <td style={{ padding: '8px 10px', width: '120px' }}>
+                                <input
+                                  type="number" min={0} max={500000} step="0.01" placeholder="0.00"
+                                  value={row.selling_price}
+                                  onChange={e => {
+                                    const val = e.target.value === '' ? '' : Number(e.target.value);
+                                    if (val !== '' && val > 500000) { setSellingExceeded(prev => ({ ...prev, [idx]: true })); return; }
+                                    setSellingExceeded(prev => ({ ...prev, [idx]: false }));
+                                    updateRow(idx, 'selling_price', val);
+                                  }}
+                                  style={{ ...FIELD_STYLE, height: '34px', padding: '4px 8px', fontSize: '0.875rem', textAlign: 'center' }}
+                                />
+                                {sellingExceeded[idx] && <div style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '2px', textAlign: 'center' }}>Maximum is ₱500,000</div>}
+                              </td>
 
                           {/* Expiry Date */}
                           <td style={{ padding: '8px 10px', width: '140px' }}>
                             <input
                               type="date"
+                              min={today}
                               value={row.expiry_date}
                               onChange={e => updateRow(idx, 'expiry_date', e.target.value)}
                               style={{ ...FIELD_STYLE, height: '34px', padding: '4px 8px', fontSize: '0.875rem' }}
                             />
-                          </td>
-
-                          {/* Subtotal */}
-                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                            ₱{((Number(row.quantity_ordered) || 0) * (Number(row.unit_cost) || 0)).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                           </td>
 
                           {/* Remove */}
@@ -680,18 +735,18 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                   </table>
                 </div>
 
-                {/* + Add New Item to Inventory */}
+                 {/* ── ITEMS CARD ── */}
+                 <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px' }}>
                 <button
-                  type="button"
-                  onClick={openNewItemModal}
-                  style={{ width: '100%', marginTop: '12px', padding: '12px', border: '2px dashed #e5e7eb', borderRadius: '8px', backgroundColor: '#fff', color: '#4b5563', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                  onMouseOver={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#2563eb'; }}
-                  onMouseOut={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#4b5563'; }}
-                >
-                  <PackagePlus size={15} />
-                  + Add New Item to Inventory
-                </button>
-              </div>
+                onClick={addRow}
+                style={{ width: '100%', marginTop: '12px', padding: '12px', border: '2px dashed #e5e7eb', borderRadius: '8px', backgroundColor: '#fff', color: '#4b5563', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                onMouseOver={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#2563eb'; }}
+                onMouseOut={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#4b5563'; }}
+              >
+                <LuPlus size={15} /> Add Purchase Item
+              </button>
+            </div>
+            </div>
 
               {/* ── SUPPLIER & DELIVERY CARD ── */}
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>

@@ -16,6 +16,22 @@ from routes.dashboard import dashboard_bp
 from routes.notifications import notifications_bp
 from routes.purchases import purchases_bp
 
+def _ensure_schema():
+    from database.db_config import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            ALTER TABLE purchase_order_item
+            ADD COLUMN IF NOT EXISTS selling_price NUMERIC(12,2)
+        """)
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+_ensure_schema()
+
 app = Flask(__name__)
 CORS(app, origins=[
     "http://localhost:3000",

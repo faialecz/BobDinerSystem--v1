@@ -43,6 +43,7 @@ interface ItemRow {
   uom_name:           string;
   quantity_ordered:   number | '';
   unit_cost:          number | '';
+  selling_price:      number | '';
   expiry_date:        string;
 }
 
@@ -86,16 +87,22 @@ function toDateInputValue(raw: string | null | undefined): string {
 
 // ── Blank row factory ──────────────────────────────────────────────────────────
 
-const BLANK = (): ItemRow => ({
-  po_item_id:         null,
-  inventory_brand_id: '',
-  brand_name:         '',
-  item_name:          '',
-  uom_name:           '',
-  quantity_ordered:   '',
-  unit_cost:          '',
-  expiry_date:        '',
-});
+const BLANK = (): ItemRow => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  const expiry = d.toISOString().slice(0, 10);
+  return {
+    po_item_id:         null,
+    inventory_brand_id: '',
+    brand_name:         '',
+    item_name:          '',
+    uom_name:           '',
+    quantity_ordered:   '',
+    unit_cost:          '',
+    selling_price:      '',
+    expiry_date:        expiry,
+  };
+};
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -122,6 +129,12 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
   const [searchOpen, setSearchOpen]       = useState<Record<number, boolean>>({});
   const searchTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const justPicked   = useRef<Record<number, boolean>>({});
+  const originalValues = useRef({ supplierName: '', expectedDelivery: '', notes: '' });
+  const originalItems  = useRef<ItemRow[]>([]);
+
+  const [qtyExceeded, setQtyExceeded]         = useState<Record<number, boolean>>({});
+  const [costExceeded, setCostExceeded]       = useState<Record<number, boolean>>({});
+  const [sellingExceeded, setSellingExceeded] = useState<Record<number, boolean>>({});
 
   const isOpen = !!purchaseOrder;
 
@@ -135,9 +148,19 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
     setSupplierName(purchaseOrder.supplier_name ?? '');
     setExpectedDelivery(toDateInputValue(purchaseOrder.expected_delivery));
     setNotes(purchaseOrder.notes ?? '');
+
+     originalValues.current = {
+      supplierName:     purchaseOrder.supplier_name ?? '',
+      expectedDelivery: toDateInputValue(purchaseOrder.expected_delivery),
+      notes:            purchaseOrder.notes ?? '',
+    };
+
     setSearchQuery({});
     setSearchResults({});
     setSearchOpen({});
+    setQtyExceeded({});
+    setCostExceeded({});
+    setSellingExceeded({});
     setCurrentStatus(purchaseOrder.status ?? '');
 
     // Fetch reference data + existing items in parallel
@@ -168,10 +191,12 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
           uom_name:           it.uom_name ?? '',
           quantity_ordered:   it.quantity_ordered,
           unit_cost:          it.unit_cost,
+          selling_price:      it.selling_price ?? '',
           expiry_date:        toDateInputValue(it.expiry_date),
         }));
         setItems(rows);
-        // Build search query display for each pre-populated row
+        originalItems.current = rows.map(r => ({ ...r }));
+
         const sq: Record<number, string> = {};
         rows.forEach((r, i) => {
           sq[i] = `${r.item_name} — ${r.brand_name} (${r.uom_name})`;
@@ -211,6 +236,7 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
       item_name:          result.item_name,
       uom_name:           result.uom_name,
       unit_cost:          result.item_selling_price ?? '',
+      selling_price:      result.item_selling_price ?? '',
     }));
   }
 
@@ -249,7 +275,10 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
     for (const [i, row] of items.entries()) {
       if (!row.inventory_brand_id)                                    return setError(`Row ${i + 1}: select an item.`);
       if (!row.quantity_ordered || Number(row.quantity_ordered) <= 0) return setError(`Row ${i + 1}: quantity must be > 0.`);
+      if (Number(row.quantity_ordered) > 99999)                       return setError(`Row ${i + 1}: quantity cannot exceed 99,999.`);
       if (!row.unit_cost        || Number(row.unit_cost)        <= 0) return setError(`Row ${i + 1}: unit cost must be > 0.`);
+      if (Number(row.unit_cost) > 300000)                             return setError(`Row ${i + 1}: unit cost cannot exceed ₱300,000.`);
+      if (Number(row.selling_price) > 500000)                         return setError(`Row ${i + 1}: selling price cannot exceed ₱500,000.`);
     }
 
     setSubmitting(true);
@@ -278,6 +307,7 @@ const res = await fetch(`/api/purchases/${purchaseOrder!.purchase_order_id}`, {
             inventory_brand_id: r.inventory_brand_id,
             quantity_ordered:   Number(r.quantity_ordered),
             unit_cost:          Number(r.unit_cost),
+            selling_price:      r.selling_price !== '' ? Number(r.selling_price) : null,
             expiry_date:        r.expiry_date || null,
           })),
         }),
@@ -292,18 +322,42 @@ const res = await fetch(`/api/purchases/${purchaseOrder!.purchase_order_id}`, {
     }
   }
 
+  const today = (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0, 10); })();
+
   const supplierHasError = () => submitAttempted && !supplierId;
   const deliveryHasError = () => submitAttempted && !expectedDelivery;
   const rowQtyHasError   = (idx: number) => submitAttempted && (!items[idx]?.quantity_ordered || Number(items[idx]?.quantity_ordered) <= 0);
   const rowCostHasError  = (idx: number) => submitAttempted && (!items[idx]?.unit_cost || Number(items[idx]?.unit_cost) <= 0);
 
-  const handleCancelClick = () => {
-  if (supplierName || expectedDelivery || notes || items.some(r => r.inventory_brand_id)) {
-    setShowCancelConfirm(true);
-  } else {
-    onClose();
-  }
-};
+const handleCancelClick = () => {
+    const itemsDirty =
+      items.length !== originalItems.current.length ||
+      items.some((row, i) => {
+        const orig = originalItems.current[i];
+        if (!orig) return true;
+        return (
+          row.inventory_brand_id !== orig.inventory_brand_id ||
+          Number(row.quantity_ordered) !== Number(orig.quantity_ordered) ||
+          Number(row.unit_cost)        !== Number(orig.unit_cost)        ||
+          Number(row.selling_price)    !== Number(orig.selling_price)    ||
+          row.expiry_date              !== orig.expiry_date              ||
+          row.uom_name                 !== orig.uom_name
+        );
+      });
+
+    const isDirty =
+      supplierName     !== originalValues.current.supplierName ||
+      expectedDelivery !== originalValues.current.expectedDelivery ||
+      notes            !== originalValues.current.notes ||
+      currentStatus    !== purchaseOrder!.status ||
+      itemsDirty;
+
+    if (isDirty) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -352,18 +406,13 @@ const res = await fetch(`/api/purchases/${purchaseOrder!.purchase_order_id}`, {
               <div style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px' }}>
                   <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>Items *</span>
-                  <button
-                    onClick={addRow}
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontSize: '0.85rem', fontWeight: 600 }}
-                  >
-                    <LuPlus size={14} /> Add Row
-                  </button>
                 </div>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: '860px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                      {['Item / Brand', 'UOM', 'Qty Ordered', 'Unit Cost (₱)', 'Expiry Date', 'Subtotal', ''].map(h => (
+                      {['Item / Brand', 'UOM', 'Qty Ordered', 'Unit Cost (₱)', 'Selling Price (₱)', 'Expiry Date', 'Subtotal', ''].map(h => (
                         <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: '#6b7280', whiteSpace: 'nowrap' }}>
                           {h}
                         </th>
@@ -472,35 +521,83 @@ const res = await fetch(`/api/purchases/${purchaseOrder!.purchase_order_id}`, {
                         {/* Qty */}
                         <td style={{ padding: '8px 10px', width: '100px' }}>
                           <input
-                            type="number" min={1} placeholder="0"
+                            type="number" min={1} max={99999} placeholder="0"
                             value={row.quantity_ordered}
-                            onChange={e => updateRow(idx, 'quantity_ordered', e.target.value === '' ? '' : Number(e.target.value))}
-                            style={{ ...FIELD, 
-                              height: '34px', 
-                              padding: '4px 8px', 
-                              fontSize: '0.875rem', 
+                            onChange={e => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              if (val !== '' && val > 99999) {
+                                setQtyExceeded(prev => ({ ...prev, [idx]: true }));
+                                return;
+                              }
+                              setQtyExceeded(prev => ({ ...prev, [idx]: false }));
+                              updateRow(idx, 'quantity_ordered', val);
+                            }}
+                            style={{ ...FIELD,
+                              height: '34px',
+                              padding: '4px 8px',
+                              fontSize: '0.875rem',
                               textAlign: 'center', ...(rowQtyHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
                           />
+                          {qtyExceeded[idx] && (
+                            <div style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '2px', textAlign: 'center' }}>Maximum is 99,999</div>
+                          )}
                         </td>
 
                         {/* Unit Cost */}
                         <td style={{ padding: '8px 10px', width: '120px' }}>
                           <input
-                            type="number" min={0} step="0.01" placeholder="0.00"
+                            type="number" min={0} max={300000} step="0.01" placeholder="0.00"
                             value={row.unit_cost}
-                            onChange={e => updateRow(idx, 'unit_cost', e.target.value === '' ? '' : Number(e.target.value))}
-                            style={{ ...FIELD, 
-                              height: '34px', 
-                              padding: '4px 8px', 
-                              fontSize: '0.875rem', 
+                            onChange={e => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              if (val !== '' && val > 300000) {
+                                setCostExceeded(prev => ({ ...prev, [idx]: true }));
+                                return;
+                              }
+                              setCostExceeded(prev => ({ ...prev, [idx]: false }));
+                              updateRow(idx, 'unit_cost', val);
+                            }}
+                            style={{ ...FIELD,
+                              height: '34px',
+                              padding: '4px 8px',
+                              fontSize: '0.875rem',
                               textAlign: 'center', ...(rowCostHasError(idx) ? { border: '1px solid #f87171' } : {}) }}
                           />
+                          {costExceeded[idx] && (
+                            <div style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '2px', textAlign: 'center' }}>Maximum is ₱300,000</div>
+                          )}
+                        </td>
+
+                        {/* Selling Price */}
+                        <td style={{ padding: '8px 10px', width: '120px' }}>
+                          <input
+                            type="number" min={0} max={500000} step="0.01" placeholder="0.00"
+                            value={row.selling_price}
+                            onChange={e => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              if (val !== '' && val > 500000) {
+                                setSellingExceeded(prev => ({ ...prev, [idx]: true }));
+                                return;
+                              }
+                              setSellingExceeded(prev => ({ ...prev, [idx]: false }));
+                              updateRow(idx, 'selling_price', val);
+                            }}
+                            style={{ ...FIELD,
+                              height: '34px',
+                              padding: '4px 8px',
+                              fontSize: '0.875rem',
+                              textAlign: 'center' }}
+                          />
+                          {sellingExceeded[idx] && (
+                            <div style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '2px', textAlign: 'center' }}>Maximum is ₱500,000</div>
+                          )}
                         </td>
 
                         {/* Expiry */}
                         <td style={{ padding: '8px 10px', width: '140px' }}>
                           <input
                             type="date"
+                            min={today}
                             value={row.expiry_date}
                             onChange={e => updateRow(idx, 'expiry_date', e.target.value)}
                             style={{ ...FIELD, height: '34px', padding: '4px 8px', fontSize: '0.875rem' }}
@@ -537,6 +634,16 @@ const res = await fetch(`/api/purchases/${purchaseOrder!.purchase_order_id}`, {
                     </tr>
                   </tfoot>
                 </table>
+                </div>
+                
+                <button
+                    onClick={addRow}
+                    style={{ width: '100%', marginTop: '12px', padding: '12px', border: '2px dashed #e5e7eb', borderRadius: '8px', backgroundColor: '#fff', color: '#4b5563', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    onMouseOver={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.color = '#2563eb'; }}
+                    onMouseOut={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#4b5563'; }}
+                  >
+                    <LuPlus size={15} /> Add Row
+                  </button>
               </div>
 
               {/* ── SUPPLIER & DELIVERY CARD ── */}
