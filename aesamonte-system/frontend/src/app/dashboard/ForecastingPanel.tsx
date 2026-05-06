@@ -15,6 +15,17 @@ interface ForecastItem {
   days_until_stockout: number;
   suggested_reorder_qty: number;
   stockout_date: string;
+  inventory_brand_id: number;
+  unit_cost: number;
+}
+
+interface ReorderPayload {
+  inventory_brand_id: number;
+  item_name: string;
+  brand_name: string;
+  uom_name: string;
+  quantity_ordered: number;
+  unit_cost: number;
 }
 
 function stockPct(item: ForecastItem): number {
@@ -44,7 +55,7 @@ function EmptyState({ slide }: { slide: "reorder" | "stockout" }) {
 }
 
 // ── Smart Reorder card ───────────────────────────────────────────────────────
-function ReorderCard({ item }: { item: ForecastItem }) {
+function ReorderCard({ item, onCreatePO }: { item: ForecastItem; onCreatePO?: (payload: ReorderPayload) => void }) {
   const target30d = Math.round(item.daily_rate * 30);
 
   return (
@@ -80,8 +91,18 @@ function ReorderCard({ item }: { item: ForecastItem }) {
       </div>
 
       {/* CTA */}
-      <button className={styles.draftPoBtn}>
-        Draft PO: {item.suggested_reorder_qty} {item.uom}
+      <button
+        className={styles.draftPoBtn}
+        onClick={() => onCreatePO?.({
+          inventory_brand_id: item.inventory_brand_id,
+          item_name:          item.item_name,
+          brand_name:         item.brand,
+          uom_name:           item.uom,
+          quantity_ordered:   item.suggested_reorder_qty,
+          unit_cost:          item.unit_cost,
+        })}
+      >
+        Create Purchase Order
       </button>
       <p className={styles.draftPoNote}>
         Provides 30 days of coverage based on current velocity.
@@ -92,30 +113,57 @@ function ReorderCard({ item }: { item: ForecastItem }) {
 
 // ── Stock-Out Prediction card ────────────────────────────────────────────────
 function StockOutCard({ item }: { item: ForecastItem }) {
+  const isOutOfStock   = item.current_stock <= 0;
+  const hasVelocity    = item.daily_rate > 0;
+  const daysLeft       = hasVelocity ? Math.floor(item.current_stock / item.daily_rate) : Infinity;
+
   const pct = stockPct(item);
-  const fillClass = item.days_until_stockout < 7
+  const fillClass = isOutOfStock
     ? styles.stockFillRed
-    : item.days_until_stockout < 15
+    : !hasVelocity
+    ? styles.stockFillGreen
+    : daysLeft < 7
+    ? styles.stockFillRed
+    : daysLeft < 15
     ? styles.stockFillAmber
     : styles.stockFillGreen;
 
+  // Hero display
+  let heroLabel: string;
+  let heroBadge: React.ReactNode;
+  if (isOutOfStock) {
+    heroLabel = "Out of Stock";
+    heroBadge = (
+      <span className={`${styles.stockoutHeroDays} ${styles.urgencyRed}`}>
+        Restock Immediately
+      </span>
+    );
+  } else if (!hasVelocity) {
+    heroLabel = "Stocked";
+    heroBadge = (
+      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>No recent consumption</span>
+    );
+  } else {
+    heroLabel = item.stockout_date;
+    heroBadge = (
+      <span className={`${styles.stockoutHeroDays} ${urgencyClass(daysLeft)}`}>
+        {daysLeft} Days Left
+      </span>
+    );
+  }
+
   return (
     <div className={styles.insightCard}>
-      {/* fix 4: product name + SKU badge, vertically centered */}
       <div className={styles.insightProductRow}>
         <p className={styles.insightProductName}>{item.item_name}</p>
         {item.sku && <span className={styles.insightSkuBadge}>SKU: {item.sku}</span>}
       </div>
 
-      {/* fix 3: date is the hero, days badge sits below it */}
       <div>
-        <p className={styles.stockoutHeroDate}>{item.stockout_date}</p>
-        <span className={`${styles.stockoutHeroDays} ${urgencyClass(item.days_until_stockout)}`}>
-          {item.days_until_stockout} Days Left
-        </span>
+        <p className={styles.stockoutHeroDate}>{heroLabel}</p>
+        {heroBadge}
       </div>
 
-      {/* fix 2: progress bar lives INSIDE the data box, under Current Stock */}
       <div className={styles.aiAnalysisBox}>
         <div className={styles.aiAnalysisRow}>
           <span>Current Stock</span>
@@ -127,11 +175,10 @@ function StockOutCard({ item }: { item: ForecastItem }) {
         <p className={styles.stockProgressInlineLabel}>{pct}% remaining</p>
         <div className={styles.aiAnalysisRow}>
           <span>Avg. Daily Consumption</span>
-          <span>{item.daily_rate} / day</span>
+          <span>{item.daily_rate > 0 ? `${item.daily_rate} / day` : '—'}</span>
         </div>
       </div>
 
-      {/* fix 5: distinct right-aligned action link pushed to bottom */}
       <div className={styles.restockRow}>
         <button className={styles.restockLink}>Review Supplier →</button>
       </div>
@@ -140,7 +187,7 @@ function StockOutCard({ item }: { item: ForecastItem }) {
 }
 
 // ── Panel ────────────────────────────────────────────────────────────────────
-export default function ForecastingPanel() {
+export default function ForecastingPanel({ onCreatePO }: { onCreatePO?: (payload: ReorderPayload) => void } = {}) {
   const [items, setItems]       = useState<ForecastItem[]>([]);
   const [loading, setLoading]   = useState(true);
   const [slideIndex, setSlideIndex] = useState(0);  // 0=Reorder, 1=StockOut
@@ -164,7 +211,7 @@ export default function ForecastingPanel() {
         ? <div className={styles.skeletonBlock} />
         : totalItems === 0
         ? <EmptyState slide="reorder" />
-        : currentItem && <ReorderCard item={currentItem} />,
+        : currentItem && <ReorderCard item={currentItem} onCreatePO={onCreatePO} />,
     },
     {
       title: "Stock-Out Prediction",

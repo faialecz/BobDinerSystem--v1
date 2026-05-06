@@ -128,7 +128,7 @@ export default function Home() {
           />
           <div className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#F8F3D9] p-0`}>
             {activeTab === "Dashboard" ? (
-              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTabPersisted} />
+              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTabPersisted} onCreatePO={(item) => { setReorderItem(item); setActiveTabPersisted('Purchases'); }} />
             ) : activeTab === "Inventory" ? (
               <Inventory role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Inventory' ? pendingSearch.term : ''} permissions={userInfo.permissions?.inventory} initialViewId={viewTarget?.tab === 'Inventory' ? viewTarget.id : undefined} onViewOpened={() => setViewTarget(null)} />
             ) : activeTab === "Sales" ? (

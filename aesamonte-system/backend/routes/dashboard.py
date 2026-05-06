@@ -686,20 +686,24 @@ def get_dashboard_insights():
         for row in reorder_rows:
             inv_id, name, sku, brand, qty, reorder_qty, units_sold_30d, uom, description = row
             forecast_demand, daily_rate = _item_forecast_30d(inv_id, float(units_sold_30d))
-            safety_stock   = round(daily_rate * 7) if daily_rate > 0 else round(int(reorder_qty) * 0.2)
-            recommended    = max(forecast_demand + safety_stock - int(qty), int(reorder_qty))
+            # Clamp 30-day target: velocity forecast OR reorder point, whichever is higher.
+            # Prevents slow/new items from getting a 0-unit target.
+            min_floor       = int(reorder_qty) if reorder_qty else 0
+            thirty_day_target = max(forecast_demand, min_floor)
+            safety_stock    = round(daily_rate * 7) if daily_rate > 0 else round(min_floor * 0.2)
+            recommended     = max(thirty_day_target + safety_stock - int(qty), 0)
             reorder_suggestions.append({
-                "inventory_id":   inv_id,
-                "item_name":      name,
-                "sku":            sku or f"SKU{inv_id:06d}",
-                "brand":          brand or "",
-                "description":    description or "",
-                "uom":            uom,
-                "current_qty":    int(qty),
-                "forecast_demand": forecast_demand,
-                "safety_stock":   safety_stock,
+                "inventory_id":    inv_id,
+                "item_name":       name,
+                "sku":             sku or f"SKU{inv_id:06d}",
+                "brand":           brand or "",
+                "description":     description or "",
+                "uom":             uom,
+                "current_qty":     int(qty),
+                "forecast_demand": thirty_day_target,
+                "safety_stock":    safety_stock,
                 "recommended_qty": recommended,
-                "note":           "Restock to meet forecasted demand",
+                "note":            "Restock to meet forecasted demand",
             })
 
         # ── Stockout predictions ───────────────────────────────────────────
@@ -1047,7 +1051,9 @@ def get_inventory_forecast():
                     COALESCE(MIN(b.brand_name), '')               AS brand,
                     COALESCE(SUM(bat.quantity_on_hand), 0)::float AS current_stock,
                     COALESCE(SUM(s.units_sold), 0)::float         AS units_sold_30d,
-                    COALESCE(MIN(ia.low_stock_qty), 10)::float    AS low_stock_qty
+                    COALESCE(MIN(ia.low_stock_qty), 10)::float    AS low_stock_qty,
+                    COALESCE(MIN(ib.inventory_brand_id), 0)       AS inventory_brand_id,
+                    COALESCE(AVG(bat.unit_cost), 0)               AS avg_unit_cost
                 FROM inventory i
                 JOIN inventory_brand    ib  ON ib.inventory_id       = i.inventory_id
                 LEFT JOIN inventory_action  ia  ON ia.inventory_brand_id = ib.inventory_brand_id
@@ -1091,7 +1097,9 @@ def get_inventory_forecast():
                     CASE WHEN units_sold_30d > 0
                          THEN (units_sold_30d / 30.0) * 30 - current_stock
                          ELSE low_stock_qty - current_stock END
-                ))::int                                                         AS suggested_reorder_qty
+                ))::int                                                         AS suggested_reorder_qty,
+                inventory_brand_id,
+                avg_unit_cost
             FROM item_stats
             ORDER BY
                 CASE WHEN current_stock = 0 THEN 0 ELSE 1 END ASC,
@@ -1122,6 +1130,8 @@ def get_inventory_forecast():
                 "days_until_stockout":   days,
                 "suggested_reorder_qty": int(r[7]),
                 "stockout_date":         stockout_date,
+                "inventory_brand_id":    int(r[8]),
+                "unit_cost":             float(r[9]),
             })
         return jsonify(items), 200
 

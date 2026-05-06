@@ -34,15 +34,25 @@ interface LowStockItem {
   supplier_name?: string;
 }
 
+interface ReorderPayload {
+  inventory_brand_id: number;
+  item_name: string;
+  brand_name: string;
+  uom_name: string;
+  quantity_ordered: number;
+  unit_cost: number;
+}
+
 interface DashboardProps {
   role?: string;
   onLogout: () => void;
   onNavigate?: (tab: string) => void;
+  onCreatePO?: (payload: ReorderPayload) => void;
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-export default function Dashboard({ role = "Admin", onLogout, onNavigate }: DashboardProps) {
+export default function Dashboard({ role = "Admin", onLogout, onNavigate, onCreatePO }: DashboardProps) {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [charts, setCharts] = useState<ChartsData | null>(null);
@@ -170,7 +180,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
 
           {/* Left column */}
           <div className={styles.column}>
-            <ForecastingPanel />
+            <ForecastingPanel onCreatePO={onCreatePO} />
             <ForecastRevenuePanel />
           </div>
 

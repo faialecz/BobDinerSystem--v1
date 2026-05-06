@@ -203,7 +203,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
         item_name:          it.item_name,
         uom_name:           it.uom_name,
         quantity_ordered:   it.quantity_ordered,
-        unit_cost:          it.unit_cost,
+        unit_cost:          it.unit_cost ?? '',
         selling_price:      '',
         expiry_date:        '',
       })));
@@ -668,7 +668,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                               <td style={{ padding: '8px 10px', width: '120px' }}>
                                 <input
                                   type="number" min={0} max={300000} step="0.01" placeholder="0.00"
-                                  value={row.unit_cost}
+                                  value={row.unit_cost ?? ''}
                                   onChange={e => {
                                     const val = e.target.value === '' ? '' : Number(e.target.value);
                                     if (val !== '' && val > 300000) { setCostExceeded(prev => ({ ...prev, [idx]: true })); return; }
