@@ -7,23 +7,28 @@ reports_bp = Blueprint("reports", __name__)
 def parse_dates():
     """
     Pull start_date / end_date from query-string.
-    start_date: if missing, no lower bound (use 2000-01-01 as floor).
-    end_date:   if missing, defaults to today (open-ended).
+    - start only  → exact day  (end = start)
+    - start + end → inclusive range
+    Uses >= start AND < end+1 so timestamp columns are fully covered.
     """
-    today     = date.today()
     start_str = request.args.get("start_date")
     end_str   = request.args.get("end_date")
+    today     = date.today()
     try:
         start = date.fromisoformat(start_str) if start_str else date(2000, 1, 1)
     except ValueError:
         start = date(2000, 1, 1)
     try:
-        end = date.fromisoformat(end_str) if end_str else today
+        # if no end_date, use start so it's an exact-day filter
+        end = date.fromisoformat(end_str) if end_str else start
     except ValueError:
-        end = today
+        end = start
     if start > end:
         start, end = end, start
-    return start, end
+    # +1 day so "col >= start AND col < end_excl" covers the full end day
+    end_excl = end + timedelta(days=1)
+    print(f"[parse_dates] start={start}, end={end}, end_excl={end_excl}")
+    return start, end_excl
 
 
 def _fetch_action_map(cur):
@@ -258,25 +263,34 @@ def report_product_performance():
         end_str   = request.args.get("end_date")
         if start_str or end_str:
             start, end = parse_dates()
-            date_filter = "AND st.sales_date BETWEEN %s AND %s"
-            # date_added subquery params (start, end) + sales filter params (start, end)
-            params: tuple = (start, end, start, end)
-            date_added_subquery = f"""(SELECT MIN(b2.date_created) FROM inventory_batch b2
-                 WHERE b2.inventory_brand_id = ib.inventory_brand_id
-                   AND b2.date_created BETWEEN %s AND %s)"""
+            # Filter by date_added (MIN batch date_created) within the date range
+            date_filter = ""
+            params: tuple = (start, end)
+            date_added_subquery = """(SELECT MIN(b2.date_created) FROM inventory_batch b2
+                 WHERE b2.inventory_brand_id = ib.inventory_brand_id)"""
+            date_added_where = "AND (SELECT MIN(b2.date_created) FROM inventory_batch b2 WHERE b2.inventory_brand_id = ib.inventory_brand_id) >= %s AND (SELECT MIN(b2.date_created) FROM inventory_batch b2 WHERE b2.inventory_brand_id = ib.inventory_brand_id) < %s"
+            print(f"[product-performance] filtering date_added >= {start} AND < {end}")
         else:
             date_filter = ""
             params = ()
             date_added_subquery = """(SELECT MIN(b2.date_created) FROM inventory_batch b2
                  WHERE b2.inventory_brand_id = ib.inventory_brand_id)"""
+            date_added_where = ""
 
-        # Diagnostic: check what's in order_details
+        # Diagnostic: check what's in order_details and what dates exist
         cur.execute("""
             SELECT COUNT(*), COUNT(batch_id), COALESCE(SUM(order_quantity),0), COALESCE(SUM(order_total),0)
             FROM order_details WHERE is_archived IS NOT TRUE
         """)
         diag = cur.fetchone()
         print(f"[product-performance] order_details: rows={diag[0]}, with_batch={diag[1]}, qty={diag[2]}, revenue={diag[3]}")
+
+        # Show actual date range in sales_transaction
+        cur.execute("SELECT MIN(sales_date), MAX(sales_date) FROM sales_transaction")
+        date_range = cur.fetchone()
+        print(f"[product-performance] sales_transaction date range: {date_range[0]} → {date_range[1]}")
+        if start_str or end_str:
+            print(f"[product-performance] filtering date_added >= {start} AND < {end}")
 
         cur.execute(f"""
             SELECT
@@ -289,7 +303,8 @@ def report_product_performance():
                 COALESCE(sales.cogs, 0)                                               AS cogs,
                 (COALESCE(sales.qty_sold, 0) * COALESCE(ib.item_selling_price, 0))
                     - COALESCE(sales.cogs, 0)                                         AS net_profit,
-                {date_added_subquery}                                                 AS date_added,                i.inventory_id                                                        AS inventory_id,
+                {date_added_subquery}                                                 AS date_added,
+                i.inventory_id                                                        AS inventory_id,
                 ib.inventory_brand_id                                                 AS inventory_brand_id
             FROM inventory_brand ib
             JOIN  inventory        i   ON i.inventory_id  = ib.inventory_id
@@ -307,12 +322,12 @@ def report_product_performance():
                 JOIN order_transaction ot ON ot.order_id = od.order_id
                 JOIN sales_transaction st ON st.order_id = ot.order_id
                 WHERE od.is_archived IS NOT TRUE
-                  {date_filter}
                 GROUP BY bat.inventory_brand_id
             ) sales ON sales.inventory_brand_id = ib.inventory_brand_id
             WHERE ss_i.status_code != 'INACTIVE'
               AND ss_b.status_code != 'ARCHIVED'
               AND COALESCE(sales.qty_sold, 0) > 0
+              {date_added_where}
             GROUP BY i.item_name, b.brand_name, ib.item_sku, u.uom_name,
                      sales.qty_sold, sales.cogs, ib.item_selling_price, i.inventory_id, ib.inventory_brand_id
             ORDER BY net_profit DESC
@@ -370,11 +385,13 @@ def report_inventory_valuation():
         if val_params:
             date_where = """
               AND (SELECT MIN(b2.date_created) FROM inventory_batch b2
-                   WHERE b2.inventory_brand_id = ib.inventory_brand_id) BETWEEN %s AND %s
+                   WHERE b2.inventory_brand_id = ib.inventory_brand_id) >= %s
+              AND (SELECT MIN(b2.date_created) FROM inventory_batch b2
+                   WHERE b2.inventory_brand_id = ib.inventory_brand_id) < %s
             """
             date_added_subquery = f"""(SELECT MIN(b2.date_created) FROM inventory_batch b2
                  WHERE b2.inventory_brand_id = ib.inventory_brand_id
-                   AND b2.date_created BETWEEN %s AND %s)"""
+                   AND b2.date_created >= %s AND b2.date_created < %s)"""
 
         cur.execute(f"""
             SELECT
@@ -495,20 +512,38 @@ def report_stock_ageing():
     cur  = conn.cursor()
     try:
         today = date.today()
-        start_str = request.args.get("start_date")
-        end_str   = request.args.get("end_date")
-        date_filter = ""
+        start_str  = request.args.get("start_date")
+        end_str    = request.args.get("end_date")
+        date_field = request.args.get("date_field", "last_sale_date")  # last_sale_date | earliest_expiry | date_added
+
+        date_filter      = ""
         sale_date_filter = ""
+        expiry_filter    = ""
+        date_added_filter = ""
         params: tuple = ()
+
         if start_str or end_str:
             try:
                 start = date.fromisoformat(start_str) if start_str else date(2000, 1, 1)
-                end   = date.fromisoformat(end_str)   if end_str   else today
+                end   = date.fromisoformat(end_str) if end_str else start
             except ValueError:
-                start, end = date(2000, 1, 1), today
-            date_filter = "AND bat.date_created BETWEEN %s AND %s"
-            sale_date_filter = "AND st.sales_date BETWEEN %s AND %s"
-            params = (start, end, start, end)
+                start = date(2000, 1, 1); end = start
+            if start > end:
+                start, end = end, start
+            end_excl = end + timedelta(days=1)
+            print(f"[stock-ageing] date_field={date_field}, filtering >= {start} AND < {end_excl}")
+
+            if date_field == "date_added":
+                date_filter = "AND bat.date_created >= %s AND bat.date_created < %s"
+                params = (start, end_excl, start, end_excl)  # date_filter + sale_date_filter (sale unused but keeps tuple shape)
+                sale_date_filter = ""
+                params = (start, end_excl)  # only date_filter needs params
+            elif date_field == "earliest_expiry":
+                expiry_filter = "AND bat.expiry_date >= %s AND bat.expiry_date < %s"
+                params = (start, end_excl)
+            else:  # last_sale_date (default)
+                sale_date_filter = "AND st.sales_date >= %s AND st.sales_date < %s"
+                params = (start, end_excl)
 
         cur.execute(f"""
             SELECT
@@ -543,6 +578,7 @@ def report_stock_ageing():
                     WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'ARCHIVED'
                 )
                 {date_filter}
+                {expiry_filter}
             LEFT JOIN LATERAL (
                 SELECT unit_cost FROM inventory_batch
                 WHERE inventory_brand_id = ib.inventory_brand_id
@@ -767,8 +803,13 @@ def report_customer_sales():
         cs_params: tuple = ()
         if start_str or end_str:
             start, end = parse_dates()
-            date_clause = "AND ot.order_date BETWEEN %s AND %s"
+            date_clause = "AND ot.order_date >= %s AND ot.order_date < %s"
             cs_params = (start, end)
+            # Diagnostic
+            cur.execute("SELECT MIN(order_date), MAX(order_date) FROM order_transaction")
+            dr = cur.fetchone()
+            print(f"[customer-sales] order_transaction date range: {dr[0]} → {dr[1]}")
+            print(f"[customer-sales] filtering: order_date >= {start} AND order_date < {end}")
 
         cur.execute(f"""
             SELECT
