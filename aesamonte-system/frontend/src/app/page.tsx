@@ -72,11 +72,12 @@ export default function Home() {
   useEffect(() => {
     function handleNavigate(e: Event) {
       const detail = (e as CustomEvent).detail ?? {};
-      const { tab, search, view_inventory_id, view_po_id } = detail;
+      const { tab, search, view_inventory_id, view_po_id, reorder_tab } = detail;
       setActiveTabPersisted(tab);
       setPendingSearch({ tab, term: search ?? '' });
       if (view_inventory_id != null) setViewTarget({ tab: 'Inventory', id: String(view_inventory_id) });
       else if (view_po_id != null)   setViewTarget({ tab: 'Purchases', id: String(view_po_id) });
+      else if (reorder_tab != null)  setViewTarget({ tab: 'Reports', id: String(reorder_tab) });
       else                           setViewTarget(null);
     }
     window.addEventListener('app:navigate', handleNavigate);
@@ -134,7 +135,7 @@ export default function Home() {
             ) : activeTab === "Orders" ? (
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} permissions={userInfo.permissions?.orders} />
             ) : activeTab === "Reports" ? (
-              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} onNavigate={(tab, item?) => {
+              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} initialTab={viewTarget?.tab === 'Reports' ? viewTarget.id as TabKey : undefined} onViewOpened={() => setViewTarget(null)} onNavigate={(tab, item?) => {
                 setActiveTabPersisted(tab);
                 if (typeof item === 'string') setViewTarget({ tab, id: item });
                 else if (item) setReorderItem(item);

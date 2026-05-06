@@ -33,8 +33,11 @@ type Supplier = {
   supplier_address: string;
   paymentTerms?: string;
   is_archived?: boolean;
+  status_code?: string;
+  status?: string;
   created_at?: string;
   date_added?: string | null;
+  inactive_date?: string | null;
 };
 
 type SortKey = keyof Supplier;
@@ -111,7 +114,7 @@ export default function Suppliers({
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedSupplierForView, setSelectedSupplierForView] = useState<Supplier | null>(null);
   const [showSupplierItems, setShowSupplierItems] = useState(false);
-  const [supplierItems, setSupplierItems] = useState<{ item_name: string; brand_name: string; sku: string; inventory_id: number }[]>([]);
+  const [supplierItems, setSupplierItems] = useState<{ item_name: string; brand_name: string; sku: string; inventory_id: number; inventory_brand_id: number }[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
 
   // --- CREATE MODAL STATE ---
@@ -139,8 +142,7 @@ export default function Suppliers({
     direction: 'asc' | 'desc' | null;
   }>({ key: null, direction: null });
 
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo,   setDateTo]   = useState('');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Inactive'>('All');
 
   /* ================= FETCH ================= */
 
@@ -217,7 +219,8 @@ export default function Suppliers({
         editFormData.contact_person   !== editOriginalData.contact_person   ||
         editFormData.supplier_contact !== editOriginalData.supplier_contact ||
         editFormData.supplier_email   !== editOriginalData.supplier_email   ||
-        (editFormData.paymentTerms    !== editOriginalData.paymentTerms)
+        (editFormData.paymentTerms    !== editOriginalData.paymentTerms)    ||
+        editFormData.status_code      !== editOriginalData.status_code
       );
     };
 
@@ -354,6 +357,10 @@ export default function Suppliers({
       });
       const data = await response.json();
       if (response.ok) {
+        // If status changed, toggle it via the archive endpoint
+        if (editFormData.status_code !== editOriginalData?.status_code) {
+          await fetch(`/api/suppliers/archive/${editFormData.supplier_id}`, { method: 'PUT' });
+        }
         await fetchSuppliers();
         handleCloseEditModal();
         setToastMessage(data.message || 'Supplier updated successfully!');
@@ -377,7 +384,9 @@ export default function Suppliers({
       if (response.ok) {
         const apiData = await response.json();
         setSuppliers(prev =>
-          prev.map(sup => sup.supplier_id === id ? { ...sup, is_archived: apiData.is_archived } : sup)
+          prev.map(sup => sup.supplier_id === id
+            ? { ...sup, is_archived: false, status_code: apiData.is_archived ? 'INACTIVE' : 'ACTIVE', status: apiData.is_archived ? 'Inactive' : 'Active' }
+            : sup)
         );
         setToastMessage(apiData.message);
         setIsError(false);
@@ -394,6 +403,18 @@ export default function Suppliers({
       setIsError(true);
       setShowToast(true);
     }
+  };
+
+  const handleToggleStatusFromView = async () => {
+    if (!selectedSupplierForView) return;
+    await handleToggleArchive(selectedSupplierForView.supplier_id);
+    const nowInactive = selectedSupplierForView.status_code !== 'INACTIVE';
+    setSelectedSupplierForView({
+      ...selectedSupplierForView,
+      is_archived:  nowInactive,
+      status_code:  nowInactive ? 'INACTIVE' : 'ACTIVE',
+      status:       nowInactive ? 'Inactive' : 'Active',
+    });
   };
 
   const handleSort = (key: SortKey, direction: 'asc' | 'desc') => {
@@ -577,16 +598,13 @@ export default function Suppliers({
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return suppliers.filter(sup => {
-      const matchesArchiveView = isArchiveView ? Boolean(sup.is_archived) : !sup.is_archived;
-      const matchesDate = (() => {
-        if (!dateFrom && !dateTo) return true;
-        const d = sup.created_at ? sup.created_at.slice(0, 10) : '';
-        if (!d) return false;
-        if (dateFrom && d < dateFrom) return false;
-        if (dateTo   && d > dateTo)   return false;
-        return true;
-      })();
-      return matchesArchiveView && matchesDate && (
+      // Archive view shows only truly archived (handled by backend — not returned in main list)
+      // Main view shows both Active and Inactive
+      if (isArchiveView) return false; // archive view handled separately
+      const matchesStatus = statusFilter === 'All' ? true
+        : statusFilter === 'Active'   ? sup.status_code === 'ACTIVE'
+        : sup.status_code === 'INACTIVE';
+      return matchesStatus && (
         sup.supplier_id.toString().includes(term) ||
         (sup.supplier_name || '').toLowerCase().includes(term) ||
         (sup.contact_person || '').toLowerCase().includes(term) ||
@@ -595,7 +613,7 @@ export default function Suppliers({
         (sup.supplier_address || '').toLowerCase().includes(term)
       );
     });
-  }, [suppliers, searchTerm, isArchiveView, dateFrom, dateTo]);
+  }, [suppliers, searchTerm, isArchiveView, statusFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -648,30 +666,7 @@ export default function Suppliers({
     return pages;
   };
 
-  if (false) return (
-  <div className={s.container}>
-    <TopHeader role={role} onLogout={onLogout} />
-    <div className={s.mainContent}>
-      <div style={{ background: 'white', border: '0.5px solid #e5e7eb', borderRadius: 12, padding: '1.1rem 1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div className={s.skeleton} style={{ width: 130, height: 24 }} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[34, 200, 60].map((w, i) => (
-              <div key={i} className={s.skeleton} style={{ width: w, height: 34, borderRadius: 6 }} />
-            ))}
-          </div>
-        </div>
-        {[0,1,2,3,4,5,6,7].map(i => (
-          <div key={i} style={{ display: 'flex', gap: 14, padding: '10px 0', borderBottom: '0.5px solid #e5e7eb' }}>
-            {[40, 200, 150, 120, 160, 180, 30].map((w, j) => (
-              <div key={j} className={s.skeleton} style={{ width: w, height: 12, borderRadius: 4, flexShrink: 0 }} />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
+  if (false) { /* dead skeleton block removed */ }
 
   const columns: { label: string; key: SortKey }[] = [
     { label: 'ID',             key: 'supplier_id' },
@@ -679,7 +674,7 @@ export default function Suppliers({
     { label: 'CONTACT PERSON', key: 'contact_person' },
     { label: 'CONTACT NUMBER', key: 'supplier_contact' },
     { label: 'EMAIL',          key: 'supplier_email' },
-    { label: 'ADDRESS',        key: 'supplier_address' }
+    { label: 'ADDRESS',        key: 'supplier_address' },
   ];
 
   /* ================= RENDER ================= */
@@ -722,20 +717,21 @@ export default function Suppliers({
                 <button className={s.archiveIconBtn} onClick={() => setIsArchiveView(true)} title="View Archives">
                   <LuArchive size={20} />
                 </button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input type="date" value={dateFrom} max={dateTo || undefined}
-                    onChange={e => { setDateFrom(e.target.value); setCurrentPage(1); }}
-                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', color: '#1e293b', background: '#f8fafc', cursor: 'pointer' }} />
-                  <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>–</span>
-                  <input type="date" value={dateTo} min={dateFrom || undefined}
-                    onChange={e => { setDateTo(e.target.value); setCurrentPage(1); }}
-                    style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', color: '#1e293b', background: '#f8fafc', cursor: 'pointer' }} />
-                  {(dateFrom || dateTo) && (
-                    <button onClick={() => { setDateFrom(''); setDateTo(''); }}
-                      style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 7, padding: '6px 10px', fontSize: '0.75rem', color: '#94a3b8', cursor: 'pointer' }}>
-                      Clear
+                {/* Status filter */}
+                <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', borderRadius: 8, padding: 3 }}>
+                  {(['All', 'Active', 'Inactive'] as const).map(s2 => (
+                    <button key={s2} onClick={() => setStatusFilter(s2)}
+                      style={{
+                        padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                        background: statusFilter === s2 ? '#fff' : 'transparent',
+                        color: statusFilter === s2
+                          ? s2 === 'Active' ? '#15803d' : s2 === 'Inactive' ? '#b91c1c' : '#1a4263'
+                          : '#64748b',
+                        boxShadow: statusFilter === s2 ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                      }}>
+                      {s2}
                     </button>
-                  )}
+                  ))}
                 </div>
                 <div className={s.searchWrapper}>
                   <input
@@ -782,6 +778,7 @@ export default function Suppliers({
                         </th>
                       )
                     })}
+                    <th className={s.nonSortableHeader} style={{ whiteSpace: 'nowrap' }}>STATUS</th>
                     <th className={s.actionHeader}>ACTION</th>
                   </tr>
                 </thead>
@@ -814,6 +811,30 @@ export default function Suppliers({
                         <td>{sup.supplier_contact}</td>
                         <td>{sup.supplier_email}</td>
                         <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sup.supplier_address}</td>
+                        <td onClick={e => e.stopPropagation()}>
+                          {(() => {
+                            const isInactive = sup.status_code === 'INACTIVE';
+                            const daysLeft = sup.inactive_date
+                              ? 30 - Math.floor((Date.now() - new Date(sup.inactive_date).getTime()) / 86400000)
+                              : null;
+                            return (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '3px 10px', borderRadius: 20, fontSize: '0.75rem', fontWeight: 600,
+                                background: isInactive ? '#fef9c3' : '#dcfce7',
+                                color:      isInactive ? '#854d0e' : '#15803d',
+                              }}>
+                                {isInactive ? 'Inactive' : 'Active'}
+                                {isInactive && daysLeft !== null && daysLeft > 0 && (
+                                  <span style={{ fontWeight: 400, fontSize: '0.7rem' }}>({daysLeft}d to archive)</span>
+                                )}
+                                {isInactive && daysLeft !== null && daysLeft <= 0 && (
+                                  <span style={{ fontWeight: 400, fontSize: '0.7rem' }}>(archiving soon)</span>
+                                )}
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td className={s.actionCell} onClick={e => e.stopPropagation()}>
                           <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === sup.supplier_id ? null : sup.supplier_id)} />
                           {openMenuId === sup.supplier_id && (
@@ -822,7 +843,7 @@ export default function Suppliers({
                                 <LuPencil size={14} /> Edit
                               </button>
                               <button className={s.popBtnArchive} onClick={() => handleToggleArchive(sup.supplier_id)}>
-                                <LuArchive size={14} /> Mark as Inactive
+                                <LuArchive size={14} /> Mark as Archive
                               </button>
                               <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
                             </div>
@@ -1130,6 +1151,29 @@ export default function Suppliers({
                 </div>
               )}
 
+              {/* Status toggle */}
+              <div style={{ marginTop: 16, padding: '12px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#374151' }}>Supplier Status</p>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+                    {editFormData.status_code === 'INACTIVE' ? 'Marked inactive — will auto-archive after 30 days' : 'Currently active'}
+                  </p>
+                </div>
+                <button type="button"
+                  onClick={() => setEditFormData({
+                    ...editFormData,
+                    status_code: editFormData.status_code === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE',
+                    is_archived: editFormData.status_code !== 'INACTIVE',
+                  })}
+                  style={{
+                    padding: '6px 14px', borderRadius: 8, border: 'none', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
+                    background: editFormData.status_code === 'INACTIVE' ? '#dcfce7' : '#fee2e2',
+                    color:      editFormData.status_code === 'INACTIVE' ? '#15803d' : '#b91c1c',
+                  }}>
+                  {editFormData.status_code === 'INACTIVE' ? '✓ Restore to Active' : '✕ Mark as Inactive'}
+                </button>
+              </div>
+
               <div className={s.modalFooter}>
                 <button type="button" onClick={handleEditCancelClick} className={s.cancelBtn}>Cancel</button>
                 <button type="button" onClick={handleEditSupplier} className={s.saveBtn}>Update Supplier</button>
@@ -1253,7 +1297,7 @@ export default function Suppliers({
                         <tbody>
                           {supplierItems.map((item, i) => (
                             <tr key={i}
-                              onClick={() => { if (onNavigate) { closeViewModal(); onNavigate('Inventory', String(item.inventory_id)); } }}
+                              onClick={() => { if (onNavigate) { closeViewModal(); onNavigate('Inventory', String(item.inventory_brand_id)); } }}
                               style={{ borderBottom: '1px solid #f1f5f9', cursor: onNavigate ? 'pointer' : undefined }}
                               title={onNavigate ? `View ${item.item_name} in Inventory` : undefined}
                             >
@@ -1271,6 +1315,15 @@ export default function Suppliers({
             </div>
 
             <div className={s.viewModalFooter}>
+              <button
+                onClick={handleToggleStatusFromView}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: 'none', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                  background: selectedSupplierForView.status_code === 'INACTIVE' ? '#dcfce7' : '#fee2e2',
+                  color:      selectedSupplierForView.status_code === 'INACTIVE' ? '#15803d' : '#b91c1c',
+                }}>
+                {selectedSupplierForView.status_code === 'INACTIVE' ? '✓ Restore to Active' : '✕ Mark as Inactive'}
+              </button>
               <button className={s.viewBtnPrint} onClick={handlePrint}><LuPrinter size={14} /> Print</button>
             </div>
           </div>

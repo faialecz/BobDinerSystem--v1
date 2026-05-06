@@ -259,11 +259,16 @@ def report_product_performance():
         if start_str or end_str:
             start, end = parse_dates()
             date_filter = "AND st.sales_date BETWEEN %s AND %s"
-            # date_added subquery params (start, start, end, end) + sales filter params (start, end)
-            params: tuple = (start, start, end, end, start, end)
+            # date_added subquery params (start, end) + sales filter params (start, end)
+            params: tuple = (start, end, start, end)
+            date_added_subquery = f"""(SELECT MIN(b2.date_created) FROM inventory_batch b2
+                 WHERE b2.inventory_brand_id = ib.inventory_brand_id
+                   AND b2.date_created BETWEEN %s AND %s)"""
         else:
             date_filter = ""
-            params = (None, None, None, None)
+            params = ()
+            date_added_subquery = """(SELECT MIN(b2.date_created) FROM inventory_batch b2
+                 WHERE b2.inventory_brand_id = ib.inventory_brand_id)"""
 
         # Diagnostic: check what's in order_details
         cur.execute("""
@@ -284,11 +289,7 @@ def report_product_performance():
                 COALESCE(sales.cogs, 0)                                               AS cogs,
                 (COALESCE(sales.qty_sold, 0) * COALESCE(ib.item_selling_price, 0))
                     - COALESCE(sales.cogs, 0)                                         AS net_profit,
-                (SELECT MIN(b2.date_created) FROM inventory_batch b2
-                 WHERE b2.inventory_brand_id = ib.inventory_brand_id
-                   AND (%s IS NULL OR b2.date_created >= %s)
-                   AND (%s IS NULL OR b2.date_created <= %s))                         AS date_added,
-                i.inventory_id                                                        AS inventory_id,
+                {date_added_subquery}                                                 AS date_added,                i.inventory_id                                                        AS inventory_id,
                 ib.inventory_brand_id                                                 AS inventory_brand_id
             FROM inventory_brand ib
             JOIN  inventory        i   ON i.inventory_id  = ib.inventory_id
@@ -317,7 +318,6 @@ def report_product_performance():
             ORDER BY net_profit DESC
         """, params)
         rows = cur.fetchall()
-        print(f"[product-performance] result rows={len(rows)}, sample={rows[:2]}")
 
         total_revenue = sum(float(r[5] or 0) for r in rows)
 
@@ -498,6 +498,7 @@ def report_stock_ageing():
         start_str = request.args.get("start_date")
         end_str   = request.args.get("end_date")
         date_filter = ""
+        sale_date_filter = ""
         params: tuple = ()
         if start_str or end_str:
             try:
@@ -506,7 +507,8 @@ def report_stock_ageing():
             except ValueError:
                 start, end = date(2000, 1, 1), today
             date_filter = "AND bat.date_created BETWEEN %s AND %s"
-            params = (start, end)
+            sale_date_filter = "AND st.sales_date BETWEEN %s AND %s"
+            params = (start, end, start, end)
 
         cur.execute(f"""
             SELECT
@@ -558,6 +560,7 @@ def report_stock_ageing():
             ) AND od.is_archived = FALSE
             LEFT JOIN order_transaction ot ON ot.order_id = od.order_id
             LEFT JOIN sales_transaction st ON st.order_id = ot.order_id
+                AND (TRUE {sale_date_filter})
             WHERE ss_i.status_code != 'INACTIVE'
               AND ss_b.status_code != 'ARCHIVED'
             GROUP BY ib.inventory_brand_id, i.item_name, ib.item_sku, fefo.unit_cost
@@ -758,7 +761,16 @@ def report_customer_sales():
     conn = get_connection()
     cur  = conn.cursor()
     try:
-        cur.execute("""
+        start_str = request.args.get("start_date")
+        end_str   = request.args.get("end_date")
+        date_clause = ""
+        cs_params: tuple = ()
+        if start_str or end_str:
+            start, end = parse_dates()
+            date_clause = "AND ot.order_date BETWEEN %s AND %s"
+            cs_params = (start, end)
+
+        cur.execute(f"""
             SELECT
                 c.customer_name,
                 COUNT(DISTINCT ot.order_id)                AS total_orders,
@@ -780,9 +792,10 @@ def report_customer_sales():
             FROM order_transaction  ot
             JOIN customer           c  ON c.customer_id  = ot.customer_id
             WHERE 1=1
+            {date_clause}
             GROUP BY c.customer_id, c.customer_name
             ORDER BY total_revenue DESC
-        """)
+        """, cs_params)
         rows = cur.fetchall()
 
         result = []
@@ -811,6 +824,19 @@ def report_customer_sales():
             else:
                 activity_status = 'Dormant'
 
+            # Spending insight
+            if this_month == 0 or last_month == 0:
+                spending_insight = ""
+            else:
+                diff = this_month - last_month
+                pct  = abs(round((diff / last_month) * 100, 1))
+                if diff > 0:
+                    spending_insight = f"↑ {pct}% vs last month"
+                elif diff < 0:
+                    spending_insight = f"↓ {pct}% vs last month"
+                else:
+                    spending_insight = ""
+
             result.append({
                 "customer_name":      r[0] or "Unknown",
                 "total_orders":       int(r[1] or 0),
@@ -821,6 +847,7 @@ def report_customer_sales():
                 "ltv_trend":          ltv_trend,
                 "this_month":         this_month,
                 "last_month":         last_month,
+                "spending_insight":   spending_insight,
                 "preferred_payment":  r[6] or "—",
             })
         return jsonify(result), 200
