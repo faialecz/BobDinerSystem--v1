@@ -137,7 +137,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
       customerAddress: "",
       orderDate: "",
       totalAmount: 0,
-      status: "",
+      order_status: "",
       paymentMethod: "",
       items: [],
     });
@@ -198,7 +198,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate }: Dash
           onClose={() => setReceipt(null)}
           onOrdersUpdate={setRecentOrders}
           onReceiptStatusUpdate={(orderId, status) =>
-            setReceipt((prev) => (prev ? { ...prev, status } : prev))
+            setReceipt((prev) => (prev ? { ...prev, order_status: status } : prev))
           }
         />
       )}

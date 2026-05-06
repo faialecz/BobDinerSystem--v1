@@ -63,7 +63,7 @@ function ReorderCard({ item }: { item: ForecastItem }) {
 
       {/* AI Analysis math box */}
       <div className={styles.aiAnalysisBox}>
-        <p className={styles.aiAnalysisTitle}>AI Analysis</p>
+        <p className={styles.aiAnalysisTitle}></p>
         <div className={styles.aiAnalysisRow}>
           <span>30-Day Target</span>
           <span>{target30d} {item.uom}</span>

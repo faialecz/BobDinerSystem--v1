@@ -854,8 +854,8 @@ def update_order_status(order_id: str):
     cur = conn.cursor()
     try:
         data = request.get_json(silent=True) or {}
-        target_status = data.get("status", "RECEIVED").upper()
-        if target_status not in ("PREPARING", "TO SHIP", "RECEIVED"):
+        target_status = data.get("status", "").upper()
+        if target_status not in ("PACKED", "SHIPPING", "RECEIVED"):
             return jsonify({"error": "Invalid target status"}), 400
         cur.execute("""
             SELECT ss.status_code
@@ -868,9 +868,9 @@ def update_order_status(order_id: str):
             return jsonify({"error": "Order not found"}), 404
         current_status = row[0]
         allowed = {
-            "PREPARING": ("PREPARING",),
-            "TO SHIP":   ("PREPARING",),
-            "RECEIVED":  ("PREPARING", "TO SHIP"),
+            "PACKED":    ("PREPARING",),
+            "SHIPPING":  ("PACKED",),
+            "RECEIVED":  ("SHIPPING",),
         }
         if current_status not in allowed[target_status]:
             return jsonify({"error": f"Cannot move from {current_status} to {target_status}"}), 400

@@ -30,7 +30,7 @@ export default function ReceiptModal({
   // Debug: Log the order status to diagnose the issue
   console.log("Current Order Status Data:", receipt.order_status);
 
-  const [confirmAction, setConfirmAction] = useState<"PREPARING" | "TO SHIP" | "RECEIVED" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"PACKED" | "SHIPPING" | "RECEIVED" | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
@@ -48,7 +48,7 @@ export default function ReceiptModal({
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
-  const handleStatusAdvance = async (targetStatus: "PREPARING" | "TO SHIP" | "RECEIVED") => {
+  const handleStatusAdvance = async (targetStatus: "PACKED" | "SHIPPING" | "RECEIVED") => {
   try {
     const res = await fetch(
       `${API}/api/dashboard/order-status/${receipt.orderId}`,
@@ -62,24 +62,22 @@ export default function ReceiptModal({
     const data = await res.json();
 
     if (!res.ok) {
-      // Surface the backend error message
       showToast(data.error ?? "Failed to update status.", "error");
       return;
     }
 
-    if (data.status) {
-      onReceiptStatusUpdate(receipt.orderId, data.status);
+    const newStatus = data.order_status;
+    if (newStatus) {
+      onReceiptStatusUpdate(receipt.orderId, newStatus);
       onOrdersUpdate((prev) =>
         prev.map((o) =>
-          o.orderId === receipt.orderId ? { ...o, status: data.status } : o
+          o.orderId === receipt.orderId ? { ...o, order_status: newStatus } : o
         )
       );
       showToast(
-        targetStatus === "RECEIVED"
-          ? "Order marked as Received ✓"
-          : targetStatus === "TO SHIP"
-          ? "Order moved to To Ship ✓"
-          : "Order moved to Preparing ✓",
+        targetStatus === "RECEIVED" ? "Order marked as Received ✓" :
+        targetStatus === "SHIPPING"  ? "Order moved to Shipping ✓"  :
+                                       "Order marked as Packed ✓",
         "success"
       );
     }
@@ -229,17 +227,17 @@ export default function ReceiptModal({
             </div>
             <div className={styles.confirmBody}>
               <p className={styles.confirmTitle}>
-                {confirmAction === "RECEIVED" ? "Mark as Received?" 
-                : confirmAction === "TO SHIP" ? "Mark as To Ship?"
-                : "Mark as Preparing?"}
+                {confirmAction === "RECEIVED" ? "Mark as Received?" :
+                 confirmAction === "SHIPPING"  ? "Mark as Shipping?"  :
+                                                 "Mark as Packed?"}
               </p>
               <p className={styles.confirmMessage}>
                 {confirmAction === "RECEIVED" ? (
-                  <><strong>Received</strong> status means the customer has collected their order. This cannot be undone.</>
-                ) : confirmAction === "TO SHIP" ? (
-                  <>This will move the order to <strong>To Ship</strong> status.</>
+                  <><strong>Received</strong> means the customer has collected their order. This cannot be undone.</>
+                ) : confirmAction === "SHIPPING" ? (
+                  <>This will move the order to <strong>Shipping</strong> status.</>
                 ) : (
-                  <>This will move the order to <strong>Preparing</strong> status.</>
+                  <>This will move the order to <strong>Packed</strong> status.</>
                 )}
               </p>
               <div className={styles.confirmActions}>
@@ -255,11 +253,9 @@ export default function ReceiptModal({
                     setConfirmAction(null);
                   }}
                 >
-                  {confirmAction === "RECEIVED"
-                    ? "Yes, Mark as Received"
-                    : confirmAction === "TO SHIP"
-                    ? "Yes, Mark as To Ship"
-                    : "Yes, Mark as Preparing"}
+                  {confirmAction === "RECEIVED" ? "Yes, Mark as Received" :
+                   confirmAction === "SHIPPING"  ? "Yes, Mark as Shipping"  :
+                                                   "Yes, Mark as Packed"}
                 </button>
               </div>
             </div>
@@ -320,34 +316,60 @@ export default function ReceiptModal({
                 <span>Total</span>
                 <span>{fmt(receipt.totalAmount)}</span>
               </div>
-              <div className={styles.receiptStatusActions}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px', width: '100%' }}>
                 {checkStatus(receipt.order_status, "PREPARING", 19) && (
                   <button
                     className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnAmber}`}
-                    onClick={() => setConfirmAction("TO SHIP")}
+                    style={{ width: '100%', padding: '10px', textAlign: 'center' }}
+                    onClick={() => setConfirmAction("PACKED")}
+                  >
+                    Mark as Packed
+                  </button>
+                )}
+                {checkStatus(receipt.order_status, "PACKED", 20) && (
+                  <button
+                    className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnAmber}`}
+                    style={{ width: '100%', padding: '10px', textAlign: 'center' }}
+                    onClick={() => setConfirmAction("SHIPPING")}
                   >
                     Mark as To Ship
                   </button>
                 )}
-                {(checkStatus(receipt.order_status, "PACKED", 20) || checkStatus(receipt.order_status, "TO SHIP", 20)) && (
+                {checkStatus(receipt.order_status, "SHIPPING", 21) && (
                   <button
                     className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnGreen}`}
+                    style={{ width: '100%', padding: '10px', textAlign: 'center' }}
                     onClick={() => setConfirmAction("RECEIVED")}
                   >
                     Mark as Received
                   </button>
                 )}
-                {(checkStatus(receipt.order_status, "SHIPPING", 21) || checkStatus(receipt.order_status, "RECEIVED", 22)) && (
-                  <span className={styles.receiptStatusDone}>✓ Received</span>
+                {checkStatus(receipt.order_status, "RECEIVED", 22) && (
+                  <span className={styles.receiptStatusDone} style={{ textAlign: 'center' }}>✓ Received</span>
                 )}
+                <button
+                  className={styles.receiptPrintBtn}
+                  style={{ width: '100%', padding: '10px', textAlign: 'center' }}
+                  onClick={handlePrint}
+                >
+                  Print Receipt
+                </button>
               </div>
-              <button className={styles.receiptPrintBtn} onClick={handlePrint}>
-                Print Receipt
-              </button>
             </>
           )}
         </div>
       </div>
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
+          padding: '10px 18px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 500,
+          color: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          backgroundColor: toast.type === 'success' ? '#16a34a' : '#dc2626',
+        }}>
+          {toast.message}
+        </div>
+      )}
     </>
   );
 }
