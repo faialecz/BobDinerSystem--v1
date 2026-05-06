@@ -99,7 +99,13 @@ def orders_list():
                               AND NOT COALESCE(od.is_archived, FALSE)),
                     0
                 ) AS total_qty,
-                COALESCE(ot.total_amount, 0) AS total_amount,
+                COALESCE(ot.total_amount, 0)  AS total_amount,
+                COALESCE(ot.amount_paid, 0)   AS amount_paid,
+                ot.payment_status_id,
+                ot.deposit_date,
+                ot.final_payment_date,
+                ot.shipped_date,
+                ot.cancelled_date,
                 COALESCE(
                     json_agg(
                         json_build_object(
@@ -140,7 +146,13 @@ def orders_list():
                 sl_status.status_name,
                 sl_pm.status_name,
                 sl_ps.status_name,
-                ot.total_amount
+                ot.total_amount,
+                ot.amount_paid,
+                ot.payment_status_id,
+                ot.deposit_date,
+                ot.final_payment_date,
+                ot.shipped_date,
+                ot.cancelled_date
             ORDER BY ot.order_id DESC
         """)
 
@@ -150,7 +162,9 @@ def orders_list():
         for row in rows:
             (order_id, customer_name, customer_address, customer_contact,
              order_date, order_status, payment_method, payment_status,
-             total_qty, total_amount, items_json) = row
+             total_qty, total_amount, amount_paid, payment_status_id,
+             deposit_date, final_payment_date,
+             shipped_date, cancelled_date, items_json) = row
 
             order_status_upper = (order_status or "").upper()
             is_archived        = order_status_upper == 'ARCHIVED'
@@ -185,10 +199,16 @@ def orders_list():
                 "paymentStatus":      payment_status,
                 "totalQty":           int(total_qty),
                 "totalAmount":        float(total_amount) if total_amount is not None else 0.0,
+                "amount_paid":        float(amount_paid) if amount_paid is not None else 0.0,
+                "payment_status_id":  payment_status_id,
+                "deposit_date":       deposit_date.isoformat() if deposit_date else None,
+                "final_payment_date": final_payment_date.isoformat() if final_payment_date else None,
                 "availabilityStatus": availability_status,
                 "problematicItems":   problematic_items,
                 "items":              items_list,
                 "is_archived":        is_archived,
+                "shipped_date":       shipped_date.isoformat() if shipped_date else None,
+                "cancelled_date":     cancelled_date.isoformat() if cancelled_date else None,
             })
 
         return jsonify(orders)
@@ -364,6 +384,214 @@ def _restore_batch_items(cur, order_id):
             """, (inv_id, inv_brand_id))
 
 
+def _flip_to_available(cur, inv_brand_id):
+    """Flip inventory back to AVAILABLE if any stock remains and it's currently OUT_OF_STOCK."""
+    cur.execute("""
+        SELECT COALESCE(SUM(quantity_on_hand), 0)
+        FROM inventory_batch WHERE inventory_brand_id = %s
+    """, (inv_brand_id,))
+    if cur.fetchone()[0] > 0:
+        cur.execute("""
+            UPDATE inventory
+            SET item_status_id = (
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'AVAILABLE' LIMIT 1
+            )
+            WHERE inventory_id = (
+                SELECT inventory_id FROM inventory_brand WHERE inventory_brand_id = %s
+            )
+            AND item_status_id = (
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK' LIMIT 1
+            )
+        """, (inv_brand_id,))
+
+
+def _mark_out_of_stock_if_empty(cur, inv_brand_id):
+    """Mark inventory OUT_OF_STOCK if all batches for this brand are exhausted."""
+    cur.execute("""
+        SELECT COALESCE(SUM(quantity_on_hand), 0)
+        FROM inventory_batch WHERE inventory_brand_id = %s
+    """, (inv_brand_id,))
+    if cur.fetchone()[0] <= 0:
+        cur.execute("""
+            UPDATE inventory
+            SET item_status_id = (
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'OUT_OF_STOCK' LIMIT 1
+            )
+            WHERE inventory_id = (
+                SELECT inventory_id FROM inventory_brand WHERE inventory_brand_id = %s
+            )
+        """, (inv_brand_id,))
+
+
+def _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=True):
+    """
+    Three-phase delta update that preserves CHECK constraints throughout.
+
+    Proof of safety: after Phase 1+2 (inserts + increases), running total >=
+    final total (Phase 3 only lowers). Since final total >= amount_paid
+    (pre-validated by caller), total never dips below amount_paid mid-transaction.
+
+    Phases:
+      1. INSERT new brands            → total rises
+      2. UPDATE increasing qty/price  → total rises or stays
+      3. DELETE removed + reduce qty  → total falls to final value
+
+    return_stock_on_delete:
+      True  = existing rows hold deducted stock (PREPARING/PACKED/SHIPPING)
+      False = existing rows are reference-only (PENDING)
+    """
+
+    def _parse_qty_price(item):
+        try:
+            qty = int(item.get('quantity') or item.get('qty') or item.get('order_quantity') or 1) or 1
+        except (ValueError, TypeError):
+            qty = 1
+        try:
+            amount = float(item.get('amount') or item.get('order_total') or 0)
+        except (ValueError, TypeError):
+            amount = 0.0
+        return qty, round(amount / qty, 4) if qty else 0.0
+
+    # ── Load existing rows ────────────────────────────────────────────────────
+    cur.execute("""
+        SELECT od.batch_id, od.order_quantity, od.unit_price, ib.inventory_brand_id
+        FROM   order_details od
+        JOIN   inventory_batch ib ON ib.batch_id = od.batch_id
+        WHERE  od.order_id = %s
+    """, (order_id,))
+    existing = {}   # { inv_brand_id: [(batch_id, qty, unit_price), ...] }
+    for batch_id, qty, up, ibid in cur.fetchall():
+        existing.setdefault(ibid, []).append((batch_id, int(qty), float(up or 0)))
+
+    # ── Parse incoming items ──────────────────────────────────────────────────
+    incoming = {}   # { inv_brand_id: (qty, unit_price) }
+    for item in incoming_items:
+        raw_id = item.get('inventory_brand_id')
+        if not raw_id or str(raw_id).strip() == '':
+            continue
+        qty, up = _parse_qty_price(item)
+        incoming[int(raw_id)] = (qty, up)
+
+    new_ids     = set(incoming) - set(existing)
+    updated_ids = set(incoming) & set(existing)
+    deleted_ids = set(existing) - set(incoming)
+
+    # ════════════════════════════════════════════════════════════════════
+    # PHASE 1 — INSERT new brands (raises total)
+    # ════════════════════════════════════════════════════════════════════
+    for ibid in new_ids:
+        qty, up = incoming[ibid]
+        alloc = _fifo_allocate(cur, ibid, qty)
+        for batch_id, take in alloc:
+            cur.execute("""
+                INSERT INTO order_details (order_id, batch_id, order_quantity, unit_price, order_total)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (order_id, batch_id, take, up, round(up * take, 4)))
+            cur.execute("""
+                UPDATE inventory_batch
+                SET quantity_on_hand = quantity_on_hand - %s WHERE batch_id = %s
+            """, (take, batch_id))
+        _mark_out_of_stock_if_empty(cur, ibid)
+
+    # ════════════════════════════════════════════════════════════════════
+    # PHASE 2 — UPDATE existing: qty increases + price changes (raises total)
+    # ════════════════════════════════════════════════════════════════════
+    for ibid in updated_ids:
+        qty, up   = incoming[ibid]
+        old_rows  = existing[ibid]
+        old_qty   = sum(r[1] for r in old_rows)
+        delta     = qty - old_qty
+
+        if delta > 0:
+            alloc = _fifo_allocate(cur, ibid, delta)
+            for batch_id, take in alloc:
+                # If this batch already has a row for this order, merge into it
+                cur.execute("""
+                    SELECT order_quantity FROM order_details
+                    WHERE order_id = %s AND batch_id = %s
+                """, (order_id, batch_id))
+                existing_row = cur.fetchone()
+                if existing_row:
+                    new_row_qty = existing_row[0] + take
+                    cur.execute("""
+                        UPDATE order_details
+                        SET order_quantity = %s, order_total = %s, unit_price = %s
+                        WHERE order_id = %s AND batch_id = %s
+                    """, (new_row_qty, round(up * new_row_qty, 4), up, order_id, batch_id))
+                else:
+                    cur.execute("""
+                        INSERT INTO order_details
+                            (order_id, batch_id, order_quantity, unit_price, order_total)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (order_id, batch_id, take, up, round(up * take, 4)))
+                cur.execute("""
+                    UPDATE inventory_batch
+                    SET quantity_on_hand = quantity_on_hand - %s WHERE batch_id = %s
+                """, (take, batch_id))
+            _mark_out_of_stock_if_empty(cur, ibid)
+
+        # Update unit_price on all pre-existing rows (handles price-only changes)
+        for batch_id, row_qty, old_up in old_rows:
+            if abs(old_up - up) > 0.0001:
+                cur.execute("""
+                    UPDATE order_details
+                    SET unit_price = %s, order_total = order_quantity * %s
+                    WHERE order_id = %s AND batch_id = %s
+                """, (up, up, order_id, batch_id))
+
+    # ════════════════════════════════════════════════════════════════════
+    # PHASE 3 — Reduce quantities + DELETE removed brands (lowers total last)
+    # ════════════════════════════════════════════════════════════════════
+
+    # 3a. Reduce qty for updated items where new_qty < old_qty
+    for ibid in updated_ids:
+        qty, up  = incoming[ibid]
+        old_rows = existing[ibid]
+        old_qty  = sum(r[1] for r in old_rows)
+        to_trim  = old_qty - qty
+
+        if to_trim > 0:
+            for batch_id, row_qty, _ in reversed(old_rows):
+                if to_trim <= 0:
+                    break
+                take      = min(row_qty, to_trim)
+                remaining = row_qty - take
+                if remaining == 0:
+                    cur.execute("""
+                        DELETE FROM order_details WHERE order_id = %s AND batch_id = %s
+                    """, (order_id, batch_id))
+                else:
+                    cur.execute("""
+                        UPDATE order_details
+                        SET order_quantity = %s, order_total = %s, unit_price = %s
+                        WHERE order_id = %s AND batch_id = %s
+                    """, (remaining, round(up * remaining, 4), up, order_id, batch_id))
+                if return_stock_on_delete:
+                    cur.execute("""
+                        UPDATE inventory_batch
+                        SET quantity_on_hand = quantity_on_hand + %s WHERE batch_id = %s
+                    """, (take, batch_id))
+                    _flip_to_available(cur, ibid)
+                to_trim -= take
+
+    # 3b. Delete entirely removed brands
+    for ibid in deleted_ids:
+        for batch_id, row_qty, _ in existing[ibid]:
+            cur.execute("""
+                DELETE FROM order_details WHERE order_id = %s AND batch_id = %s
+            """, (order_id, batch_id))
+            if return_stock_on_delete:
+                cur.execute("""
+                    UPDATE inventory_batch
+                    SET quantity_on_hand = quantity_on_hand + %s WHERE batch_id = %s
+                """, (row_qty, batch_id))
+        if return_stock_on_delete:
+            _flip_to_available(cur, ibid)
+
+
 def _insert_and_deduct_items(cur, order_id, items):
     """
     Inserts order_details rows using FIFO batch allocation and deducts
@@ -524,6 +752,107 @@ def _create_sales_record(cur, order_id):
     """, (order_id, payment_status_id, 1, payment_method_id))
 
 
+# ================= STATUS-ONLY UPDATE =================
+@orders_bp.route("/<string:order_id>/status", methods=["PATCH", "OPTIONS"])
+def update_order_status(order_id):
+    if request.method == "OPTIONS":
+        return jsonify({"message": "CORS OK"}), 200
+
+    data   = request.json or {}
+    status_name = data.get('status', '').strip()
+    if not status_name:
+        return jsonify({"error": "status is required"}), 400
+
+    conn = get_connection()
+    cur  = conn.cursor()
+    try:
+        # Block updates on already-cancelled orders
+        cur.execute("""
+            SELECT ss.status_code
+            FROM order_transaction ot
+            JOIN static_status ss ON ot.order_status_id = ss.status_id
+            WHERE ot.order_id = %s
+        """, (order_id,))
+        row = cur.fetchone()
+        if row and row[0].upper() == 'CANCELLED':
+            return jsonify({"error": "Cannot edit an order that is already CANCELLED."}), 400
+
+        cur.execute("""
+            SELECT status_id, status_code FROM static_status
+            WHERE status_scope = 'ORDER_STATUS' AND status_name ILIKE %s
+        """, (status_name,))
+        status_row = cur.fetchone()
+        if not status_row:
+            return jsonify({"error": f"Unknown status: {status_name}"}), 400
+
+        new_status_id, new_status_code = status_row
+        new_status_code = new_status_code.upper()
+
+        if new_status_code == 'RECEIVED':
+            _create_sales_record(cur, order_id)
+        elif new_status_code == 'CANCELLED':
+            cur.execute("""
+                SELECT ss.status_code FROM order_transaction ot
+                JOIN static_status ss ON ot.order_status_id = ss.status_id
+                WHERE ot.order_id = %s
+            """, (order_id,))
+            old_row = cur.fetchone()
+            if old_row and old_row[0].upper() in {'PREPARING', 'PACKED', 'SHIPPING'}:
+                _restore_batch_items(cur, order_id)
+
+        shipped_date   = None
+        cancelled_date = None
+        if new_status_code == 'SHIPPING':
+            cur.execute("""
+                UPDATE order_transaction
+                SET order_status_id = %s,
+                    shipped_date    = CURRENT_TIMESTAMP
+                WHERE order_id = %s
+                RETURNING shipped_date, cancelled_date
+            """, (new_status_id, order_id))
+            row = cur.fetchone()
+            shipped_date   = row[0].isoformat() if row and row[0] else None
+            cancelled_date = row[1].isoformat() if row and row[1] else None
+        elif new_status_code == 'CANCELLED':
+            cur.execute("""
+                UPDATE order_transaction
+                SET order_status_id  = %s,
+                    cancelled_date   = CURRENT_TIMESTAMP
+                WHERE order_id = %s
+                RETURNING shipped_date, cancelled_date
+            """, (new_status_id, order_id))
+            row = cur.fetchone()
+            shipped_date   = row[0].isoformat() if row and row[0] else None
+            cancelled_date = row[1].isoformat() if row and row[1] else None
+        elif new_status_code in ('PREPARING', 'PACKED'):
+            cur.execute("""
+                UPDATE order_transaction
+                SET order_status_id = %s,
+                    shipped_date    = NULL
+                WHERE order_id = %s
+            """, (new_status_id, order_id))
+        else:
+            cur.execute("""
+                UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
+            """, (new_status_id, order_id))
+
+        conn.commit()
+        return jsonify({
+            "message":        "Order status updated successfully",
+            "shipped_date":   shipped_date,
+            "cancelled_date": cancelled_date,
+        }), 200
+
+    except Exception as e:
+        conn.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
 # ================= UPDATE ORDER =================
 @orders_bp.route("/update/<string:order_id>", methods=["PUT", "OPTIONS"])
 def update_order(order_id):
@@ -568,6 +897,18 @@ def update_order(order_id):
         pm_row    = cur.fetchone()
         new_pm_id = pm_row[0] if pm_row else None
 
+        # --- Extract payment and debt management fields ---
+        try:
+            amount_paid = float(data.get('amount_paid') or 0)
+        except (ValueError, TypeError):
+            amount_paid = 0.0
+        try:
+            frontend_payment_status_id = int(data.get('payment_status_id') or 0)
+        except (ValueError, TypeError):
+            frontend_payment_status_id = 0
+        deposit_date = data.get('deposit_date')
+        final_payment_date = None
+
         # --- Update customer info ---
         cur.execute("SELECT customer_id FROM order_transaction WHERE order_id = %s", (order_id,))
         cust_row = cur.fetchone()
@@ -594,6 +935,45 @@ def update_order(order_id):
         old_is_deducted = old_status_code in DEDUCTED_STATES
         new_is_active   = new_status_code in DEDUCTED_STATES if new_status_code else False
 
+        # --- Compute total for status recalculation + pre-validate payment ---
+        incoming_items = data.get('items') or []
+        if incoming_items:
+            total_for_status = sum(
+                float(it.get('amount') or it.get('order_total') or 0)
+                for it in incoming_items
+                if str(it.get('inventory_brand_id') or '').strip() != ''
+            )
+            if total_for_status < amount_paid:
+                return jsonify({
+                    "error": "Cannot update: The new order total is less than the amount already paid. Please adjust the payment/refund first."
+                }), 400
+        else:
+            cur.execute("SELECT total_amount FROM order_transaction WHERE order_id = %s", (order_id,))
+            tot_row = cur.fetchone()
+            total_for_status = float(tot_row[0]) if tot_row and tot_row[0] is not None else 0.0
+
+        # --- Payment status resolution: manual Paid override, then math fallback ---
+        if frontend_payment_status_id == 29:
+            # Manual "Paid" override (e.g. Shopee/e-commerce): align amount_paid to total
+            payment_status_id = 29
+            amount_paid = total_for_status
+        elif amount_paid > 0 and amount_paid >= total_for_status:
+            payment_status_id = 29  # Paid
+        elif amount_paid > 0:
+            payment_status_id = 31  # Partial
+        else:
+            payment_status_id = 30  # Unpaid
+
+        # --- Handle date stamping based on recalculated payment_status_id ---
+        if payment_status_id == 29:
+            final_payment_date = 'CURRENT_TIMESTAMP'
+            deposit_date = None
+        elif payment_status_id == 31:
+            final_payment_date = None
+        elif payment_status_id == 30:
+            deposit_date = None
+            final_payment_date = None
+
         # --- State machine ---
         if new_status_code == 'RECEIVED':
             # Order is being marked as received → create sales record
@@ -605,27 +985,126 @@ def update_order(order_id):
             _restore_batch_items(cur, order_id)
 
         elif old_is_deducted and new_is_active:
-            # Swap: restore old stock, replace items, deduct new stock
-            _restore_batch_items(cur, order_id)
-            cur.execute("DELETE FROM order_details WHERE order_id = %s", (order_id,))
-            _insert_and_deduct_items(cur, order_id, data.get('items', []))
+            # Delta update: INSERT new → UPDATE changed → DELETE removed
+            # Preserves total_amount >= amount_paid at every intermediate step
+            if incoming_items:
+                _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=True)
 
         elif not old_is_deducted and new_is_active:
-            # First deduction: order promoted from PENDING to active state
-            cur.execute("DELETE FROM order_details WHERE order_id = %s", (order_id,))
-            _insert_and_deduct_items(cur, order_id, data.get('items', []))
+            # Promoting from PENDING: existing rows are reference-only (no stock held)
+            # Delta strategy still applies; return_stock_on_delete=False skips stock returns
+            _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=False)
 
         else:
             # No stock change (PENDING → PENDING, PENDING → CANCELLED)
-            if new_status_code != 'CANCELLED' and data.get('items') is not None:
-                cur.execute("DELETE FROM order_details WHERE order_id = %s", (order_id,))
-                _insert_items_only(cur, order_id, data.get('items', []))
+            if new_status_code != 'CANCELLED' and incoming_items:
+                _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=False)
 
-        # --- Apply status and payment updates ---
+        # --- Apply status, payment, and debt management updates ---
+        shipped_date    = None
+        cancelled_date  = None
+        returned_amount_paid = amount_paid
+        returned_payment_status_id = payment_status_id
+        returned_deposit_date = deposit_date
+        returned_final_payment_date = final_payment_date if final_payment_date != 'CURRENT_TIMESTAMP' else None
+
         if new_status_id:
-            cur.execute("""
-                UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
-            """, (new_status_id, order_id))
+            if new_status_code == 'SHIPPING':
+                if payment_status_id is not None and amount_paid is not None:
+                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
+                    cur.execute(f"""
+                        UPDATE order_transaction
+                        SET order_status_id = %s,
+                            shipped_date    = CURRENT_TIMESTAMP,
+                            amount_paid     = %s,
+                            payment_status_id = %s,
+                            deposit_date    = %s,
+                            final_payment_date = {final_payment_date_sql}
+                        WHERE order_id = %s
+                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
+                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
+                else:
+                    cur.execute("""
+                        UPDATE order_transaction
+                        SET order_status_id = %s,
+                            shipped_date    = CURRENT_TIMESTAMP
+                        WHERE order_id = %s
+                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
+                    """, (new_status_id, order_id))
+                row = cur.fetchone()
+                shipped_date   = row[0].isoformat() if row and row[0] else None
+                cancelled_date = row[1].isoformat() if row and row[1] else None
+                if row and len(row) > 2:
+                    returned_amount_paid = row[2]
+                    returned_payment_status_id = row[3]
+                    returned_deposit_date = row[4].isoformat() if row[4] else None
+                    returned_final_payment_date = row[5].isoformat() if row[5] else None
+            elif new_status_code == 'CANCELLED':
+                if payment_status_id is not None and amount_paid is not None:
+                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
+                    cur.execute(f"""
+                        UPDATE order_transaction
+                        SET order_status_id  = %s,
+                            cancelled_date   = CURRENT_TIMESTAMP,
+                            amount_paid     = %s,
+                            payment_status_id = %s,
+                            deposit_date    = %s,
+                            final_payment_date = {final_payment_date_sql}
+                        WHERE order_id = %s
+                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
+                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
+                else:
+                    cur.execute("""
+                        UPDATE order_transaction
+                        SET order_status_id  = %s,
+                            cancelled_date   = CURRENT_TIMESTAMP
+                        WHERE order_id = %s
+                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
+                    """, (new_status_id, order_id))
+                row = cur.fetchone()
+                shipped_date   = row[0].isoformat() if row and row[0] else None
+                cancelled_date = row[1].isoformat() if row and row[1] else None
+                if row and len(row) > 2:
+                    returned_amount_paid = row[2]
+                    returned_payment_status_id = row[3]
+                    returned_deposit_date = row[4].isoformat() if row[4] else None
+                    returned_final_payment_date = row[5].isoformat() if row[5] else None
+            elif new_status_code in ('PREPARING', 'PACKED'):
+                if payment_status_id is not None and amount_paid is not None:
+                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
+                    cur.execute(f"""
+                        UPDATE order_transaction
+                        SET order_status_id = %s,
+                            shipped_date    = NULL,
+                            amount_paid     = %s,
+                            payment_status_id = %s,
+                            deposit_date    = %s,
+                            final_payment_date = {final_payment_date_sql}
+                        WHERE order_id = %s
+                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
+                else:
+                    cur.execute("""
+                        UPDATE order_transaction
+                        SET order_status_id = %s,
+                            shipped_date    = NULL
+                        WHERE order_id = %s
+                    """, (new_status_id, order_id))
+            else:
+                if payment_status_id is not None and amount_paid is not None:
+                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
+                    cur.execute(f"""
+                        UPDATE order_transaction
+                        SET order_status_id = %s,
+                            amount_paid     = %s,
+                            payment_status_id = %s,
+                            deposit_date    = %s,
+                            final_payment_date = {final_payment_date_sql}
+                        WHERE order_id = %s
+                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
+                else:
+                    cur.execute("""
+                        UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
+                    """, (new_status_id, order_id))
 
         if new_pm_id:
             cur.execute("""
@@ -641,8 +1120,37 @@ def update_order(order_id):
             WHERE order_id = %s
         """, (order_id, order_id))
 
+        # --- Python enforcement (replaces dropped DB constraints) ---
+        cur.execute("""
+            SELECT ot.total_amount, ot.amount_paid, ss.status_code
+            FROM   order_transaction ot
+            JOIN   static_status     ss ON ss.status_id = ot.payment_status_id
+            WHERE  ot.order_id = %s
+        """, (order_id,))
+        fin = cur.fetchone()
+        if fin:
+            fin_total       = float(fin[0]) if fin[0] is not None else 0.0
+            fin_paid        = float(fin[1]) if fin[1] is not None else 0.0
+            fin_pay_status  = (fin[2] or '').upper()
+
+            if fin_paid > fin_total:
+                conn.rollback()
+                return jsonify({
+                    "error": "Cannot reduce order total below the amount already paid. Please adjust payments first."
+                }), 400
+
+            if fin_pay_status in ('PARTIAL', 'PAID') and fin_paid == 0:
+                conn.rollback()
+                return jsonify({
+                    "error": f"Payment status is '{fin_pay_status}' but amount paid is 0. Please correct the payment details."
+                }), 400
+
         conn.commit()
-        return jsonify({"message": "Order updated successfully"}), 200
+        return jsonify({
+            "message":        "Order updated successfully",
+            "shipped_date":   shipped_date,
+            "cancelled_date": cancelled_date,
+        }), 200
 
     except Exception as e:
         conn.rollback()

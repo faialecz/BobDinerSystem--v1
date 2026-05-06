@@ -16,10 +16,12 @@ interface SettingsPageProps {
   role?: string;
   roleId?: number;
   employeeId?: number;
+  isSystem?: boolean; 
+  permissions?: Record<string, any>; 
   onLogout: () => void;
 }
 
-export default function SettingsPage({ role = "Admin", roleId, employeeId, onLogout }: SettingsPageProps) {
+export default function SettingsPage({ role = "Admin", roleId, employeeId, isSystem, permissions, onLogout }: SettingsPageProps) {
   const [activeView, setActiveView] = useState<"main" | "users" | "access" | "appPreferences" | "backupRestore" | "auditlog">("main");
   const [showChangePassword, setShowChangePassword] = useState(false);
 
@@ -39,8 +41,8 @@ export default function SettingsPage({ role = "Admin", roleId, employeeId, onLog
   };
 
   // role_id 1 = Super Admin, role_id 2 = Admin — both get full settings access
-  const isAdmin = roleId === 1 || roleId === 2;
-  const isManagerOrHead = role === "Manager" || role === "Head";
+ const isAdmin = isSystem === true;
+ const isManagerOrHead = permissions?.settings?.can_view === true && !isAdmin;
 
   const allConfigItems = [
     {
@@ -106,7 +108,7 @@ export default function SettingsPage({ role = "Admin", roleId, employeeId, onLog
         )}
 
         {activeView === "access" && (
-          <AccessControl onBack={() => setActiveView("main")} />
+          <AccessControl onBack={() => setActiveView("main")} currentUserRole={role} />
         )}
 
         {activeView === "appPreferences" && (

@@ -24,12 +24,19 @@ const ROWS_PER_PAGE = 10;
 type OrderItemBackend = {
   inventory_id: number; order_quantity: number; available_quantity: number;
   item_status_id: number; item_status?: string; item_name?: string; amount?: number; uom?: string;
+  brand_name?: string; item_description?: string;
 };
 
 export type Order = {
   id: number; customer: string; contact?: string; address: string;
-  date: string; status: string; paymentMethod: string;
+  date: string; status: string; paymentMethod: string; paymentStatus?: string;
   totalQty: number; totalAmount: number; items?: OrderItemBackend[]; is_archived?: boolean;
+  amount_paid?: number;
+  payment_status_id?: number;
+  deposit_date?: string | null;
+  final_payment_date?: string | null;
+  shipped_date?: string | null;
+  cancelled_date?: string | null;
 };
 
 type Summary = {
@@ -95,6 +102,9 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   // ── STATUS FILTER ──
   const [statusFilter, setStatusFilter] = useState<string>('All Status');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+
+  // ── TOTAL ORDERS CARD FILTER ──
+  const [totalOrdersFilter, setTotalOrdersFilter] = useState<'all' | 'week' | 'month'>('all');
 
   const s = styles;
 
@@ -229,11 +239,48 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
 
   const handleUpdateSave = async (updatedOrder: any) => {
     try {
-      console.log('[handleUpdateSave] payload:', JSON.stringify(updatedOrder, null, 2));
-      const response = await fetch(`/api/orders/update/${updatedOrder.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOrder),
+      const original = selectedOrderForEdit;
+      const statusChanged  = updatedOrder.status !== original?.status;
+      const itemsChanged   = JSON.stringify(updatedOrder.items)   !== JSON.stringify(original?.items);
+      const detailsChanged = updatedOrder.customerName !== original?.name ||
+                             updatedOrder.contact      !== original?.contact ||
+                             updatedOrder.address      !== original?.address ||
+                             updatedOrder.paymentMethod !== original?.paymentMethod;
+
+      const isStatusOnly = statusChanged && !itemsChanged && !detailsChanged;
+
+      const url    = isStatusOnly
+        ? `/api/orders/${updatedOrder.id}/status`
+        : `/api/orders/update/${updatedOrder.id}`;
+      const method = isStatusOnly ? 'PATCH' : 'PUT';
+      const body   = isStatusOnly
+        ? JSON.stringify({ status: updatedOrder.status })
+        : JSON.stringify(updatedOrder);
+
+      const response = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' }, body,
       });
       if (response.ok) {
+        const apiData = await response.json().catch(() => ({}));
+        setOrders(prev => prev.map(o =>
+          o.id === updatedOrder.id
+            ? {
+                ...o,
+                customer:           updatedOrder.customerName ?? o.customer,
+                contact:            updatedOrder.contact      ?? o.contact,
+                address:            updatedOrder.address      ?? o.address,
+                status:             updatedOrder.status       ?? o.status,
+                paymentMethod:      updatedOrder.paymentMethod ?? o.paymentMethod,
+                totalAmount:        updatedOrder.totalAmt      ?? o.totalAmount,
+                amount_paid:        updatedOrder.amount_paid   ?? o.amount_paid,
+                payment_status_id:  updatedOrder.payment_status_id ?? o.payment_status_id,
+                deposit_date:       updatedOrder.deposit_date       ?? o.deposit_date,
+                final_payment_date: updatedOrder.final_payment_date ?? o.final_payment_date,
+                shipped_date:       apiData.shipped_date   !== undefined ? apiData.shipped_date   : o.shipped_date,
+                cancelled_date:     apiData.cancelled_date !== undefined ? apiData.cancelled_date : o.cancelled_date,
+              }
+            : o
+        ));
         setToastTitle("Updated!"); setToastMessage("The order record has been successfully updated.");
         setIsError(false); setSubmittedData(null); setShowToast(true); setShowEditModal(false);
         fetchOrders(); fetchSummary();
@@ -263,7 +310,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   };
 
   const handleOpenEdit = (order: Order) => {
-    setSelectedOrderForEdit({ id: order.id, name: order.customer, contact: order.contact || '', address: order.address, status: order.status, paymentMethod: order.paymentMethod, items: order.items });
+    setSelectedOrderForEdit({ id: order.id, name: order.customer, contact: order.contact || '', address: order.address, status: order.status, paymentMethod: order.paymentMethod, items: order.items, amount_paid: order.amount_paid ?? 0, payment_status_id: order.payment_status_id ?? 30, deposit_date: order.deposit_date ?? '', final_payment_date: order.final_payment_date ?? '' });
     setOpenMenuId(null); setShowEditModal(true);
   };
 
@@ -442,6 +489,45 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
     });
   }, [filtered, sortConfig]);
 
+  const { shippedTodayCount, activeQueueCount, cancelledTodayCount } = useMemo(() => {
+    // Compare only the calendar date (YYYY-MM-DD) so time zones never cause
+    // an off-by-one when the timestamp is near midnight.
+    const todayYMD = (() => {
+      const n = new Date();
+      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+    })();
+
+    const isTodayISO = (dateStr: string | null | undefined): boolean => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return false;
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return ymd === todayYMD;
+    };
+
+    let shipped   = 0;
+    let queue     = 0;
+    let cancelled = 0;
+    for (const o of orders) {
+      if (o.is_archived) continue;
+      const st = o.status?.toLowerCase();
+      if (st === 'shipping'  && isTodayISO(o.shipped_date))   shipped++;
+      if (st === 'cancelled' && isTodayISO(o.cancelled_date)) cancelled++;
+      if (st === 'preparing' || st === 'packed')               queue++;
+    }
+    return { shippedTodayCount: shipped, activeQueueCount: queue, cancelledTodayCount: cancelled };
+  }, [orders]);
+
+  const filteredTotalCount = useMemo(() => {
+    const active = orders.filter(o => !o.is_archived);
+    if (totalOrdersFilter === 'all') return active.length;
+    const now = new Date();
+    const cutoff = totalOrdersFilter === 'week'
+      ? (() => { const d = new Date(now); d.setDate(now.getDate() - now.getDay()); d.setHours(0, 0, 0, 0); return d; })()
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    return active.filter(o => { const d = parseDate(o.date); return d !== null && d >= cutoff; }).length;
+  }, [orders, totalOrdersFilter]);
+
   const totalPages = Math.max(1, Math.ceil(sorted.length / ROWS_PER_PAGE));
   const paginated = sorted.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
   
@@ -488,6 +574,50 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
       </span>
     );
   };
+  // Converts an ISO timestamp (or any date string) to MM/DD/YY without throwing.
+  const fmtDate = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+  };
+
+  const getPaymentStatusBadge = (o: Order) => {
+    const id = o.payment_status_id;
+    if (id === 29) {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac' }}>
+          Paid
+        </span>
+      );
+    }
+    if (id === 31) {
+      return (
+        <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#fef9c3', color: '#a16207', border: '1.5px solid #fde047' }}>
+            Partial
+          </span>
+          {o.deposit_date && (
+            <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Dep: {fmtDate(o.deposit_date)}</span>
+          )}
+        </span>
+      );
+    }
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#f3f4f6', color: '#6b7280', border: '1.5px solid #e5e7eb' }}>
+        Unpaid
+      </span>
+    );
+  };
+
+  // Returns the most contextually relevant date for a row.
+  const getDisplayDate = (o: Order): string => {
+    const st = o.status?.toLowerCase();
+    if (st === 'cancelled' && o.cancelled_date) return fmtDate(o.cancelled_date) ?? o.date;
+    if ((st === 'shipping' || st === 'received') && o.shipped_date) return fmtDate(o.shipped_date) ?? o.date;
+    return o.date;
+  };
+
   if (isLoading === null) return (
   <div className={s.container}>
     <TopHeader role={role} onLogout={onLogout} />
@@ -594,21 +724,41 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                 <rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v4h-7V8z"/>
                 <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
               </svg>
-              <span style={{ color: "#16a34a" }}>{summary ? summary.shippedToday.current : '—'}</span>
-              {summary && <span style={{ color: "#164163" }}>/{summary.shippedToday.total}</span>}
+              <span style={{ color: "#16a34a" }}>{shippedTodayCount}</span>
+              <span style={{ color: "#164163" }}>/{activeQueueCount}</span>
             </h2>
           </section>
           <section className={s.statCard}>
             <p className={s.cardTitle}>Orders Cancelled</p>
-            <h2 className={s.bigNumberRed}>{summary ? summary.cancelled.current : '—'}</h2>
+            <h2 className={s.bigNumberRed}>{cancelledTodayCount}</h2>
           </section>
           <section className={s.statCardSpaced}>
-            <p className={s.cardTitle}>Total Orders</p>
-            <h2 className={s.bigNumberGold}>{summary ? summary.totalOrders.count.toLocaleString() : '—'}</h2>
-            <div className={s.cardFooter}>
-              <span className={s.cardSubtext}>vs last month</span>
-              {summary && summary.totalOrders.growth != null && renderGrowthPill(summary.totalOrders.growth)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem', gap: '1rem' }}>
+              <p className={s.cardTitle} style={{ margin: 0, fontWeight: 700, color: '#1e293b' }}>Total Orders</p>
+              <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+                {([['all', 'All'], ['week', 'Week'], ['month', 'Month']] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setTotalOrdersFilter(val)}
+                    style={{
+                      padding: '3px 10px',
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s, color 0.15s',
+                      backgroundColor: totalOrdersFilter === val ? '#1e293b' : 'transparent',
+                      color:           totalOrdersFilter === val ? '#ffffff' : '#64748b',
+                      boxShadow:       totalOrdersFilter === val ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <h2 className={s.bigNumberGold}>{filteredTotalCount.toLocaleString()}</h2>
           </section>
         </div>
         
@@ -693,9 +843,9 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                     {[
                       { label: 'ID', key: 'id' }, { label: 'CUSTOMER', key: 'customer' },
                       { label: 'ADDRESS', key: 'address' }, { label: 'QTY', key: 'totalQty' },
-                      { label: 'TOTAL', key: 'totalAmount' }, { label: 'PAYMENT', key: 'paymentMethod' },
-                      { label: 'DATE', key: 'date' }, { label: 'STATUS', key: 'status' },
-                      { label: 'ACTION', key: null },
+                      { label: 'TOTAL', key: 'totalAmount' }, { label: 'METHOD', key: 'paymentMethod' },
+                      { label: 'DATE', key: 'date' }, { label: 'ORDER STATUS', key: 'status' },
+                      { label: 'PAYMENT STATUS', key: null }, { label: 'ACTION', key: null },
                     ].map(col => {
                       const isSortable = col.key === 'id'
                       return (
@@ -731,7 +881,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                   <>
                     {[0,1,2,3,4,5,6,7].map(i => (
                       <tr key={i}>
-                        {[40,110,130,60,30,70,70,55,55].map((w,j) => (
+                        {[40,110,130,60,30,70,70,55,70,55].map((w,j) => (
                           <td key={j}>
                             <div style={{
                               height: '12px',
@@ -754,8 +904,9 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                       <td>{o.totalQty}</td>
                       <td style={{ fontWeight: 'bold' }}>₱{o.totalAmount?.toLocaleString()}</td>
                       <td>{o.paymentMethod}</td>
-                      <td>{o.date}</td>
+                      <td>{getDisplayDate(o)}</td>
                       <td><span style={getStatusStyle(o.status)}>{o.status}</span></td>
+                      <td>{getPaymentStatusBadge(o)}</td>
                       <td className={s.actionCell} onClick={e => e.stopPropagation()}>
                         <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)} />
                         {openMenuId === o.id && (
@@ -833,15 +984,33 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
             <div ref={printRef} className={s.viewPrintBody}>
               <div className={s.viewCustomerSection}>
                 <p className={s.viewSectionTitle}>Customer Details</p>
-                <div className={s.viewCustomerGrid}>
-                  {[
-                    { label: 'Customer Name', value: selectedOrderForView.customer },
-                    { label: 'Contact Number', value: selectedOrderForView.contact || '—' },
-                    { label: 'Address', value: selectedOrderForView.address },
-                    { label: 'Payment Method', value: selectedOrderForView.paymentMethod },
-                  ].map(({ label, value }) => (
-                    <div key={label}><p className={s.viewInfoLabel}>{label}</p><p className={s.viewInfoValue}>{value}</p></div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    {[
+                      { label: 'Customer Name', value: selectedOrderForView.customer },
+                      { label: 'Contact Number', value: selectedOrderForView.contact || '—' },
+                    ].map(({ label, value }) => (
+                      <div key={label}><p className={s.viewInfoLabel}>{label}</p><p className={s.viewInfoValue}>{value}</p></div>
+                    ))}
+                  </div>
+                  <div>
+                    <p className={s.viewInfoLabel}>Address</p>
+                    <p className={s.viewInfoValue}>{selectedOrderForView.address}</p>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div><p className={s.viewInfoLabel}>Payment Method</p><p className={s.viewInfoValue}>{selectedOrderForView.paymentMethod}</p></div>
+                    <div>
+                      <p className={s.viewInfoLabel}>Payment Status</p>
+                      <p className={s.viewInfoValue}>
+                        {(() => {
+                          const id = selectedOrderForView.payment_status_id;
+                          if (id === 29) return <span style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Paid</span>;
+                          if (id === 31) return <span style={{ backgroundColor: '#fef9c3', color: '#a16207', border: '1.5px solid #fde047', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Partial</span>;
+                          return <span style={{ backgroundColor: '#f3f4f6', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Unpaid</span>;
+                        })()}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -854,7 +1023,14 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                       const unitCost = item.order_quantity > 0 ? itemAmount / item.order_quantity : 0;
                       return (
                         <tr key={idx}>
-                          <td><p className={s.viewItemName}>{item.item_name || `Item #${item.inventory_id}`}</p>{item.uom && <p className={s.viewItemStatus}>{item.uom}</p>}</td>
+                          <td>
+                            <p className={s.viewItemName}>
+                              {item.item_name || `Item #${item.inventory_id}`}
+                              {item.brand_name && <span style={{ fontWeight: 400, color: '#475569' }}> — {item.brand_name}</span>}
+                            </p>
+                            {item.item_description && <p className={s.viewItemStatus}>{item.item_description}</p>}
+                            {item.uom && <p className={s.viewItemStatus}>UOM: {item.uom}</p>}
+                          </td>
                           <td>{item.order_quantity}</td>
                           <td>₱ {unitCost.toFixed(2)}</td>
                           <td>₱ {itemAmount.toFixed(2)}</td>

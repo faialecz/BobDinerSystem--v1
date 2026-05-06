@@ -56,6 +56,7 @@ export default function Home() {
           employeeUsername: "",
           roleName:         payload.role_name as string,
           roleId:           payload.role_id as number,
+          isSystem: payload.is_system as boolean,  // in the token restore useEffect
           permissions:      payload.permissions as UserInfo["permissions"],
           token,
         });
@@ -141,7 +142,7 @@ export default function Home() {
                 else if (item) setReorderItem(item);
               }} />
             ) : activeTab === "Settings" ? (
-              <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} onLogout={handleLogout} />
+            <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} isSystem={userInfo.isSystem} permissions={userInfo.permissions} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (
               <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (
