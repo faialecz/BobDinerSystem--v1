@@ -7,8 +7,8 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 // Alert types → navigation destination
 const TYPE_NAV_MAP: Record<string, string> = {
-  low_stock:        'Inventory',
-  out_of_stock:     'Inventory',
+  low_stock:        'Reports',
+  out_of_stock:     'Reports',
   expiring_soon:    'Inventory',
   inactive_supplier:'Suppliers',
   overdue_payment:  'Orders',
@@ -127,11 +127,14 @@ export default function TopHeader({ role }: TopHeaderProps) {
 
     const detail: Record<string, unknown> = { tab };
 
-    // Navigate to the right item WITHOUT setting a search term (avoids filtering everything out)
-    if (notif.category === 'INVENTORY') {
+    if (notif.category === 'INVENTORY' && (notif.type === 'expiring_soon')) {
       detail.view_inventory_id = notif.reference;
+    } else if (notif.type === 'low_stock' || notif.type === 'out_of_stock') {
+      // Navigate to Reports → Reorder tab
+      detail.tab = 'Reports';
+      detail.reorder_tab = 'reorder';
     } else if (notif.type === 'overdue_payment') {
-      detail.search = notif.reference; // order ID
+      detail.search = notif.reference;
     }
 
     window.dispatchEvent(new CustomEvent('app:navigate', { detail }));

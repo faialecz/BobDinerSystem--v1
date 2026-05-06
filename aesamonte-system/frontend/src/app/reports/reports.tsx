@@ -102,14 +102,16 @@ function AgeingBadge({ status }: { status: string }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function ReportsPage({
-  role = 'Admin', onLogout, permissions, onNavigate,
+  role = 'Admin', onLogout, permissions, onNavigate, initialTab, onViewOpened,
 }: {
   role?: string;
   onLogout: () => void;
   permissions?: ModulePerms;
   onNavigate?: (tab: string, item?: { inventory_brand_id: number; item_name: string; brand_name: string; uom_name: string; quantity_ordered: number; unit_cost: number; } | string) => void;
+  initialTab?: TabKey;
+  onViewOpened?: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<TabKey>('product-performance');
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab ?? 'product-performance');
   const [dataMap,   setDataMap]   = useState<Partial<Record<TabKey, Record<string, unknown>[]>>>({});
   const [extraMap,  setExtraMap]  = useState<Partial<Record<TabKey, unknown>>>({});
   const [loading,   setLoading]   = useState(false);
@@ -164,6 +166,14 @@ export default function ReportsPage({
       setErrMsg(e instanceof Error ? e.message : 'Unknown error');
     } finally { setLoading(false); }
   }, []);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+      onViewOpened?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab]);
 
   useEffect(() => {
     fetchTab(activeTab, '', '');
@@ -344,7 +354,7 @@ export default function ReportsPage({
   }
 
   // Tabs that show date inputs (server-side via usesDateFilter, or client-side filtering)
-  const hasDateFilter = ['product-performance', 'stock-ageing', 'customer-sales', 'inventory-valuation', 'reorder'].includes(activeTab);
+  const hasDateFilter = ['product-performance', 'stock-ageing','inventory-valuation'].includes(activeTab);
 
   function PaginationFooter() {
     if (filteredRows.length <= ROWS_PER_PAGE) return null;
@@ -551,10 +561,10 @@ export default function ReportsPage({
                 <div className={styles.statusFilterContainer}>
                   <button
                     className={`${styles.statusFilterTrigger} ${statusOpen ? styles.statusFilterTriggerOpen : ''}`}
-                    onClick={() => setStatusOpen(p => !p)}
+                    onClick={() => { setStatusOpen(p => !p); setAgeingExpiryOpen(false); }}
                   >
                     <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, backgroundColor: dotColor, display: 'inline-block' }} />
-                    <span>{statusFilter}</span>
+                    <span>{statusFilter === 'All' && activeTab === 'stock-ageing' ? 'Stock Status' : statusFilter}</span>
                     <svg className={`${styles.statusFilterChevron} ${statusOpen ? styles.statusFilterChevronOpen : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
                   </button>
                   {statusOpen && (
@@ -575,7 +585,7 @@ export default function ReportsPage({
               )}
 
               {/* Date Added toggle — only for tabs that have it */}
-              {['product-performance', 'inventory-valuation'].includes(activeTab) && (
+              {['product-performance', 'inventory-valuation', 'stock-ageing'].includes(activeTab) && (
                 <button
                   onClick={() => setShowDateAdded(p => !p)}
                   style={{
@@ -585,7 +595,7 @@ export default function ReportsPage({
                     color: showDateAdded ? '#fff' : '#64748b',
                     whiteSpace: 'nowrap',
                   }}>
-                  {showDateAdded ? '✓ Toggle Date Added' : '+ Toggle Date Added'}
+                  {showDateAdded ? '✓ Date Added' : '+ Date Added'}
                 </button>
               )}
 
@@ -602,11 +612,12 @@ export default function ReportsPage({
                       { label: 'Stable',            color: '#15803d' },
                     ];
                     const activeDot = expiryOpts.find(o => o.label === ageingExpiryFilter)?.color ?? '#9ca3af';
+                    
                     return (
                       <div className={styles.statusFilterContainer} style={{ position: 'relative' }}>
                         <button
                           className={`${styles.statusFilterTrigger} ${ageingExpiryOpen ? styles.statusFilterTriggerOpen : ''}`}
-                          onClick={() => setAgeingExpiryOpen(p => !p)}>
+                          onClick={() => { setAgeingExpiryOpen(p => !p); setStatusOpen(false); }}>
                           <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, backgroundColor: activeDot, display: 'inline-block' }} />
                           <span>{ageingExpiryFilter || 'Expiry Status'}</span>
                           <svg className={`${styles.statusFilterChevron} ${ageingExpiryOpen ? styles.statusFilterChevronOpen : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -630,7 +641,7 @@ export default function ReportsPage({
 
                   {/* Min age filter with unit selector */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', background: '#f8fafc' }}>
-                    <input type="number" min="0" step="0.1" placeholder="Min age"
+                    <input type="number" min="0" step="1" placeholder="Min age"
                       value={ageingDaysMin}
                       onChange={e => { setAgeingDaysMin(e.target.value); setCurrentPage(1); }}
                       style={{ padding: '7px 8px', border: 'none', background: 'transparent', fontSize: '0.85rem', width: 80, outline: 'none', color: '#2d3748' }} />

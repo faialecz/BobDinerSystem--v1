@@ -33,7 +33,34 @@ def get_suppliers():
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Check which date column exists on the supplier table
+        # Ensure inactive_date column exists
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'supplier' AND column_name = 'inactive_date'
+        """)
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE supplier ADD COLUMN inactive_date DATE")
+            conn.commit()
+
+        # Auto-archive suppliers inactive for 30+ days
+        cur.execute("""
+            UPDATE supplier
+            SET supplier_status_id = (
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'SUPPLIER_STATUS' AND status_code = 'ARCHIVED'
+                LIMIT 1
+            )
+            WHERE inactive_date IS NOT NULL
+              AND inactive_date <= CURRENT_DATE - INTERVAL '30 days'
+              AND supplier_status_id = (
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'SUPPLIER_STATUS' AND status_code = 'INACTIVE'
+                LIMIT 1
+              )
+        """)
+        conn.commit()
+
+        # Check which date column exists
         cur.execute("""
             SELECT column_name FROM information_schema.columns
             WHERE table_name = 'supplier'
@@ -54,12 +81,14 @@ def get_suppliers():
                 st.status_name AS supplier_status,
                 st.status_code,
                 pm.status_name AS payment_terms,
-                {date_col}     AS date_added
+                {date_col}     AS date_added,
+                TO_CHAR(s.inactive_date, 'YYYY-MM-DD') AS inactive_date
             FROM supplier s
             LEFT JOIN static_status st ON s.supplier_status_id = st.status_id
             LEFT JOIN static_status pm ON s.payment_terms = pm.status_id
                                       AND pm.status_scope = 'PAYMENT_METHOD'
             WHERE st.status_scope = 'SUPPLIER_STATUS'
+              AND st.status_code != 'ARCHIVED'
             ORDER BY s.supplier_id DESC
         """)
         rows = cur.fetchall()
@@ -79,10 +108,12 @@ def get_suppliers():
             "supplier_email":  r[4],
             "supplier_address":r[5],
             "status":          r[6],
-            "is_archived":     r[7] == 'INACTIVE',
+            "status_code":     r[7],
+            "is_archived":     False,  # INACTIVE suppliers still show in main list
             "created_at":      None,
             "paymentTerms":    r[8] or "—",
             "date_added":      r[9] if len(r) > 9 else None,
+            "inactive_date":   r[10] if len(r) > 10 else None,
         }
         for r in rows
     ]
@@ -208,7 +239,8 @@ def get_supplier_items(supplier_id):
                 i.item_name,
                 COALESCE(b.brand_name, 'Generic') AS brand_name,
                 COALESCE(ib.item_sku, '—')         AS sku,
-                i.inventory_id
+                i.inventory_id,
+                ib.inventory_brand_id
             FROM inventory_brand_supplier ibs
             JOIN inventory_brand ib ON ib.inventory_brand_id = ibs.inventory_brand_id
             JOIN inventory       i  ON i.inventory_id        = ib.inventory_id
@@ -218,7 +250,7 @@ def get_supplier_items(supplier_id):
         """, (supplier_id,))
         rows = cur.fetchall()
         return jsonify([
-            {"item_name": r[0], "brand_name": r[1], "sku": r[2], "inventory_id": r[3]}
+            {"item_name": r[0], "brand_name": r[1], "sku": r[2], "inventory_id": r[3], "inventory_brand_id": r[4]}
             for r in rows
         ]), 200
     except Exception as e:
@@ -258,24 +290,24 @@ def toggle_supplier_archive(supplier_id):
                 WHERE status_scope = 'SUPPLIER_STATUS' AND status_code = 'ACTIVE'
             """)
             is_archived = False
-            action_msg = "Restored from Archive"
+            action_msg = "Restored to Active"
+            new_status_id = cur.fetchone()[0]
+            cur.execute("""
+                UPDATE supplier SET supplier_status_id = %s, inactive_date = NULL
+                WHERE supplier_id = %s
+            """, (new_status_id, supplier_id))
         else:
             cur.execute("""
                 SELECT status_id FROM static_status 
                 WHERE status_scope = 'SUPPLIER_STATUS' AND status_code = 'INACTIVE'
             """)
             is_archived = True
-            action_msg = "Moved to Archive"
-
-        res = cur.fetchone()
-        if not res:
-            return jsonify({"error": "Target status not found in static_status."}), 404
-
-        new_status_id = res[0]
-
-        cur.execute("""
-            UPDATE supplier SET supplier_status_id = %s WHERE supplier_id = %s
-        """, (new_status_id, supplier_id))
+            action_msg = "Marked as Inactive"
+            new_status_id = cur.fetchone()[0]
+            cur.execute("""
+                UPDATE supplier SET supplier_status_id = %s, inactive_date = CURRENT_DATE
+                WHERE supplier_id = %s
+            """, (new_status_id, supplier_id))
 
         conn.commit()
 
