@@ -123,7 +123,7 @@ export default function ReportsPage({
   const [statusFilter, setStatusFilter] = useState('All');
   const [statusOpen,   setStatusOpen]   = useState(false);
 
-  // ── Date range filter (for tabs that don't use server-side date) ──
+  // ── Date range filter — start required, end optional (null = open-ended) ──
   const [fromDate, setFromDate] = useState('');
   const [toDate,   setToDate]   = useState('');
 
@@ -136,10 +136,10 @@ export default function ReportsPage({
   // ── Column toggles ──
   const [showDateAdded, setShowDateAdded] = useState(false);
   // ── Stock ageing extra filters ──
-  const [ageingExpiryFilter, setAgeingExpiryFilter] = useState('');
-  const [ageingDaysMin,      setAgeingDaysMin]      = useState('');
-  const [ageingDaysUnit,     setAgeingDaysUnit]     = useState<'d'|'mo'|'yr'>('d');
-  const [ageingExpiryOpen,   setAgeingExpiryOpen]   = useState(false);
+  const [ageingExpiryFilter,  setAgeingExpiryFilter]  = useState('');
+  const [ageingDateField,     setAgeingDateField]      = useState<'last_sale_date'|'earliest_expiry'|'date_added'>('last_sale_date');
+  const [ageingExpiryOpen,    setAgeingExpiryOpen]     = useState(false);
+  const [ageingDateFieldOpen, setAgeingDateFieldOpen]  = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg,  setToastMsg]  = useState('');
   const [isError,   setIsError]   = useState(false);
@@ -149,18 +149,23 @@ export default function ReportsPage({
     setTimeout(() => setShowToast(false), 4000);
   }, []);
 
-  const fetchTab = useCallback(async (tab: TabKey, sd: string, ed: string) => {
+  const fetchTab = useCallback(async (tab: TabKey, sd: string, ed: string, dateField?: string) => {
     const cfg = TABS.find(t => t.key === tab)!;
     setLoading(true); setErrMsg(null);
     let url = cfg.endpoint;
     const params = new URLSearchParams();
-    if (sd) params.set('start_date', sd);
-    if (ed) params.set('end_date', ed);
+    if (sd) {
+      params.set('start_date', sd);
+      params.set('end_date', ed || sd);
+    }
+    if (dateField) params.set('date_field', dateField);
     if (params.toString()) url += `?${params.toString()}`;
+    console.log('[reports] fetching:', url);
     try {
       const res  = await fetch(url, { cache: 'no-store' });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'Request failed');
+      console.log('[reports] got', Array.isArray(json) ? json.length : json, 'rows for', tab);
       setDataMap(prev => ({ ...prev, [tab]: json }));
     } catch (e: unknown) {
       setErrMsg(e instanceof Error ? e.message : 'Unknown error');
@@ -179,7 +184,8 @@ export default function ReportsPage({
     fetchTab(activeTab, '', '');
     setSearch(''); setStatusFilter('All'); setFromDate(''); setToDate('');
     setSortKey(''); setSortDir('asc'); setCurrentPage(1);
-    setAgeingExpiryFilter(''); setAgeingDaysMin(''); setAgeingDaysUnit('d'); setAgeingExpiryOpen(false);
+    setAgeingExpiryFilter(''); setAgeingDateField('last_sale_date');
+    setAgeingExpiryOpen(false); setAgeingDateFieldOpen(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
   const allRows = useMemo<Record<string, unknown>[]>(() => dataMap[activeTab] ?? [], [dataMap, activeTab]);
@@ -254,24 +260,7 @@ export default function ReportsPage({
       }
     }
 
-    // Date range filter (client-side, for non-server-date tabs)
-    if ((fromDate || toDate) && !cfg.usesDateFilter) {
-      const dateField: Partial<Record<TabKey, string>> = {
-        'stock-ageing':   'last_sold_date',
-        'customer-sales': 'sales_date',
-        'product-performance': 'sales_date',
-      };
-      const field = dateField[activeTab];
-      if (field) {
-        result = result.filter(r => {
-          const d = (r as Record<string,unknown>)[field] as string | null;
-          if (!d) return !fromDate; // null dates only shown when no from filter
-          if (fromDate && d < fromDate) return false;
-          if (toDate   && d > toDate)   return false;
-          return true;
-        });
-      }
-    }
+    // Date range filter is handled server-side via fetchTab — no client-side re-filter needed
 
     // Sort
     if (sortKey) {
@@ -289,15 +278,10 @@ export default function ReportsPage({
       if (ageingExpiryFilter) {
         result = result.filter(r => (r as Record<string,unknown>).expiry_status === ageingExpiryFilter);
       }
-      if (ageingDaysMin) {
-        const multiplier = ageingDaysUnit === 'yr' ? 365 : ageingDaysUnit === 'mo' ? 30 : 1;
-        const min = Number(ageingDaysMin) * multiplier;
-        result = result.filter(r => ((r as Record<string,unknown>).days_in_inventory as number ?? 0) >= min);
-      }
     }
 
     return result;
-  }, [rows, statusFilter, fromDate, toDate, sortKey, sortDir, activeTab, tabStatusOptions, ageingExpiryFilter, ageingDaysMin, ageingDaysUnit]);
+  }, [rows, statusFilter, sortKey, sortDir, activeTab, tabStatusOptions, ageingExpiryFilter]);
 
   function toggleSort(key: string) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -536,17 +520,34 @@ export default function ReportsPage({
                     <input type="date" className={styles.dateInput}
                       value={fromDate}
                       max={toDate || undefined}
-                      onChange={e => { setFromDate(e.target.value); setCurrentPage(1); fetchTab(activeTab, e.target.value, toDate); }} />
+                      onChange={e => {
+                        const val = e.target.value;
+                        setFromDate(val);
+                        setCurrentPage(1);
+                        fetchTab(activeTab, val, toDate, activeTab === 'stock-ageing' ? ageingDateField : undefined);
+                      }} />
                   </div>
                   <div className={styles.filterGroup}>
-                    <label className={styles.filterLabel}>End Date</label>
+                    <label className={styles.filterLabel}>End Date <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
                     <input type="date" className={styles.dateInput}
                       value={toDate}
                       min={fromDate || undefined}
-                      onChange={e => { setToDate(e.target.value); setCurrentPage(1); fetchTab(activeTab, fromDate, e.target.value); }} />
+                      onChange={e => {
+                        const val = e.target.value;
+                        setToDate(val);
+                        setCurrentPage(1);
+                        fetchTab(activeTab, fromDate, val, activeTab === 'stock-ageing' ? ageingDateField : undefined);
+                      }} />
                   </div>
+                  {fromDate && (
+                    <div style={{ alignSelf: 'flex-end', paddingBottom: 8, fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {toDate
+                        ? `${new Date(fromDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} → ${new Date(toDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                        : new Date(fromDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  )}
                   {(fromDate || toDate) && (
-                    <button onClick={() => { setFromDate(''); setToDate(''); fetchTab(activeTab, '', ''); setCurrentPage(1); }}
+                    <button onClick={() => { setFromDate(''); setToDate(''); fetchTab(activeTab, '', '', activeTab === 'stock-ageing' ? ageingDateField : undefined); setCurrentPage(1); }}
                       style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: 7, padding: '7px 12px', fontSize: '0.8rem', color: '#94a3b8', cursor: 'pointer', alignSelf: 'flex-end' }}>
                       Clear
                     </button>
@@ -602,6 +603,39 @@ export default function ReportsPage({
               {/* Stock ageing inline filters */}
               {activeTab === 'stock-ageing' && (
                 <>
+                  {/* Date field selector */}
+                  {(() => {
+                    const dateFieldOpts: { value: typeof ageingDateField; label: string }[] = [
+                      { value: 'last_sale_date', label: 'Last Sold' },
+                      { value: 'earliest_expiry', label: 'Earliest Expiry' },
+                      { value: 'date_added', label: 'Date Added' },
+                    ];
+                    const activeLabel = dateFieldOpts.find(o => o.value === ageingDateField)?.label ?? 'Last Sold';
+                    return (
+                      <div className={styles.statusFilterContainer} style={{ position: 'relative' }}>
+                        <button
+                          className={`${styles.statusFilterTrigger} ${ageingDateFieldOpen ? styles.statusFilterTriggerOpen : ''}`}
+                          onClick={() => { setAgeingDateFieldOpen(p => !p); setStatusOpen(false); setAgeingExpiryOpen(false); }}>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b', marginRight: 4 }}>Filter by:</span>
+                          <span>{activeLabel}</span>
+                          <svg className={`${styles.statusFilterChevron} ${ageingDateFieldOpen ? styles.statusFilterChevronOpen : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        {ageingDateFieldOpen && (
+                          <div className={styles.statusFilterMenu}>
+                            {dateFieldOpts.map(opt => (
+                              <button key={opt.value}
+                                className={`${styles.statusFilterMenuItem} ${ageingDateField === opt.value ? styles.statusFilterMenuItemActive : ''}`}
+                                onClick={() => { setAgeingDateField(opt.value); setAgeingDateFieldOpen(false); setCurrentPage(1); fetchTab(activeTab, fromDate, toDate, opt.value); }}>
+                                <span style={{ flex: 1 }}>{opt.label}</span>
+                                {ageingDateField === opt.value && <svg className={styles.statusFilterCheckmark} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Expiry filter — styled like stock status dropdown */}
                   {(() => {
                     const expiryOpts: { label: string; color: string }[] = [
@@ -617,7 +651,7 @@ export default function ReportsPage({
                       <div className={styles.statusFilterContainer} style={{ position: 'relative' }}>
                         <button
                           className={`${styles.statusFilterTrigger} ${ageingExpiryOpen ? styles.statusFilterTriggerOpen : ''}`}
-                          onClick={() => { setAgeingExpiryOpen(p => !p); setStatusOpen(false); }}>
+                          onClick={() => { setAgeingExpiryOpen(p => !p); setStatusOpen(false); setAgeingDateFieldOpen(false); }}>
                           <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, backgroundColor: activeDot, display: 'inline-block' }} />
                           <span>{ageingExpiryFilter || 'Expiry Status'}</span>
                           <svg className={`${styles.statusFilterChevron} ${ageingExpiryOpen ? styles.statusFilterChevronOpen : ''}`} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -639,22 +673,8 @@ export default function ReportsPage({
                     );
                   })()}
 
-                  {/* Min age filter with unit selector */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', background: '#f8fafc' }}>
-                    <input type="number" min="0" step="1" placeholder="Min age"
-                      value={ageingDaysMin}
-                      onChange={e => { setAgeingDaysMin(e.target.value); setCurrentPage(1); }}
-                      style={{ padding: '7px 8px', border: 'none', background: 'transparent', fontSize: '0.85rem', width: 80, outline: 'none', color: '#2d3748' }} />
-                    <select value={ageingDaysUnit} onChange={e => { setAgeingDaysUnit(e.target.value as 'd'|'mo'|'yr'); setCurrentPage(1); }}
-                      style={{ padding: '7px 6px', border: 'none', borderLeft: '1px solid #e2e8f0', background: 'transparent', fontSize: '0.82rem', color: '#64748b', cursor: 'pointer', outline: 'none' }}>
-                      <option value="d">days</option>
-                      <option value="mo">months</option>
-                      <option value="yr">years</option>
-                    </select>
-                  </div>
-
-                  {(ageingExpiryFilter || ageingDaysMin) && (
-                    <button onClick={() => { setAgeingExpiryFilter(''); setAgeingDaysMin(''); setAgeingDaysUnit('d'); setCurrentPage(1); }}
+                  {ageingExpiryFilter && (
+                    <button onClick={() => { setAgeingExpiryFilter(''); setCurrentPage(1); }}
                       className={styles.statusFilterTrigger} style={{ color: '#94a3b8' }}>
                       Clear
                     </button>
@@ -837,9 +857,10 @@ export default function ReportsPage({
                     <Th col="ageing_label">Stock Status</Th>
                     <Th col="expiry_status">Expiration Status</Th>
                     <Th col="recommended_action">Recommended Action</Th>
+                    {showDateAdded && <Th col="last_received_date">Date Added</Th>}
                   </tr></thead>
                   <tbody>
-                    {loading ? <LoadingRow cols={9} /> : r.length === 0 ? <EmptyRow cols={9} /> : r.map((row, i) => {
+                    {loading ? <LoadingRow cols={showDateAdded ? 10 : 9} /> : r.length === 0 ? <EmptyRow cols={showDateAdded ? 10 : 9} /> : r.map((row, i) => {
                       const bs = bucketStyle[row.ageing_label] ?? { color: '#64748b', bg: '#f1f5f9' };
                       return (
                         <tr key={i}
@@ -872,6 +893,7 @@ export default function ReportsPage({
                           <td style={{ fontSize: '0.82rem', fontWeight: 600, color: actionStyle[row.recommended_action] ?? '#64748b' }}>
                             {row.recommended_action}
                           </td>
+                          {showDateAdded && <td>{fmtDate(row.last_received_date) ?? <span style={{ color: '#94a3b8' }}>—</span>}</td>}
                         </tr>
                       );
                     })}
@@ -879,7 +901,7 @@ export default function ReportsPage({
                   {all.length > 0 && <tfoot><tr>
                     <td colSpan={2} className={styles.totalLabel}>Totals</td>
                     <td className={`${styles.numCol} ${styles.totalValue}`}>{num(sumField(all, 'qty_on_hand'))}</td>
-                    <td colSpan={6} />
+                    <td colSpan={showDateAdded ? 7 : 6} />
                   </tr></tfoot>}
                 </table>
               </div>
