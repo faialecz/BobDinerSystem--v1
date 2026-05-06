@@ -27,7 +27,7 @@ export interface OrderReceipt {
   customerAddress: string;
   orderDate: string;
   totalAmount: number;
-  status: string;
+  order_status: string;
   paymentMethod: string;
   items: ReceiptItem[];
 }

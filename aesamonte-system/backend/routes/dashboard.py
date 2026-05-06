@@ -941,7 +941,7 @@ def get_order_receipt(order_id: str):
             "customerAddress": customer_address,
             "orderDate": order_date.strftime("%m/%d/%y") if order_date else "",
             "totalAmount": float(total_amount or 0),
-            "status": status,
+            "order_status": status,
             "paymentMethod": payment_method,
             "items": items,
         }), 200

@@ -27,14 +27,27 @@ export default function ReceiptModal({
   onOrdersUpdate,
   onReceiptStatusUpdate,
 }: ReceiptModalProps) {
+  // Debug: Log the order status to diagnose the issue
+  console.log("Current Order Status Data:", receipt.order_status);
+
   const [confirmAction, setConfirmAction] = useState<"PREPARING" | "TO SHIP" | "RECEIVED" | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-const showToast = (message: string, type: "success" | "error") => {
-  setToast({ message, type });
-  setTimeout(() => setToast(null), 3000);
-};
+  // Helper function for format-agnostic status checking
+  const checkStatus = (status: string | number | null | undefined, targetName: string, targetId: number): boolean => {
+    if (status === null || status === undefined) return false;
+    // Check if it's the numeric ID
+    if (typeof status === "number" && status === targetId) return true;
+    // Check if it's the string name (case-insensitive)
+    if (typeof status === "string" && status.toUpperCase() === targetName.toUpperCase()) return true;
+    return false;
+  };
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
   const handleStatusAdvance = async (targetStatus: "PREPARING" | "TO SHIP" | "RECEIVED") => {
   try {
     const res = await fetch(
@@ -308,7 +321,7 @@ const showToast = (message: string, type: "success" | "error") => {
                 <span>{fmt(receipt.totalAmount)}</span>
               </div>
               <div className={styles.receiptStatusActions}>
-                {receipt.status === "PREPARING" && (
+                {checkStatus(receipt.order_status, "PREPARING", 19) && (
                   <button
                     className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnAmber}`}
                     onClick={() => setConfirmAction("TO SHIP")}
@@ -316,7 +329,7 @@ const showToast = (message: string, type: "success" | "error") => {
                     Mark as To Ship
                   </button>
                 )}
-                {receipt.status === "TO SHIP" && (
+                {(checkStatus(receipt.order_status, "PACKED", 20) || checkStatus(receipt.order_status, "TO SHIP", 20)) && (
                   <button
                     className={`${styles.receiptStatusBtn} ${styles.receiptStatusBtnGreen}`}
                     onClick={() => setConfirmAction("RECEIVED")}
@@ -324,7 +337,7 @@ const showToast = (message: string, type: "success" | "error") => {
                     Mark as Received
                   </button>
                 )}
-                {receipt.status === "RECEIVED" && (
+                {(checkStatus(receipt.order_status, "SHIPPING", 21) || checkStatus(receipt.order_status, "RECEIVED", 22)) && (
                   <span className={styles.receiptStatusDone}>✓ Received</span>
                 )}
               </div>
