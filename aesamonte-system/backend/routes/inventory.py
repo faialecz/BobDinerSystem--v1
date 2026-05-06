@@ -311,15 +311,9 @@ def search_inventory_variants():
                                   AND s_i.status_scope  = 'INVENTORY_STATUS'
         LEFT JOIN static_status s_b ON s_b.status_id   = ib.item_status_id
                                    AND s_b.status_scope = 'INVENTORY_STATUS'
-        WHERE COALESCE((
-                SELECT SUM(bat2.quantity_on_hand)
-                FROM   inventory_batch bat2
-                WHERE  bat2.inventory_brand_id = ib.inventory_brand_id
-                  AND  bat2.batch_status_id    = 15
-              ), 0) > 0
-          AND COALESCE(s_b.status_code, '') != 'ARCHIVED'
+         WHERE COALESCE(s_b.status_code, '') != 'ARCHIVED'
           AND s_i.status_code != 'ARCHIVED'
-    """
+          """
 
     try:
         if q:
