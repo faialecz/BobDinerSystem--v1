@@ -6,6 +6,15 @@ export interface Metrics {
   lowStock: number;
 }
 
+export interface PendingPaymentOrder {
+  orderId: number;
+  customer: string;
+  totalAmount: number;
+  totalQty: number;
+  date: string;
+  paymentStatus: string | null;
+}
+
 export interface RecentOrder {
   orderId: number;
   customerName: string;

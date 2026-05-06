@@ -17,6 +17,7 @@ import {
   ChartsData,
   InsightsData,
   OrderReceipt,
+  PendingPaymentOrder,
 } from "./types";
 
 interface LowStockItem {
@@ -58,6 +59,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate, onCrea
   const [charts, setCharts] = useState<ChartsData | null>(null);
   const [insights, setInsights] = useState<InsightsData | null>(null);
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
+  const [pendingPaymentOrders, setPendingPaymentOrders] = useState<PendingPaymentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
@@ -67,8 +69,9 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate, onCrea
       Promise.all([
         fetch(`${API}/api/dashboard/all`, { headers: { "Cache-Control": "no-cache" } }).then((r) => { if (!r.ok) throw new Error(`Dashboard API ${r.status}`); return r.json(); }),
         fetch(`${API}/api/inventory`, { headers: { "Cache-Control": "no-cache" } }).then((r) => { if (!r.ok) throw new Error(`Inventory API ${r.status}`); return r.json(); }),
+        fetch(`${API}/api/orders/list`, { headers: { "Cache-Control": "no-cache" } }).then((r) => r.ok ? r.json() : []),
       ])
-        .then(([dashData, inventoryData]) => {
+        .then(([dashData, inventoryData, ordersData]) => {
           const { metrics: m, recentOrders: ro, charts: ch, insights: ins, lowStockItems: dashLowStock } = dashData;
 
           if (ch && !ch.error) setCharts(ch);
@@ -128,6 +131,33 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate, onCrea
           if (m && !m.error) {
             setMetrics({ ...m, lowStock: stockAlerts.length });
           }
+
+          if (Array.isArray(ordersData)) {
+            const parseOrderDate = (s: string) => {
+              // date comes as "mm/dd/yy" from the backend
+              const [m, d, y] = (s || "").split("/");
+              return new Date(`20${y}-${m}-${d}`).getTime();
+            };
+
+            const pending = (ordersData as any[])
+              .filter((o) => {
+                if (o.is_archived) return false;
+                const ps = (o.paymentStatus ?? "").toUpperCase();
+                return ps === "UNPAID" || ps === "PARTIAL";
+              })
+              .sort((a, b) => parseOrderDate(a.date) - parseOrderDate(b.date));
+
+            setPendingPaymentOrders(
+              pending.map((o) => ({
+                orderId: o.id,
+                customer: o.customer,
+                totalAmount: o.totalAmount ?? 0,
+                totalQty: o.totalQty ?? 0,
+                date: o.date ?? "",
+                paymentStatus: o.paymentStatus ?? null,
+              }))
+            );
+          }
         })
         .catch((e) => console.error("Dashboard fetch error:", e))
         .finally(() => setLoading(false));
@@ -174,6 +204,7 @@ export default function Dashboard({ role = "Admin", onLogout, onNavigate, onCrea
           onNavigate={onNavigate}
           insights={insights}
           lowStockItems={lowStockItems}
+          pendingPaymentOrders={pendingPaymentOrders}
         />
 
         <div className={styles.panelsGrid}>
