@@ -1,0 +1,632 @@
+import os
+import csv
+import json
+import zipfile
+import io
+import threading
+from datetime import datetime, timezone
+from flask import Blueprint, jsonify, request, send_file
+from database.db_config import get_connection
+
+backup_bp = Blueprint("backup", __name__, url_prefix="/api/backup")
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+STORAGE_BUCKET = "backups"
+
+DAY_MAP = {
+    'monday': 0, 'tuesday': 1, 'wednesday': 2,
+    'thursday': 3, 'friday': 4, 'saturday': 5, 'sunday': 6
+}
+
+# ---------------------------------------------------------------------------
+# User-friendly error messages — hides raw DB / OS details from the frontend
+# ---------------------------------------------------------------------------
+
+def _friendly_error(e: Exception) -> str:
+    msg = str(e).lower()
+    if any(k in msg for k in ("connection", "timeout", "could not connect", "database")):
+        return "Backup failed: unable to reach the database. Please check your connection."
+    if any(k in msg for k in ("permission", "access", "denied")):
+        return "Backup failed: permission denied when saving the file."
+    if any(k in msg for k in ("disk", "space", "no space", "quota")):
+        return "Backup failed: not enough disk space to save the backup."
+    if any(k in msg for k in ("no such file", "directory", "path")):
+        return "Backup failed: the backup folder could not be created."
+    return "Backup failed due to a system error. Please try again or contact support."
+
+
+# ---------------------------------------------------------------------------
+# Background scheduler — checks every 30 s and fires run_backup() at the
+# configured daily / weekly time.  Uses a (date, hour, minute) key so the
+# backup runs at most once per minute even if the thread wakes up twice.
+# ---------------------------------------------------------------------------
+
+_last_backup_key: tuple | None = None
+
+
+def _scheduler_loop():
+    global _last_backup_key
+    import time as _time
+    while True:
+        _time.sleep(10)
+        try:
+            settings = load_settings()
+            now = datetime.now()
+            current_key = (now.date(), now.hour, now.minute)
+            if current_key == _last_backup_key:
+                continue
+
+            should_run = False
+            daily = settings.get("daily", {})
+            if daily.get("enabled"):
+                if now.hour == daily.get("hour", 12) and now.minute == daily.get("minute", 0):
+                    should_run = True
+
+            if not should_run:
+                weekly = settings.get("weekly", {})
+                if weekly.get("enabled"):
+                    target_day = DAY_MAP.get(weekly.get("day", "monday").lower(), 0)
+                    if (now.weekday() == target_day
+                            and now.hour == weekly.get("hour", 12)
+                            and now.minute == weekly.get("minute", 0)):
+                        should_run = True
+
+            if should_run:
+                _last_backup_key = current_key
+                try:
+                    run_backup()
+                except Exception as e:
+                    print(f"[Backup] run_backup() failed: {e}")
+                    try:
+                        _save_last_backup("error", _friendly_error(e))
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[Backup] Scheduler error: {e}")
+
+
+# In Flask debug mode, Werkzeug spawns two processes. Only start the scheduler
+# in the reloader child (WERKZEUG_RUN_MAIN=true) to avoid duplicate backups.
+_is_reloader_child = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+_is_production = os.environ.get("WERKZEUG_RUN_MAIN") is None
+if _is_reloader_child or _is_production:
+    _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True, name="backup-scheduler")
+    _scheduler_thread.start()
+
+
+# ---------------------------------------------------------------------------
+# Supabase Storage helper
+# ---------------------------------------------------------------------------
+
+def _supabase():
+    from supabase import create_client
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+# ---------------------------------------------------------------------------
+# Settings — stored in the backup_settings DB table (single row, id=1)
+# Table is created automatically on first run if it does not exist yet.
+# ---------------------------------------------------------------------------
+
+def _ensure_backup_table():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS backup_settings (
+                id      INTEGER PRIMARY KEY,
+                settings JSONB NOT NULL DEFAULT '{}'
+            )
+        """)
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+_ensure_backup_table()
+
+
+def load_settings():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT settings FROM backup_settings WHERE id = 1")
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        return {
+            "daily":  {"enabled": False, "hour": 12, "minute": 0, "ampm": "PM"},
+            "weekly": {"enabled": False, "hour": 12, "minute": 0, "ampm": "PM", "day": "monday"},
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _save_settings(settings):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO backup_settings (id, settings)
+            VALUES (1, %s)
+            ON CONFLICT (id) DO UPDATE SET settings = EXCLUDED.settings
+            """,
+            (json.dumps(settings),),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# CSV / ZIP helpers
+# ---------------------------------------------------------------------------
+
+def write_csv_buffer(cur, headers):
+    rows = cur.fetchall()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow([str(v) if v is not None else '' for v in row])
+    return buf.getvalue()
+
+
+def _build_zip_bytes():
+    """Generate a ZIP of all module CSVs entirely in memory. Returns (BytesIO, date_str)."""
+    date_str = datetime.now().strftime("%m-%d-%y")
+    conn = get_connection()
+    cur = conn.cursor()
+    zip_buffer = io.BytesIO()
+    try:
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            cur.execute("""
+                SELECT i.inventory_id, i.item_name,
+                       COALESCE((SELECT ib2.item_description FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_description,
+                       COALESCE((SELECT ib2.item_sku FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS item_sku,
+                       COALESCE((SELECT b2.brand_name FROM inventory_brand ib2 JOIN brand b2 ON ib2.brand_id = b2.brand_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS brand,
+                       COALESCE((SELECT SUM(bat3.quantity_on_hand) FROM inventory_batch bat3 JOIN inventory_brand ib3 ON ib3.inventory_brand_id = bat3.inventory_brand_id WHERE ib3.inventory_id = i.inventory_id AND bat3.expiry_date > CURRENT_DATE), 0) AS item_quantity,
+                       COALESCE((SELECT u2.uom_name FROM inventory_brand ib2 JOIN unit_of_measure u2 ON ib2.uom_id = u2.uom_id WHERE ib2.inventory_id = i.inventory_id LIMIT 1), '') AS uom_code,
+                       s.status_name,
+                       COALESCE((SELECT AVG(bat2.unit_cost) FROM inventory_batch bat2 JOIN inventory_brand ib2 ON ib2.inventory_brand_id = bat2.inventory_brand_id WHERE ib2.inventory_id = i.inventory_id AND bat2.expiry_date > CURRENT_DATE), 0) AS item_unit_price,
+                       COALESCE((SELECT ib2.item_selling_price FROM inventory_brand ib2 WHERE ib2.inventory_id = i.inventory_id LIMIT 1), 0) AS item_selling_price
+                FROM inventory i
+                JOIN static_status s ON i.item_status_id = s.status_id
+                ORDER BY i.inventory_id
+            """)
+            zf.writestr(f"Inventory_{date_str}.csv", write_csv_buffer(cur, [
+                'inventory_id', 'item_name', 'item_description', 'item_sku', 'brand',
+                'item_quantity', 'uom', 'status', 'item_unit_price', 'item_selling_price',
+            ]))
+
+            cur.execute("""
+                SELECT s.supplier_id, s.supplier_name, s.contact_person, s.supplier_contact,
+                       s.supplier_email, s.supplier_address, st.status_name
+                FROM supplier s
+                LEFT JOIN static_status st ON s.supplier_status_id = st.status_id
+                ORDER BY s.supplier_id
+            """)
+            zf.writestr(f"Supplier_{date_str}.csv", write_csv_buffer(cur, [
+                'supplier_id', 'supplier_name', 'contact_person', 'supplier_contact',
+                'supplier_email', 'supplier_address', 'status',
+            ]))
+
+            cur.execute("""
+                SELECT ot.order_id, c.customer_name, c.customer_address, ot.order_date,
+                       sl.status_name, i.item_name, od.order_quantity, ot.total_amount
+                FROM order_transaction ot
+                JOIN customer c ON ot.customer_id = c.customer_id
+                JOIN static_status sl ON ot.order_status_id = sl.status_id
+                LEFT JOIN order_details od ON ot.order_id = od.order_id
+                LEFT JOIN inventory_batch bat ON bat.batch_id = od.batch_id
+                LEFT JOIN inventory_brand ib ON ib.inventory_brand_id = bat.inventory_brand_id
+                LEFT JOIN inventory i ON i.inventory_id = ib.inventory_id
+                ORDER BY ot.order_id
+            """)
+            zf.writestr(f"Orders_{date_str}.csv", write_csv_buffer(cur, [
+                'order_id', 'customer_name', 'customer_address', 'order_date',
+                'status', 'item_name', 'quantity', 'total_amount',
+            ]))
+
+            cur.execute("""
+                SELECT st.sales_id, c.customer_name, st.sales_date, ot.total_amount,
+                       ss.status_name, pm.status_name
+                FROM sales_transaction st
+                JOIN order_transaction ot ON st.order_id = ot.order_id
+                JOIN customer c ON ot.customer_id = c.customer_id
+                JOIN static_status ss ON st.payment_status_id = ss.status_id
+                LEFT JOIN static_status pm ON st.payment_method_id = pm.status_id
+                ORDER BY st.sales_date DESC
+            """)
+            zf.writestr(f"Sales_{date_str}.csv", write_csv_buffer(cur, [
+                'sales_id', 'customer_name', 'sales_date', 'total_amount', 'status', 'payment_method',
+            ]))
+    finally:
+        cur.close()
+        conn.close()
+
+    zip_buffer.seek(0)
+    return zip_buffer, date_str
+
+
+# ---------------------------------------------------------------------------
+# Scheduled backup — saves ZIP to local backups/ folder
+# ---------------------------------------------------------------------------
+
+BACKUP_DIR = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "backups")
+
+
+def _save_last_backup(status: str, message: str, filename: str = ""):
+    """Persist last backup result into the settings JSON so the frontend can poll it."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        entry = json.dumps({
+            "last_backup": {
+                "status": status,
+                "message": message,
+                "filename": filename,
+                "time": datetime.now().isoformat(),
+            }
+        })
+        cur.execute(
+            "UPDATE backup_settings SET settings = settings || %s::jsonb WHERE id = 1",
+            (entry,),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
+def run_backup():
+    """Build a backup ZIP and save it to the local backups/ folder."""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    date_str = datetime.now().strftime("%m-%d-%y")
+    filename = f"Backup_{date_str}.zip"
+    filepath = os.path.join(BACKUP_DIR, filename)
+    if os.path.exists(filepath):
+        print(f"[Backup] {filename} already exists, skipping duplicate run")
+        return
+    zip_buffer, _ = _build_zip_bytes()
+    with open(filepath, "wb") as f:
+        f.write(zip_buffer.read())
+    now_str = datetime.now().strftime("%b %d, %Y %I:%M %p")
+    print(f"[Backup] Saved {filename} to {BACKUP_DIR} at {now_str}")
+    _save_last_backup("success", f"Scheduled backup completed on {now_str}", filename)
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@backup_bp.route("/settings", methods=["GET"])
+def get_settings():
+    return jsonify(load_settings())
+
+
+@backup_bp.route("/last-backup", methods=["GET"])
+def last_backup_status():
+    settings = load_settings()
+    return jsonify(settings.get("last_backup", None))
+
+
+@backup_bp.route("/download-scheduled/<filename>", methods=["GET"])
+def download_scheduled(filename):
+    """Serve a previously saved scheduled backup file for browser download."""
+    filepath = os.path.join(BACKUP_DIR, os.path.basename(filename))
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Backup file not found"}), 404
+    return send_file(filepath, mimetype="application/zip", as_attachment=True, download_name=filename)
+
+
+@backup_bp.route("/settings", methods=["POST"])
+def save_settings():
+    data = request.get_json()
+    _save_settings(data)
+    return jsonify({"message": "Backup settings saved"})
+
+
+@backup_bp.route("/download", methods=["GET"])
+def download_backup():
+    """On-demand: generate all CSVs and return as a ZIP download."""
+    zip_buffer, date_str = _build_zip_bytes()
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f"Backup_{date_str}.zip",
+    )
+
+
+@backup_bp.route("/cron", methods=["POST"])
+def cron_backup():
+    """
+    Called daily by Vercel Cron Job (see vercel.json).
+    Checks saved settings and runs the backup only when the schedule says to.
+    Vercel automatically sends: Authorization: Bearer <CRON_SECRET>
+    """
+    cron_secret = os.environ.get("CRON_SECRET", "")
+    if cron_secret and request.headers.get("Authorization") != f"Bearer {cron_secret}":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    settings = load_settings()
+    now = datetime.now(timezone.utc)
+    should_run = False
+
+    daily = settings.get("daily", {})
+    if daily.get("enabled"):
+        should_run = True
+
+    weekly = settings.get("weekly", {})
+    if weekly.get("enabled"):
+        target_weekday = DAY_MAP.get(weekly.get("day", "monday").lower(), 0)
+        if now.weekday() == target_weekday:
+            should_run = True
+
+    if not should_run:
+        return jsonify({"message": "No backup scheduled for now"}), 200
+
+    try:
+        run_backup()
+        return jsonify({"message": "Backup completed successfully"})
+    except Exception as e:
+        print(f"[Backup] Cron backup failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@backup_bp.route("/list", methods=["GET"])
+def list_backups():
+    """List all backup ZIPs stored in Supabase Storage."""
+    try:
+        files = _supabase().storage.from_(STORAGE_BUCKET).list()
+        return jsonify(files)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@backup_bp.route("/restore", methods=["POST"])
+def restore_backup():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+    filename = file.filename or ''
+    name_lower = filename.lower()
+
+    # ── ZIP: extract each CSV inside and restore all of them ──────────────
+    if name_lower.endswith('.zip'):
+        try:
+            zip_bytes = io.BytesIO(file.read())
+            with zipfile.ZipFile(zip_bytes, 'r') as zf:
+                csv_names = [n for n in zf.namelist() if n.lower().endswith('.csv')]
+                if not csv_names:
+                    return jsonify({"error": "ZIP contains no CSV files"}), 400
+
+                conn = get_connection()
+                cur = conn.cursor()
+                total = 0
+                results = []
+                try:
+                    for csv_name in csv_names:
+                        base = os.path.basename(csv_name).lower()
+                        content = zf.read(csv_name).decode('utf-8')
+                        rows = list(csv.DictReader(io.StringIO(content)))
+                        if not rows:
+                            continue
+                        if base.startswith('inventory'):
+                            count = restore_inventory(cur, rows)
+                            results.append(f"{count} inventory records")
+                        elif base.startswith('supplier'):
+                            count = restore_supplier(cur, rows)
+                            results.append(f"{count} supplier records")
+                        elif base.startswith('orders'):
+                            count = restore_orders(cur, rows)
+                            results.append(f"{count} order records")
+                        elif base.startswith('sales'):
+                            count = restore_sales(cur, rows)
+                            results.append(f"{count} sales records")
+                        total += count
+                    conn.commit()
+                    return jsonify({"message": f"Restored {', '.join(results)} from ZIP"})
+                except Exception as e:
+                    conn.rollback()
+                    print("Restore error:", e)
+                    return jsonify({"error": str(e)}), 500
+                finally:
+                    cur.close()
+                    conn.close()
+        except zipfile.BadZipFile:
+            return jsonify({"error": "Invalid ZIP file"}), 400
+
+    # ── Single CSV ─────────────────────────────────────────────────────────
+    if not name_lower.endswith('.csv'):
+        return jsonify({"error": "Only CSV or ZIP files are supported"}), 400
+
+    base = os.path.basename(name_lower)
+    if base.startswith('inventory'):
+        module = 'inventory'
+    elif base.startswith('supplier'):
+        module = 'supplier'
+    elif base.startswith('orders'):
+        module = 'orders'
+    elif base.startswith('sales'):
+        module = 'sales'
+    else:
+        return jsonify({"error": "Filename must start with: Inventory, Supplier, Orders, or Sales"}), 400
+
+    content = file.read().decode('utf-8')
+    reader = csv.DictReader(io.StringIO(content))
+    rows = list(reader)
+
+    if not rows:
+        return jsonify({"error": "CSV file is empty"}), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        if module == 'inventory':
+            count = restore_inventory(cur, rows)
+        elif module == 'supplier':
+            count = restore_supplier(cur, rows)
+        elif module == 'orders':
+            count = restore_orders(cur, rows)
+        else:
+            count = restore_sales(cur, rows)
+
+        conn.commit()
+        return jsonify({"message": f"Successfully restored {count} records to {module.capitalize()} module"})
+    except Exception as e:
+        conn.rollback()
+        print("Restore error:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+def restore_inventory(cur, rows):
+    count = 0
+    for row in rows:
+        inv_id = row.get('inventory_id')
+        if not inv_id:
+            continue
+
+        status_name = row.get('status', 'Available')
+        cur.execute(
+            "SELECT status_id FROM static_status WHERE status_name = %s AND status_scope = 'INVENTORY_STATUS'",
+            (status_name,)
+        )
+        st_res = cur.fetchone()
+        status_id = st_res[0] if st_res else None
+        if not status_id:
+            # fallback: first AVAILABLE status
+            cur.execute(
+                "SELECT status_id FROM static_status WHERE status_code = 'AVAILABLE' AND status_scope = 'INVENTORY_STATUS' LIMIT 1"
+            )
+            fb = cur.fetchone()
+            status_id = fb[0] if fb else 1
+
+        cur.execute("""
+            INSERT INTO inventory (inventory_id, item_name, item_status_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (inventory_id) DO UPDATE SET
+                item_name      = EXCLUDED.item_name,
+                item_status_id = EXCLUDED.item_status_id
+        """, (inv_id, row.get('item_name'), status_id))
+
+        # Restore brand variant when brand + uom are present
+        brand_name = (row.get('brand') or '').strip()
+        uom_name   = (row.get('uom')   or '').strip()
+
+        if brand_name and uom_name:
+            cur.execute("SELECT uom_id FROM unit_of_measure WHERE uom_name = %s LIMIT 1", (uom_name,))
+            uom_res = cur.fetchone()
+            uom_id = uom_res[0] if uom_res else None
+
+            cur.execute("SELECT brand_id FROM brand WHERE brand_name = %s LIMIT 1", (brand_name,))
+            brand_res = cur.fetchone()
+            brand_id = brand_res[0] if brand_res else None
+
+            if uom_id and brand_id:
+                cur.execute("""
+                    INSERT INTO inventory_brand
+                        (inventory_id, brand_id, item_sku, item_selling_price,
+                         uom_id, item_description, item_status_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (
+                    inv_id, brand_id,
+                    row.get('item_sku') or None,
+                    float(row.get('item_selling_price', 0) or 0),
+                    uom_id,
+                    row.get('item_description') or None,
+                    status_id,
+                ))
+        count += 1
+    return count
+
+
+def restore_supplier(cur, rows):
+    count = 0
+    for row in rows:
+        sup_id = row.get('supplier_id')
+        if not sup_id:
+            continue
+
+        status_name = row.get('status', 'Active')
+        cur.execute(
+            "SELECT status_id FROM static_status WHERE status_name = %s AND status_scope = 'SUPPLIER_STATUS'",
+            (status_name,)
+        )
+        st_res = cur.fetchone()
+        status_id = st_res[0] if st_res else None
+
+        cur.execute("""
+            INSERT INTO supplier (supplier_id, supplier_name, contact_person, supplier_contact,
+                supplier_email, supplier_address, supplier_status_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (supplier_id) DO UPDATE SET
+                supplier_name = EXCLUDED.supplier_name,
+                contact_person = EXCLUDED.contact_person,
+                supplier_contact = EXCLUDED.supplier_contact,
+                supplier_email = EXCLUDED.supplier_email,
+                supplier_address = EXCLUDED.supplier_address,
+                supplier_status_id = EXCLUDED.supplier_status_id
+        """, (
+            sup_id, row.get('supplier_name'), row.get('contact_person'),
+            row.get('supplier_contact'), row.get('supplier_email'),
+            row.get('supplier_address'), status_id
+        ))
+        count += 1
+    return count
+
+
+def restore_orders(cur, rows):
+    count = 0
+    seen = set()
+    for row in rows:
+        order_id = row.get('order_id')
+        if not order_id or order_id in seen:
+            continue
+        seen.add(order_id)
+        status_name = row.get('status')
+        if status_name:
+            cur.execute(
+                "SELECT status_id FROM static_status WHERE status_name = %s AND status_scope = 'ORDER_STATUS'",
+                (status_name,)
+            )
+            st_res = cur.fetchone()
+            if st_res:
+                cur.execute(
+                    "UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s",
+                    (st_res[0], order_id)
+                )
+        count += 1
+    return count
+
+
+def restore_sales(cur, rows):
+    count = 0
+    for row in rows:
+        sales_id = row.get('sales_id')
+        if not sales_id:
+            continue
+        status_name = row.get('status')
+        if status_name:
+            cur.execute(
+                "SELECT status_id FROM static_status WHERE status_name = %s AND status_scope = 'SALES_STATUS'",
+                (status_name,)
+            )
+            st_res = cur.fetchone()
+            if st_res:
+                cur.execute(
+                    "UPDATE sales_transaction SET payment_status_id = %s WHERE TRIM(sales_id) = %s",
+                    (st_res[0], sales_id)
+                )
+        count += 1
+    return count

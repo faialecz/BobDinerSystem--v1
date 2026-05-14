@@ -1,0 +1,1034 @@
+/* ===== MAIN CONTAINER ===== */
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background-color: #F9FAFB;
+}
+
+.mainContent {
+  flex: 1;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Ensure all elements calculate width correctly */
+.container *, .container *::before, .container *::after {
+  box-sizing: border-box;
+}
+
+.loadingContainer {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #555;
+}
+
+/* ===== TABLE CONTAINER ===== */
+.tableContainer {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap; 
+  gap: 1rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #164163;
+  margin: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap; 
+  width: 100%; 
+  max-width: fit-content;
+}
+
+.searchWrapper {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f3f4 100%);
+  border: 1px solid #e2e8f0;
+  padding: 0 12px;
+  border-radius: 8px;
+  width: 100%; 
+  max-width: 280px; 
+  gap: 8px;
+  flex: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 36px;
+}
+
+.searchWrapper:hover {
+  border-color: #cbd5e1;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.searchWrapper:focus-within {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+}
+
+.searchIcon {
+  flex-shrink: 0;
+  color: #94a3b8;
+  transition: color 0.3s ease;
+}
+
+.searchWrapper:focus-within .searchIcon {
+  color: #2563eb;
+}
+
+.searchInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 0.9rem;
+  color: #2d3748;
+  flex: 1;
+}
+
+.searchInput::placeholder {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+
+.addButton {
+  background: #1a4263;
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 25px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.addButton:hover {
+  background-color: #8fa6b8;
+  cursor: pointer;
+}
+
+.archiveIconBtn {
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  transition: all 0.2s;
+}
+
+.archiveIconBtn:hover {
+  background-color: #3e73b1;
+  color: #fff;
+}
+
+.backArchiveIconBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  background-color: #1a4263;
+  color: #fff;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-height: 36px;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.backArchiveIconBtn:hover {
+  opacity: 0.85;
+}
+
+.popArchiveBtn:hover {
+  background-color: #64748b;
+}
+
+/* ===== TABLE STYLING ===== */
+.table {
+  width: 100%;
+  min-width: max-content; /* Forces table to expand instead of squishing text */
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 15px;
+  font-size: 0.9rem;
+  border-bottom: 1px solid #f1f3f4;
+  text-align: center; /* Center all data */
+  white-space: nowrap; /* Prevent data from wrapping to a new line */
+}
+
+.altRow {
+  background: #EFF2F4;
+}
+
+/* Fix address column */
+.table th:nth-child(6),
+.table td:nth-child(6) {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Truncate EMAIL column */
+.table th:nth-child(5),
+.table td:nth-child(5) {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* STATUS and ACTION columns */
+.table th:nth-child(8),
+.table td:nth-child(8) {
+  text-align: center;
+  width: 110px;
+  min-width: 110px;
+  padding: 8px;
+}
+/* SORTING */
+.sortableHeader {
+  cursor: pointer;
+  user-select: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.nonSortableHeader {
+  cursor: default;
+  user-select: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.sortHeaderInner,
+.sortableHeaderInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.sortIconsStack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.sortIconsStack span svg {
+  display: block;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.sortIconsStack span:hover svg {
+  color: #1a4263;
+  transform: scale(1.2);
+}
+
+.activeSort svg {
+  color: #1a4263 !important;
+}
+
+.sortIconsStack span:not(.activeSort) svg {
+  color: #b3bac3;
+}
+
+.sortIconsStack span:not(.activeSort):hover svg {
+  color: #1a4263;
+}
+
+/* ACTIONS */
+.actionHeader {
+  text-align: center !important;
+}
+
+.actionCell {
+  position: relative;
+  overflow: visible !important; 
+  /* Forces the icon to strictly anchor to the middle of the cell */
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.moreIcon {
+  cursor: pointer;
+  /* inline-flex prevents the icon from having weird hidden margins */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 1.2rem;
+  transition: color 0.2s;
+}
+
+/* ===== POPUP MENU ===== */
+.popupMenu {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #2b3e50;
+  padding: 10px 15px;
+  border-radius: 10px;
+  display: flex;
+  gap: 10px;
+  z-index: 1000;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
+.popBtnEdit, .popBtnArchive {
+  border: none;
+  padding: 6px 15px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.popBtnEdit { background: white; color: #1a4263; }
+.popBtnArchive { background: #90A4AE; color: white; }
+
+.closeX {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+/* ===== FOOTER & PAGINATION ===== */
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.5rem;
+  flex-wrap: wrap; 
+  gap: 1rem;
+}
+
+.showDataText {
+  font-size: 0.9rem;
+}
+
+.countBadge {
+  border: 1px solid #ccc;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap; 
+  justify-content: center;
+}
+
+.pageCircle, .pageCircleActive, .nextBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-weight: 600;
+  border: 1px solid #ddd;
+  background: white;
+  color: #333;
+}
+
+.pageCircleActive {
+  background: #1a4263;
+  color: #fff;
+  border: none;
+}
+
+/* ===== ADD SUPPLIER ===== */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000; 
+}
+
+.modalContent {
+  background: #ffffff;
+  width: 600px;
+  max-width: 95%;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box; 
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #f1f3f4;
+  padding-bottom: 0.5rem;
+}
+
+.modalTitleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.subText {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.closeIcon {
+  cursor: pointer;
+  color: #1a4263;
+  font-size: 1.5rem;
+}
+
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.sectionTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #164163;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.formGridTwo, .formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  width: 100%;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formGroupFull {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formGroup label, .formGroupFull label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.formGroup input, 
+.formGroup select, 
+.formGroupFull input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.formGroup input:focus, 
+.formGroup select:focus, 
+.formGroupFull input:focus {
+  border-color: #1a4263;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f3f4;
+}
+
+.cancelBtn {
+  background: #ff5722;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.1s;
+  font-size: 0.75rem;
+}
+
+
+.saveBtn {
+  background: #1a4263;
+  color: white;
+  border: none;
+  padding: 5px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform 0.1s;
+  font-size: 0.75rem;
+}
+.cancelBtn:hover,
+.saveBtn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.cancelBtn:active, .saveBtn:active {
+  transform: scale(0.97);
+}
+
+.mt_20 {
+  margin-top: 20px;
+}
+
+/* ===== RESTORE BUTTON & ACTION WRAPPER ===== */
+.archiveBtn {
+  display:inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid #a7f3d0;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background-color: #ecfdf5;
+  color: #10b981;
+  min-width: 90px;       
+  height: 28px;
+  box-sizing: border-box;
+}
+
+.archiveBtn:hover {
+  background-color: #d1fae5;
+}
+
+.actionWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.actionCell {
+  padding-right: 16px !important;   
+  overflow: visible;
+  width: 120px;
+}
+
+/* ===== ALERT / TOAST ===== */
+.toastOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 11000;
+  pointer-events: auto;
+}
+
+.alertBox {
+  background: white;
+  width: 350px;
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+  animation: toastPop 0.3s ease-out;
+}
+
+.alertHeader {
+  background-color: #488c61;
+  height: 60px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.alertHeaderError {
+  background-color: #8e2a2a !important;
+}
+
+.checkCircle {
+  position: absolute;
+  top: 20px;
+  background: #488c61;
+  color: white;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 35px;
+  border: 5px solid white;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.checkCircleError {
+  background-color: #8e2a2a !important;
+  font-size: 45px !important;
+  font-weight: bold;
+}
+
+.alertBody {
+  padding: 0 24px 24px 24px;
+}
+
+.alertTitle {
+  color: #2d3748;
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.alertMessage {
+  color: #4a5568;
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 24px;
+  line-height: 1.4;
+}
+
+.okButton {
+  background-color: #488c61;
+  color: white;
+  border: none;
+  padding: 12px 60px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.okButton:hover {
+  background-color: #3bc76f !important;
+  transform: scale(1.02);
+}
+
+.okButtonError {
+  background-color: #b73737 !important;
+}
+
+.okButtonError:hover {
+  background-color: #dc2626 !important;
+}
+
+@keyframes toastPop {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* =====================================================
+   SUPPLIER VIEW MODAL — suppliers.module.css additions
+   Copy-paste these classes into your suppliers.module.css
+   ===================================================== */
+
+/* ── Backdrop ── */
+.viewBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+/* ── Modal box ── */
+.viewModal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Modal header ── */
+.viewModalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.viewCompanyName {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.viewOrderNumber {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #1a4263;
+  letter-spacing: 0.03em;
+}
+
+.viewHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ── Status badges ── */
+.viewStatusActive {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.viewStatusArchived {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+/* ── Close button ── */
+.viewCloseBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.viewCloseBtn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+/* ── Supplier name banner ── */
+.viewSupplierBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e8f0fe 100%);
+  border-bottom: 1px solid #dbeafe;
+}
+
+.viewSupplierLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+
+.viewSupplierNameLarge {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.viewSupplierAddress {
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* ── Scrollable print body ── */
+.viewPrintBody {
+  padding: 1.25rem 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* ── Section wrapper ── */
+.viewCustomerSection {
+  margin-bottom: 1.25rem;
+}
+
+.viewSectionTitle {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 0.75rem;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* ── Supplier details grid (2 columns) ── */
+.viewSupplierDetailsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* Each detail item with icon */
+.viewDetailItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.viewDetailIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.viewInfoLabel {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.viewInfoValue {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* ── Totals / terms box (reused from orders pattern) ── */
+.viewTotalsWrapper {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.viewTotalsBox {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.viewTotalLine {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  color: #475569;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.viewTotalLine:last-child {
+  border-bottom: none;
+}
+
+.viewTotalFinal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  background: #f8fafc;
+  border-top: 2px solid #e2e8f0;
+}
+
+/* ── Modal footer ── */
+.viewModalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fafafa;
+  border-radius: 0 0 16px 16px;
+}
+
+.viewBtnPrint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  background: #1a4263;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.viewBtnPrint:hover {
+  background: #15344f;
+}
+
+/* ===== TABLE CONTAINER ===== */
+.tableContainer {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  margin-bottom: 1.5rem;
+  max-width: 100%; /* ADD THIS: Prevents the container from breaking past its parent */
+  box-sizing: border-box; /* ADD THIS: Keeps padding inside the max-width */
+}
+
+/* ADD THIS NEW CLASS */
+.tableResponsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS devices */
+  margin-bottom: 1rem; /* Optional: Adds breathing room before the footer */
+}
+
+/* ===== TABLE BODY ===== */
+.table {
+  width: 100%;
+  min-width: 900px; /* ADD THIS: Forces the table to stay wide enough, triggering the scrollbar on smaller screens */
+  border-collapse: collapse;
+}
+
+@media (max-width: 600px) {
+   .footer {
+    justify-content: center;
+    text-align: center;
+  }
+  
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .controls {
+    max-width: 100%;
+    width: 100%;
+    justify-content: space-between; 
+  }
+  
+  .searchWrapper {
+    max-width: 100%; 
+    order: 3; 
+  }
+}
+
+/* ===== SKELETON LOADER ===== */
+.skeleton {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0% { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+
+ @keyframes shimmer {
+  0% { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}

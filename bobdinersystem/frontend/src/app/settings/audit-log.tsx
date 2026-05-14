@@ -1,0 +1,327 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import styles from '@/css/audit-log.module.css';
+import { LuSearch, LuChevronUp, LuChevronDown, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+
+type AuditLog = {
+  id: number;
+  module?: string;
+  recordName?: string;
+  actionType?: string;
+  performedBy?: string;
+  actionDate?: string;
+  changedFields?: Record<string, { old?: any; new?: any } | any>;
+};
+
+type SortKey = keyof Omit<AuditLog, 'changedFields'>;
+
+const ROWS_PER_PAGE = 10;
+const MODULE_ORDER: Record<string, number> = { EMPLOYEE: 1, SUPPLIER: 2, CUSTOMER: 3, INVENTORY: 4 };
+const ACTION_ORDER: Record<string, number> = { ADD: 1, UPDATE: 2, ARCHIVE: 3 };
+
+export default function AuditLog({
+  role = 'Admin',
+  onLogout,
+  onBack
+}: {
+  role?: string;
+  onLogout: () => void;
+  onBack?: () => void;
+}) {
+  const s = styles as Record<string, string>;
+
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey | null; direction: 'asc' | 'desc' | null }>({
+    key: null,
+    direction: null
+  });
+
+  // Fetch logs
+  useEffect(() => {
+    fetch('/api/audit-log')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setLogs(data);
+        else {
+          console.error('Audit log response invalid:', data);
+          setLogs([]);
+        }
+      })
+      .catch(err => {
+        console.error('Fetch error:', err);
+        setLogs([]);
+      })
+      .finally(() => setIsLoading(false));
+    }, []);
+
+  const handleSort = (key: SortKey) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'asc'
+    }));
+  };
+
+  const normalizeModule = (mod?: string) => (mod ? mod.toUpperCase() : 'UNKNOWN');
+  const normalizeAction = (action?: string) => {
+    if (!action) return 'UNKNOWN';
+    switch (action.toLowerCase()) {
+      case 'add':
+      case 'added':
+        return 'ADD';
+      case 'update':
+      case 'updated':
+        return 'UPDATE';
+      case 'archive':
+      case 'archived':
+        return 'ARCHIVE';
+      default:
+        return 'UNKNOWN';
+    }
+  };
+
+  // Filter logs
+  const filtered = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return logs.filter(log => {
+      const matchesBasic =
+        (log.module?.toLowerCase() ?? '').includes(term) ||
+        (log.recordName?.toLowerCase() ?? '').includes(term) ||
+        (log.performedBy?.toLowerCase() ?? '').includes(term) ||
+        (log.actionType?.toLowerCase() ?? '').includes(term);
+
+      const matchesChangedFields = Object.entries(log.changedFields ?? {}).some(([field, value]) =>
+        `${field} ${(typeof value === 'object' && value.new !== undefined ? value.new : value)}`.toLowerCase().includes(term)
+      );
+
+      return matchesBasic || matchesChangedFields;
+    });
+  }, [logs, searchTerm]);
+
+  // Sort logs
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    if (!sortConfig.key || !sortConfig.direction) return arr;
+
+    const { key, direction } = sortConfig;
+    const dirMultiplier = direction === 'asc' ? 1 : -1;
+
+    return arr.sort((a, b) => {
+      // 1. Handle custom priority maps (Module & Action)
+      if (key === 'module') {
+        const valA = MODULE_ORDER[normalizeModule(a.module)] ?? 999;
+        const valB = MODULE_ORDER[normalizeModule(b.module)] ?? 999;
+        return (valA - valB) * dirMultiplier;
+      }
+      if (key === 'actionType') {
+        const valA = ACTION_ORDER[normalizeAction(a.actionType)] ?? 999;
+        const valB = ACTION_ORDER[normalizeAction(b.actionType)] ?? 999;
+        return (valA - valB) * dirMultiplier;
+      }
+      
+      // 2. Handle Dates mathematically
+      if (key === 'actionDate') {
+        const dateA = a.actionDate ? new Date(a.actionDate).getTime() : 0;
+        const dateB = b.actionDate ? new Date(b.actionDate).getTime() : 0;
+        return direction === 'asc' ? dateA - dateB : dateB - dateA;
+      }
+
+      // 3. Handle standard strings (recordName, performedBy)
+      const strA = String(a[key] ?? '').toLowerCase();
+      const strB = String(b[key] ?? '').toLowerCase();
+      
+      if (strA < strB) return direction === 'asc' ? -1 : 1;
+      if (strA > strB) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filtered, sortConfig]);
+
+  // Pagination
+  const totalPages = Math.ceil(sorted.length / ROWS_PER_PAGE);
+  const paginated = sorted.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  useEffect(() => setCurrentPage(1), [searchTerm]);
+
+  const changePage = (page: number) => {
+    if (page >= 1 && page <= totalPages) setCurrentPage(page);
+  };
+
+  const renderPageNumbers = () => {
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    const pages = [];
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <button
+          key={i}
+          className={currentPage === i ? s.pageCircleActive : s.pageCircle}
+          onClick={() => setCurrentPage(i)}
+        >
+          {i}
+        </button>
+      );
+    }
+    return pages;
+  };
+
+  if (isLoading) return <div className={s.loadingContainer}>Loading Audit Logs...</div>;
+
+  const columns: { label: string; key: SortKey }[] = [
+    { label: 'TIME & DATE', key: 'actionDate' },
+    { label: 'RECORD', key: 'recordName' },
+    { label: 'MODULE', key: 'module' },
+    { label: 'ACTION', key: 'actionType' },
+    { label: 'PERFORMED BY', key: 'performedBy' }
+  ];
+
+  return (
+    <div className={s.container}>
+      <div className={s.mainContent}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            style={{
+              display: 'inline-block',
+              marginBottom: '1rem',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: '#1a4263',
+              color: 'white',
+              fontWeight: 600,
+              cursor: 'pointer',
+              alignSelf: 'flex-start'
+            }}
+          >
+            ← Back
+          </button>
+        )}
+
+        <div className={s.tableContainer}>
+          <div className={s.header}>
+            <h2 className={s.title}>Audit Logs</h2>
+            <div className={s.searchWrapper}>
+              <input
+                className={s.searchInput}
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+              <LuSearch size={18} />
+            </div>
+          </div>
+
+          <div className={s.tableResponsive}>
+            <table className={s.table}>
+              <colgroup>
+                <col className={s.dateCol} />
+                <col className={s.recordCol} />
+                <col className={s.moduleCol} />
+                <col className={s.actionCol} />
+                <col className={s.performedByCol} />
+                <col className={s.changedFieldsCol} />
+              </colgroup>
+
+              <thead>
+                <tr>
+                  {columns.map(col => (
+                    <th key={col.key} onClick={() => handleSort(col.key)} className={s.sortableHeader}>
+                      <div className={s.sortHeaderInner}>
+                        <span>{col.label}</span>
+                        <div className={s.sortIconsStack}>
+                          <LuChevronUp
+                            size={12}
+                            className={sortConfig.key === col.key && sortConfig.direction === 'asc' ? s.activeSort : ''}
+                          />
+                          <LuChevronDown
+                            size={12}
+                            className={sortConfig.key === col.key && sortConfig.direction === 'desc' ? s.activeSort : ''}
+                          />
+                        </div>
+                      </div>
+                    </th>
+                  ))}
+                  <th>CHANGED FIELDS</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {paginated.length ? (
+                  paginated.map((log, i) => (
+                    <tr key={`log-${log.id}-${currentPage}-${i}`} className={i % 2 ? s.altRow : ''}>
+                      <td className={s.dateCol}>{log.actionDate ? new Date(log.actionDate).toLocaleString() : '-'}</td>
+                      <td className={s.recordCol}>{log.recordName ?? '-'}</td>
+                      <td className={s.moduleCol}>{log.module ?? '-'}</td>
+                      <td className={s.actionCol}>{log.actionType ?? '-'}</td>
+                      <td className={s.performedByCol}>{log.performedBy ?? '-'}</td>
+                      <td className={s.changedFieldsCol}>
+                        {log.changedFields
+                          ? Object.entries(log.changedFields).map(([field, value], idx) => {
+                              const oldVal = typeof value === 'object' && value.old !== undefined ? JSON.stringify(value.old) : '-';
+                              const newVal =
+                                typeof value === 'object' && value.new !== undefined
+                                  ? JSON.stringify(value.new)
+                                  : typeof value === 'object'
+                                  ? JSON.stringify(value)
+                                  : value ?? '-';
+
+                              return log.actionType?.toUpperCase() === 'UPDATE' ? (
+                                <div key={`field-${field}-${idx}`} style={{ marginBottom: '0.5rem' }}>
+                                  <div>
+                                    <strong>{field.replace(/_/g, ' ')}:</strong>{' '}
+                                    <span className={s.newValue}><em>{newVal}</em></span>
+                                  </div>
+                                  <div className={s.oldValue}>OLD: {oldVal}</div>
+                                </div>
+                              ) : (
+                                <div key={`field-${field}-${idx}`} style={{ marginBottom: '0.5rem' }}>
+                                  <strong>{field.replace(/_/g, ' ')}:</strong> <span className={s.newValue}>{newVal}</span>
+                                </div>
+                              );
+                            })
+                          : '-'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
+                      No audit logs found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className={s.footer}>
+            <div className={s.showDataText}>
+              Showing <span className={s.countBadge}>{paginated.length}</span> of {sorted.length}
+            </div>
+            {totalPages > 1 && (
+              <div className={s.pagination}>
+                <button className={s.nextBtn} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>
+                  <LuChevronLeft />
+                </button>
+                
+                {renderPageNumbers()}
+                
+                <button className={s.nextBtn} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>
+                  <LuChevronRight />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
