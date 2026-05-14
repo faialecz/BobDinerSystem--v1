@@ -42,7 +42,7 @@ interface NewItemFormState {
   brand_id:      number | '';
   description:   string;
   uom_id:        number | '';
-  reorder_point: number;
+  reorder_point: number;    
   unit_cost:     number | '';
   selling_price: number | '';
   expiry_date:   string;
@@ -51,6 +51,8 @@ interface NewItemFormState {
 interface SupplierEntry {
   supplier_id:   number | '';
   supplierName:  string;
+  contactPerson:  string;
+  contactNumber:  string;
   leadTime:      string;
   minOrder:      string;
 }
@@ -123,6 +125,8 @@ const BLANK_NEW_ITEM = (): NewItemFormState => ({
 const BLANK_SUPPLIER_ENTRY = (): SupplierEntry => ({
   supplier_id:  '',
   supplierName: '',
+  contactPerson: '',
+  contactNumber: '',
   leadTime:     '',
   minOrder:     '',
 });
@@ -259,7 +263,9 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
       const entry = { ...updated[idx], [field]: value };
       if (field === 'supplierName') {
         const sup = suppliers.find(s => s.supplier_name === value);
-        entry.supplier_id = sup ? sup.supplier_id : '';
+        entry.supplier_id    = sup ? sup.supplier_id : '';
+        entry.contactPerson  = (sup as any)?.contact_person  || '';
+        entry.contactNumber  = (sup as any)?.supplier_contact || '';
       }
       updated[idx] = entry;
       return updated;
@@ -353,19 +359,23 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
       if (!res.ok) { setNewItemError(data.error ?? 'Failed to save item.'); return; }
 
       const newIdx = items.length;
-      setItems(prev => [...prev, {
+     setItems(prev => [...prev, {
         inventory_brand_id: data.inventory_brand_id,
         brand_name:         data.brand_name,
         item_name:          data.item_name,
         uom_name:           data.uom_name,
-        quantity_ordered:   '',
+        quantity_ordered:   '',    
         unit_cost:          Number(newItemForm.unit_cost) || '',
         selling_price:      Number(newItemForm.selling_price) || '',
         expiry_date:        newItemForm.expiry_date || '',
       }]);
-      setSearchQuery(prev => ({ ...prev, [newIdx]: `${data.item_name} — ${data.brand_name}` }));
+
+      const searchTerm = `${data.item_name}`;
+      setSearchQuery(prev => ({ ...prev, [newIdx]: searchTerm }));
       setShowNewItemModal(false);
       setNewItemForm(BLANK_NEW_ITEM());
+      setSearchResults({});
+        
     } catch {
       setNewItemError('Network error. Please try again.');
     } finally {
@@ -921,7 +931,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
           <div className={s.modalContent} style={{
             width: '580px', maxWidth: '95vw', maxHeight: '92vh',
             display: 'flex', flexDirection: 'column', padding: 0,
-            borderRadius: '12px', overflow: 'auto',
+            borderRadius: '12px', overflow: 'hidden',
           }}>
 
             {/* Header */}
@@ -938,7 +948,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
             {/* Body */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#f9fafb' }}>
 
-              <div style={{ backgroundColor: '#fafafa', borderRadius: '10px', border: '2px dashed #e2e8f0', padding: '18px' }}>
+              <div style={{ backgroundColor: '#fafafa', borderRadius: '10px', border: '2px dashed #e2e8f0', padding: '18px', overflowY: 'auto', maxHeight: '60vh' }}>
 
                 {/* Item Name */}
                 <div style={{ marginBottom: '14px' }}>
@@ -971,9 +981,9 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                       style={FIELD_STYLE}
                     >
                       <option value="">Select Brand</option>
-                      {brands.map((b, i) => (
-                        <option key={b.brand_id ?? `brand-${i}`} value={b.brand_id ?? ''}>
-                          {b.brand_name === 'No Brand' ? '— No Brand' : b.brand_name}
+                      {brands.map((b: any, i: number) => (
+                        <option key={(b.brand_id ?? b.id) ?? `brand-${i}`} value={(b.brand_id ?? b.id) ?? ''}>
+                          {(b.brand_name ?? b.name) === 'No Brand' ? '— No Brand' : (b.brand_name ?? b.name)}
                         </option>
                       ))}
                     </select>
@@ -1116,6 +1126,7 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
             setBrands(prev => [...prev, { brand_id: newBrand.id, brand_name: newBrand.name }]);
             patchNewItem({ brand_id: newBrand.id });
             setShowBrandModal(false);
+            fetchBrands();
           }}
           existingBrands={brandsForModal}
         />

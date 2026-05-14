@@ -25,22 +25,40 @@ def _get_status_id(cur, code, scope="PURCHASE_STATUS"):
 
 # ── GET /api/brands ───────────────────────────────────────────────────────────
 
-@purchases_bp.route("/api/brands", methods=["GET"])
+@purchases_bp.route("/api/brands", methods=["POST"])
 @require_purchase_access
-def get_brands():
+def create_brand():
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT brand_id, brand_name FROM brand ORDER BY brand_name ASC")
-        rows = cur.fetchall()
-        return jsonify([{"brand_id": r[0], "brand_name": r[1]} for r in rows]), 200
+        data = request.get_json()
+        brand_name = (data.get("name") or "").strip()
+
+        if not brand_name:
+            return jsonify({"error": "Brand name is required."}), 400
+
+        cur.execute(
+            "SELECT brand_id, brand_name FROM brand WHERE LOWER(brand_name) = LOWER(%s) LIMIT 1",
+            (brand_name,)
+        )
+        existing = cur.fetchone()
+        if existing:
+            return jsonify({"error": f'"{existing[1]}" already exists.'}), 409
+
+        cur.execute(
+            "INSERT INTO brand (brand_name) VALUES (%s) RETURNING brand_id",
+            (brand_name,)
+        )
+        brand_id = cur.fetchone()[0]
+        conn.commit()
+        return jsonify({"brand_id": brand_id, "brand_name": brand_name}), 201
+
     except Exception as e:
+        conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()
-
-
 # ── POST /api/inventory/quick-add ────────────────────────────────────────────
 # Lightweight immediate-save for new inventory items created inside the PO modal.
 # Returns the real inventory_brand_id so the PO row can reference it normally.
