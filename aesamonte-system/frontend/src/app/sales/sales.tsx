@@ -72,6 +72,7 @@ const canExport = !!permissions?.can_export
   const [isDateFilterOpen, setIsDateFilterOpen] = useState(false)
   const [topClientPeriod, setTopClientPeriod] = useState<'week' | 'month'>('week')
   const [topClients, setTopClients] = useState<{ name: string; sales: number }[]>([])
+  const [totalSalesPeriod, setTotalSalesPeriod] = useState<'all' | 'week' | 'month'>('all')
 
   useEffect(() => { if (initialSearch) setSearchTerm(initialSearch) }, [initialSearch])
 
@@ -152,8 +153,9 @@ const canExport = !!permissions?.can_export
     try {
       if (!isBackground) setIsLoading(true)
       const t = new Date().getTime()
+      // ADDED: &include_archived=true
       const [summaryRes, transRes] = await Promise.all([
-        fetch(`/api/sales/summary?t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/sales/summary?t=${t}&include_archived=true&period=${totalSalesPeriod}`, { cache: 'no-store' }),
         fetch(`/api/sales/transactions?t=${t}`, { cache: 'no-store' })
       ])
       if (summaryRes.ok && transRes.ok) {
@@ -164,10 +166,10 @@ const canExport = !!permissions?.can_export
     finally { if (!isBackground) setIsLoading(false) }
   }
 
-  useEffect(() => { fetchSalesData() }, [])
+  useEffect(() => { fetchSalesData() }, [totalSalesPeriod])
 
   useEffect(() => {
-    fetch(`/api/sales/top-clients?period=${topClientPeriod}`)
+    fetch(`/api/sales/top-clients?period=${topClientPeriod}&include_archived=true`)
       .then(r => r.json())
       .then(data => setTopClients(Array.isArray(data) ? data : []))
       .catch(() => setTopClients([]))
@@ -421,16 +423,45 @@ if (isLoading === null) return (
 
         {/* Summary Cards */}
         <div className={s.topGrid}>
-          <section className={s.statCard}>
+        {/* ── TOTAL SALES CARD ── */}
+        <section className={s.statCard}>
+          <div className={s.topClientsHeader}>
             <p className={s.cardTitle}>Total Sales</p>
-            <h2 className={s.bigNumber}>₱ {safeSummary.totalSales.toLocaleString()}</h2>
-            <div className={s.cardFooter}>
-              <span className={s.subText}>vs last month</span>
-              {/* Replaced static pill with dynamic function */}
-              {renderGrowthPill(safeSummary.totalSalesChange)}
+            <div className={s.periodToggle}>
+              <button
+                className={`${s.periodBtn} ${totalSalesPeriod === 'week' ? s.periodBtnActive : ''}`}
+                onClick={() => setTotalSalesPeriod('week')}
+              >This Week</button>
+              <button
+                className={`${s.periodBtn} ${totalSalesPeriod === 'month' ? s.periodBtnActive : ''}`}
+                onClick={() => setTotalSalesPeriod('month')}
+              >This Month</button>
+              <button
+                className={`${s.periodBtn} ${totalSalesPeriod === 'all' ? s.periodBtnActive : ''}`}
+                onClick={() => setTotalSalesPeriod('all')}
+              >All</button>
             </div>
-          </section>
-          
+          </div>
+
+          <div style={{ marginTop: '1rem' }}>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: 700, color: '#164163', margin: 0 }}>
+              ₱ {safeSummary.totalSales.toLocaleString()}
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+              {/* 1. Only show the pill if NOT in 'all' view */}
+              {totalSalesPeriod !== 'all' && renderGrowthPill(safeSummary.totalSalesChange)}
+              
+              {/* 2. Conditionally change the label text */}
+              <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                {totalSalesPeriod === 'all' 
+                  ? 'Lifetime performance' 
+                  : `vs. previous ${totalSalesPeriod}`
+                }
+              </span>
+            </div>
+          </div>
+        </section>     
+             
           <section className={s.statCard}>
             <p className={s.cardTitle}>Sales Report</p>
             <div className={s.list}>

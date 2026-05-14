@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from database.db_config import get_connection
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+import calendar
 
 sales_bp = Blueprint("sales", __name__, url_prefix="/api/sales")
 
@@ -26,34 +27,39 @@ def sales_summary():
     conn = get_connection()
     cur = conn.cursor()
 
-    # Run auto-fix FIRST
+    include_archived = request.args.get('include_archived', 'false').lower() == 'true'
+    period = request.args.get('period', 'all')
+
     auto_fix_pending_payments(conn, cur)
 
-    # 1. Calculate precise date boundaries
+    # --- CALENDAR LOGIC BOUNDARIES ---
     today = date.today()
-    week_ago = today - timedelta(days=7)
-    year_ago = today.replace(month=1, day=1)
     
+    # 1. This Week (Current Monday to Today)
+    this_week_start = today - timedelta(days=today.weekday())
+    # Last Week (Previous Monday to Previous Sunday)
+    last_week_start = this_week_start - timedelta(days=7)
+    last_week_end = this_week_start - timedelta(days=1)
+
+    # 2. This Month (1st of Current Month to Today)
     this_month_start = today.replace(day=1)
-    last_month_end = this_month_start - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
+    
+    # Last Month (1st of Prev Month to Last Day of Prev Month)
+    last_day_prev_month = this_month_start - timedelta(days=1)
+    last_month_start = last_day_prev_month.replace(day=1)
+    last_month_end = last_day_prev_month
 
-    # MTD Apples-to-Apples setup
-    current_day = today.day
-    try:
-        last_month_same_day = last_month_start.replace(day=current_day)
-    except ValueError:
-        # Fallback if today is the 31st but last month only had 30 days
-        last_month_same_day = last_month_end
+    # 3. This Year (Jan 1st)
+    this_year_start = today.replace(month=1, day=1)
 
-    # 2. Upgraded helper function to support date ranges
     def sum_sales(start_date=None, end_date=None):
-        query = """
+        valid_statuses = "('PAID', 'ARCHIVED')" if include_archived else "('PAID')"
+        query = f"""
             SELECT COALESCE(SUM(ot.total_amount), 0)
             FROM sales_transaction st
             JOIN order_transaction ot ON st.order_id = ot.order_id
             JOIN static_status ss ON st.payment_status_id = ss.status_id
-            WHERE ss.status_code = 'PAID'
+            WHERE ss.status_code IN {valid_statuses}
         """
         params = []
         if start_date:
@@ -67,68 +73,51 @@ def sales_summary():
         res = cur.fetchone()
         return float(res[0] if res and res[0] else 0)
 
-    # Calculate basic stats
-    total_sales = sum_sales()
-    weekly_sales = sum_sales(start_date=week_ago)
-    monthly_sales = sum_sales(start_date=this_month_start) # Current month to date
-    yearly_sales = sum_sales(start_date=year_ago)
-    
-    # Calculate Last Month MTD sales for the fair % change
-    last_month_mtd_sales = sum_sales(start_date=last_month_start, end_date=last_month_same_day)
-
-    # Safe percentage calculator
     def calc_growth(current, previous):
         if previous == 0:
             return 100.0 if current > 0 else 0.0
         return round(((current - previous) / previous) * 100, 1)
 
-    total_sales_change = calc_growth(monthly_sales, last_month_mtd_sales)
+    # --- Calculation Engine ---
+    if period == 'week':
+        total_sales = sum_sales(start_date=this_week_start)
+        prev_sales = sum_sales(start_date=last_week_start, end_date=last_week_end)
+        total_sales_change = calc_growth(total_sales, prev_sales)
+    elif period == 'month':
+        total_sales = sum_sales(start_date=this_month_start)
+        prev_sales = sum_sales(start_date=last_month_start, end_date=last_month_end)
+        total_sales_change = calc_growth(total_sales, prev_sales)
+    else: # 'all'
+        total_sales = sum_sales()
+        total_sales_change = 0.0
 
-    # 3. Get Top Client overall, plus their ID for further filtering
-    cur.execute("""
+    # Static summaries for cards
+    weekly_sales = sum_sales(start_date=this_week_start)
+    monthly_sales = sum_sales(start_date=this_month_start) 
+    yearly_sales = sum_sales(start_date=this_year_start)
+
+    # --- Top Client logic updated with Calendar Months ---
+    valid_statuses_sql = "('PAID', 'ARCHIVED')" if include_archived else "('PAID')"
+    cur.execute(f"""
         SELECT c.customer_id, c.customer_name, COALESCE(SUM(ot.total_amount), 0) AS total_sales
         FROM sales_transaction st
         JOIN order_transaction ot ON st.order_id = ot.order_id
         JOIN customer c ON ot.customer_id = c.customer_id
         JOIN static_status ss ON st.payment_status_id = ss.status_id
-        WHERE ss.status_code = 'PAID'
+        WHERE ss.status_code IN {valid_statuses_sql}
         GROUP BY c.customer_id, c.customer_name
-        ORDER BY total_sales DESC
-        LIMIT 1
+        ORDER BY total_sales DESC LIMIT 1
     """)
     top_client_data = cur.fetchone()
 
-    top_client_name = "None"
-    top_client_sales = 0.0
-    top_client_change = 0.0
+    top_client_name, top_client_sales, top_client_change = "None", 0.0, 0.0
 
-    # 4. If a top client exists, calculate their specific MTD growth
     if top_client_data:
-        client_id = top_client_data[0]
-        top_client_name = top_client_data[1]
-        top_client_sales = float(top_client_data[2])
-
-        # Get Top Client's Current Month Sales
-        cur.execute("""
-            SELECT COALESCE(SUM(ot.total_amount), 0)
-            FROM sales_transaction st
-            JOIN order_transaction ot ON st.order_id = ot.order_id
-            JOIN static_status ss ON st.payment_status_id = ss.status_id
-            WHERE ss.status_code = 'PAID' AND ot.customer_id = %s AND st.sales_date >= %s
-        """, (client_id, this_month_start))
-        client_current_month = float(cur.fetchone()[0])
-
-        # Get Top Client's Last Month MTD Sales
-        cur.execute("""
-            SELECT COALESCE(SUM(ot.total_amount), 0)
-            FROM sales_transaction st
-            JOIN order_transaction ot ON st.order_id = ot.order_id
-            JOIN static_status ss ON st.payment_status_id = ss.status_id
-            WHERE ss.status_code = 'PAID' AND ot.customer_id = %s AND st.sales_date >= %s AND st.sales_date <= %s
-        """, (client_id, last_month_start, last_month_same_day))
-        client_last_month_mtd = float(cur.fetchone()[0])
-
-        top_client_change = calc_growth(client_current_month, client_last_month_mtd)
+        client_id, top_client_name, top_client_sales = top_client_data[0], top_client_data[1], float(top_client_data[2])
+        
+        client_curr = sum_sales(start_date=this_month_start) # Current calendar month
+        client_prev = sum_sales(start_date=last_month_start, end_date=last_month_end) # Prev calendar month
+        top_client_change = calc_growth(client_curr, client_prev)
 
     cur.close()
     conn.close()
@@ -154,7 +143,7 @@ def sales_transactions():
     # Run auto-fix FIRST
     auto_fix_pending_payments(conn, cur)
 
-    # THE FIX: Uses ot.total_amount directly so React displays the perfect price
+    # Uses ot.total_amount directly so React displays the perfect price
     query = """
         SELECT
             st.sales_id,
@@ -278,7 +267,7 @@ def toggle_archive(sales_id):
 
         current_status = row[0]
 
-        # 2. Decide target status (no show_in_ui filter)
+        # 2. Decide target status
         if current_status == 'ARCHIVED':
             target_code = 'PAID'
             is_archived = False
@@ -288,7 +277,7 @@ def toggle_archive(sales_id):
             is_archived = True
             message = "Sale moved to Archive"
 
-        # 3. Look up the target status_id (no show_in_ui filter)
+        # 3. Look up the target status_id
         cur.execute("""
             SELECT status_id FROM static_status
             WHERE status_scope = 'SALES_STATUS'
@@ -330,26 +319,48 @@ def toggle_archive(sales_id):
 @sales_bp.route("/top-clients", methods=["GET"])
 def top_clients():
     period = request.args.get('period', 'week')
+    include_archived = request.args.get('include_archived', 'false').lower() == 'true'
+    
+    # Initialize connection
     conn = get_connection()
     cur = conn.cursor()
 
     today = date.today()
-    start_date = today - timedelta(days=7) if period == 'week' else today.replace(day=1)
+    
+    # 1. CALENDAR LOGIC: Determine the start date
+    if period == 'month':
+        # Start of the current calendar month
+        start_date = today.replace(day=1)
+    elif period == 'year':
+        # Start of the current calendar year
+        start_date = today.replace(month=1, day=1)
+    else:
+        # Start of the current calendar week (Monday)
+        start_date = today - timedelta(days=today.weekday())
 
-    cur.execute("""
-        SELECT c.customer_name, COALESCE(SUM(ot.total_amount), 0) AS total_sales
-        FROM sales_transaction st
-        JOIN order_transaction ot ON st.order_id = ot.order_id
-        JOIN customer c ON ot.customer_id = c.customer_id
-        JOIN static_status ss ON st.payment_status_id = ss.status_id
-        WHERE ss.status_code = 'PAID' AND st.sales_date >= %s
-        GROUP BY c.customer_name
-        ORDER BY total_sales DESC
-        LIMIT 3
-    """, (start_date,))
+    valid_statuses_sql = "('PAID', 'ARCHIVED')" if include_archived else "('PAID')"
 
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
+    try:
+        cur.execute(f"""
+            SELECT c.customer_name, COALESCE(SUM(ot.total_amount), 0) AS total_sales
+            FROM sales_transaction st
+            JOIN order_transaction ot ON st.order_id = ot.order_id
+            JOIN customer c ON ot.customer_id = c.customer_id
+            JOIN static_status ss ON st.payment_status_id = ss.status_id
+            WHERE ss.status_code IN {valid_statuses_sql} 
+              AND st.sales_date >= %s
+            GROUP BY c.customer_name
+            ORDER BY total_sales DESC
+            LIMIT 3
+        """, (start_date,))
 
-    return jsonify([{"name": r[0], "sales": float(r[1])} for r in rows])
+        rows = cur.fetchall()
+        results = [{"name": r[0], "sales": float(r[1])} for r in rows]
+    except Exception as e:
+        print(f"Error fetching top clients: {e}")
+        results = []
+    finally:
+        cur.close()
+        conn.close()
+
+    return jsonify(results)
