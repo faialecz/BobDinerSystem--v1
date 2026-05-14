@@ -1,7 +1,0 @@
-flask
-flask-cors
-psycopg2-binary
-python-dotenv
-PyJWT
-bcrypt
-supabase
