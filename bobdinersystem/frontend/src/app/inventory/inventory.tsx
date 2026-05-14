@@ -575,16 +575,7 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
             <h2 className={s.bigNumber}>{data.totalProducts.toLocaleString()}</h2>
           </section>
 
-          <section className={s.statCard}>
-            <p className={s.cardTitle}>Inventory Report</p>
-            <div className={s.list}>
-              <div className={`${s.listRow} ${s.altRow}`}><span>Weekly</span><span className={s.green}>{data.weeklyInventory.toLocaleString()}</span></div>
-              <div className={s.listRow}><span>Monthly</span><span className={s.red}>{data.monthlyInventory.toLocaleString()}</span></div>
-              <div className={`${s.listRow} ${s.altRow}`}><span>Yearly</span><span className={s.blue}>{data.yearlyInventory.toLocaleString()}</span></div>
-            </div>
-          </section>
-
-          <section className={s.statCard}>
+<section className={s.statCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <p className={s.cardTitle} style={{ margin: 0 }}>Stock Alerts</p>
               <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '6px' }}>

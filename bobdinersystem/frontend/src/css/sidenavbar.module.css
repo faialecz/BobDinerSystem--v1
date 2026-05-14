@@ -6,14 +6,14 @@
   height: 100vh;
   transition: all 0.3s ease;
   overflow: hidden;
-  background-color:#164163;
+  background-color: #0f172a;
   color: #fff;
   width: 16rem;
 }
 
 .collapsed {
   width: 5rem;
-  background-color: #164163;
+  background-color: #0f172a;
   color: #fff;
   box-shadow: none;
 }

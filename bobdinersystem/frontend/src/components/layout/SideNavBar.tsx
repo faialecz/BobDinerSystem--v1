@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   AiOutlineUser,
   AiOutlineSetting,
@@ -13,8 +14,9 @@ import { MdOutlineInventory } from "react-icons/md";
 import { PiShoppingBag } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
 import { LuClipboardList } from "react-icons/lu";
-import { RiBarChart2Line, RiLogoutBoxRLine } from "react-icons/ri";
+import { RiLogoutBoxRLine } from "react-icons/ri";
 import { IoCloseCircleOutline } from "react-icons/io5";
+import { ClipboardList, RefreshCw } from "lucide-react";
 import styles from "@/css/sidenavbar.module.css";
 import type { UserInfo } from "@/types/user";
 
@@ -60,15 +62,16 @@ export default function Sidebar({
     return () => window.removeEventListener('pfp:updated', handlePfpUpdate);
   }, [userInfo.employeeId]);
 
-  const allMenuItems = [
-    { name: "Dashboard",  icon: <GoHome />,             show: true },
-    { name: "Sales",      icon: <GrLineChart />,        show: !!permissions.sales?.can_view },
-    { name: "Inventory",  icon: <MdOutlineInventory />, show: !!permissions.inventory?.can_view },
-    { name: "Orders",     icon: <PiShoppingBag />,      show: !!permissions.orders?.can_view },
-    { name: "Purchases",  icon: <LuClipboardList />,    show: canAccessPurchases },
-    { name: "Suppliers",  icon: <BsPeople />,           show: !!permissions.supplier?.can_view },
-    { name: "Reports",    icon: <RiBarChart2Line />,    show: !!permissions.reports?.can_view },
-    { name: "Settings",   icon: <AiOutlineSetting />,   show: !!permissions.settings?.can_view },
+  const allMenuItems: Array<{ name: string; icon: React.ReactNode; show: boolean; href?: string }> = [
+    { name: "Dashboard",      icon: <GoHome />,             show: true },
+    { name: "Sales",          icon: <GrLineChart />,        show: !!permissions.sales?.can_view },
+    { name: "Inventory",      icon: <MdOutlineInventory />, show: !!permissions.inventory?.can_view },
+    { name: "Orders",         icon: <PiShoppingBag />,      show: !!permissions.orders?.can_view },
+    { name: "Purchases",      icon: <LuClipboardList />,    show: canAccessPurchases },
+    { name: "Suppliers",      icon: <BsPeople />,           show: !!permissions.supplier?.can_view },
+{ name: "Event Log",      icon: <ClipboardList size={20} />, show: true, href: "/event-log" },
+    { name: "Reorder Point",  icon: <RefreshCw size={20} />,    show: true, href: "/reorder-point" },
+    { name: "Settings",       icon: <AiOutlineSetting />,   show: !!permissions.settings?.can_view },
   ];
 
   const menuItems = allMenuItems.filter(item => item.show);
@@ -103,19 +106,35 @@ export default function Sidebar({
         )}
 
         <nav className={styles.navMenu}>
-          {menuItems.map((item) => (
-            <button
-              key={item.name}
-              onClick={() => onTabChange(item.name)}
-              className={`${styles.navItem} ${collapsed ? styles.collapsedItem : ""} ${
-                activeTab === item.name ? styles.activeNavItem : ""
-              }`}
-              title={collapsed ? item.name : ''}
-            >
-              <span className={styles.navIcon}>{item.icon}</span>
-              {!collapsed && <span className={styles.navText}>{item.name}</span>}
-            </button>
-          ))}
+          {menuItems.map((item) =>
+            item.href ? (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={() => onTabChange(item.name)}
+                className={`${styles.navItem} ${collapsed ? styles.collapsedItem : ""} ${
+                  activeTab === item.name ? styles.activeNavItem : ""
+                }`}
+                title={collapsed ? item.name : ""}
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                <span className={styles.navIcon}>{item.icon}</span>
+                {!collapsed && <span className={styles.navText}>{item.name}</span>}
+              </Link>
+            ) : (
+              <button
+                key={item.name}
+                onClick={() => onTabChange(item.name)}
+                className={`${styles.navItem} ${collapsed ? styles.collapsedItem : ""} ${
+                  activeTab === item.name ? styles.activeNavItem : ""
+                }`}
+                title={collapsed ? item.name : ""}
+              >
+                <span className={styles.navIcon}>{item.icon}</span>
+                {!collapsed && <span className={styles.navText}>{item.name}</span>}
+              </button>
+            )
+          )}
         </nav>
       </div>
 

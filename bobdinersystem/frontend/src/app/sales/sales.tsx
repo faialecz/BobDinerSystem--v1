@@ -463,15 +463,6 @@ if (isLoading === null) return (
         </section>     
              
           <section className={s.statCard}>
-            <p className={s.cardTitle}>Sales Report</p>
-            <div className={s.list}>
-              <div className={`${s.listRow} ${s.altRow}`}><span>Weekly</span><span className={s.green}>₱ {safeSummary.weeklySales.toLocaleString()}</span></div>
-              <div className={s.listRow}><span>Monthly</span><span className={s.red}>₱ {safeSummary.monthlySales.toLocaleString()}</span></div>
-              <div className={`${s.listRow} ${s.altRow}`}><span>Yearly</span><span className={s.blue}>₱ {safeSummary.yearlySales.toLocaleString()}</span></div>
-            </div>
-          </section>
-          
-          <section className={s.statCard}>
             <div className={s.topClientsHeader}>
               <p className={s.cardTitle}>Top Clients</p>
               <div className={s.periodToggle}>

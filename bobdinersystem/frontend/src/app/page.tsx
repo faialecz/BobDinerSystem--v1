@@ -6,7 +6,6 @@ import Login from "@/app/auth/auth";
 import CreatePassword from "@/app/auth/CreatePassword";
 import Dashboard from "@/app/dashboard/dashboard";
 import Sidebar from "@/components/layout/SideNavBar";
-import Reports from "@/app/reports/reports";
 import Settings from "@/app/settings/settings";
 import Help from "@/app/help/help";
 import Inventory from "@/app/inventory/inventory";
@@ -135,8 +134,6 @@ export default function Home() {
               <Sales role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Sales' ? pendingSearch.term : ''} permissions={userInfo.permissions?.sales} />
             ) : activeTab === "Orders" ? (
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} permissions={userInfo.permissions?.orders} />
-            ) : activeTab === "Reports" ? (
-              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} onNavigate={(tab, item?) => { setActiveTabPersisted(tab); if (item) setReorderItem(item); }} />
             ) : activeTab === "Settings" ? (
               <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (

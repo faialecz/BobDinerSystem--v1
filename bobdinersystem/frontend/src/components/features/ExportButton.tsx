@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { LuUpload } from "react-icons/lu";
-import styles from "@/css/reports.module.css";
+import styles from '@/css/reports.module.css';
 
 interface ExportButtonProps {
   onSelect?: (type: 'pdf' | 'xlsx' | 'csv') => void;

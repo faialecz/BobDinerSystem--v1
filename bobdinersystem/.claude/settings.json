@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\rayah\\\\OneDrive\\\\Desktop\\\\BobsDiner\\\\BobDinerSystem--v1\\\\bobdinersystem\\\\frontend\\\\src\\\\app\\\\dashboard\\\\InventoryDashboard.tsx\")"
     ]
   }
 }

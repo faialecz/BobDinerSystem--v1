@@ -5,8 +5,8 @@ import "../css/global.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "AE Samonte Merchandise",
-  description: "An Inventory and Sales System for AE Samonte Merchandise",
+  title: "Bob Diner Inventory and Sales System",
+  description: "An Inventory and Sales System for Bob Diner",
   icons: {
     icon: "/ae-logo.png", // or "/logo.png" if that's your file name in the public folder
   },
