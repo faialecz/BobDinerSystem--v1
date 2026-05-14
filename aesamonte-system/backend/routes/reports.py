@@ -565,7 +565,9 @@ def report_stock_ageing():
                 COALESCE(fefo.unit_cost, 0)                                   AS unit_cost,
                 MAX(st.sales_date)                                            AS last_sale_date,
                 MIN(bat.expiry_date)                                          AS earliest_expiry,
-                ib.inventory_brand_id                                         AS inventory_brand_id
+                ib.inventory_brand_id                                         AS inventory_brand_id,
+                i.inventory_id                                                AS inventory_id,
+                COALESCE(ib.item_selling_price, 0)                            AS selling_price
             FROM inventory_brand ib
             JOIN inventory       i    ON i.inventory_id   = ib.inventory_id
             LEFT JOIN brand      b    ON b.brand_id        = ib.brand_id
@@ -582,12 +584,12 @@ def report_stock_ageing():
             LEFT JOIN LATERAL (
                 SELECT unit_cost FROM inventory_batch
                 WHERE inventory_brand_id = ib.inventory_brand_id
-                  AND expiry_date > CURRENT_DATE
+                  AND quantity_on_hand > 0
                   AND batch_status_id != (
                       SELECT status_id FROM static_status
                       WHERE status_scope = 'INVENTORY_STATUS' AND status_code = 'ARCHIVED'
                   )
-                ORDER BY expiry_date ASC
+                ORDER BY expiry_date ASC NULLS LAST, batch_id ASC
                 LIMIT 1
             ) fefo ON TRUE
             LEFT JOIN order_details od ON od.batch_id IN (
@@ -599,7 +601,7 @@ def report_stock_ageing():
                 AND (TRUE {sale_date_filter})
             WHERE ss_i.status_code != 'INACTIVE'
               AND ss_b.status_code != 'ARCHIVED'
-            GROUP BY ib.inventory_brand_id, i.item_name, ib.item_sku, fefo.unit_cost
+            GROUP BY ib.inventory_brand_id, i.item_name, ib.item_sku, fefo.unit_cost, i.inventory_id, ib.item_selling_price
             ORDER BY last_received_date ASC NULLS FIRST, i.item_name
         """, params)
         rows = cur.fetchall()
@@ -676,6 +678,8 @@ def report_stock_ageing():
                 "batch_ids":           r[3] or "—",
                 "qty_on_hand":         qty,
                 "last_received_date":  last_received.isoformat() if last_received else None,
+                "unit_cost":           float(r[6] or 0),
+                "selling_price":       float(r[11] or 0),
                 "last_sale_date":      last_sale.isoformat() if last_sale else None,
                 "earliest_expiry":     earliest_expiry.isoformat() if earliest_expiry else None,
                 "expiry_status":       expiry_status,
@@ -686,6 +690,7 @@ def report_stock_ageing():
                 "holding_cost":        holding_cost,
                 "recommended_action":  recommended_action,
                 "inventory_brand_id":  r[9],
+                "inventory_id":        r[10],
             })
 
         EXPIRY_PRIORITY = {'Critical': 0, 'Near Expiry': 1, 'Expired': 2, '': 3, 'Stable': 4}
