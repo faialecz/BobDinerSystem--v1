@@ -19,39 +19,36 @@ const AddBrandModal: React.FC<AddBrandModalProps> = ({ isOpen, onClose, onSave, 
   if (!isOpen) return null;
 
   const handleSubmit = async () => {
-    const trimmed = brandName.trim();
-    if (!trimmed) { setError('Brand name is required.'); return; }
+  const trimmed = brandName.trim();
+  if (!trimmed) { setError('Brand name is required.'); return; }
 
-    const isDuplicate = existingBrands.some(
-      b => b.name.toLowerCase() === trimmed.toLowerCase()
-    );
-    if (isDuplicate) {
-      setError(`"${trimmed}" already exists. Please use a different name.`);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch('/api/brands', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: trimmed }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed to save brand.'); return; }
-      onSave({ id: data.id, name: trimmed });
-      setBrandName('');
-      setError('');
-      onClose();
-    } catch {
-      setError('Server connection failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  try {
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('token') ?? '') : '';
+    const res = await fetch('/api/brands', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    const data = await res.json();
+    if (res.status === 409) { setError(data.error); return; }
+    if (!res.ok) { setError(data.error || 'Failed to save brand.'); return; }
+    onSave({ id: data.brand_id, name: data.brand_name });
+    setBrandName('');
+    setError('');
+    onClose();
+  } catch {
+    setError('Server connection failed.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
-    <div className={s.modalOverlay} style={{ zIndex: 1200 }}>
+    <div className={s.modalOverlay} style={{ zIndex: 3200 }}>
       <div className={s.modalContent} style={{ width: '420px', padding: '24px', borderRadius: '12px' }}>
 
         {/* Header */}
