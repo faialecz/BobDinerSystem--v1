@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
 import { useState, useEffect } from "react";
@@ -56,8 +57,8 @@ export default function Home() {
           employeeUsername: "",
           roleName:         payload.role_name as string,
           roleId:           payload.role_id as number,
-          isSystem: payload.is_system as boolean,  // in the token restore useEffect
           permissions:      payload.permissions as UserInfo["permissions"],
+          isSystem:         payload.is_system as boolean,
           token,
         });
         setIsLoggedIn(true);
@@ -73,12 +74,11 @@ export default function Home() {
   useEffect(() => {
     function handleNavigate(e: Event) {
       const detail = (e as CustomEvent).detail ?? {};
-      const { tab, search, view_inventory_id, view_po_id, reorder_tab } = detail;
+      const { tab, search, view_inventory_id, view_po_id } = detail;
       setActiveTabPersisted(tab);
       setPendingSearch({ tab, term: search ?? '' });
       if (view_inventory_id != null) setViewTarget({ tab: 'Inventory', id: String(view_inventory_id) });
       else if (view_po_id != null)   setViewTarget({ tab: 'Purchases', id: String(view_po_id) });
-      else if (reorder_tab != null)  setViewTarget({ tab: 'Reports', id: String(reorder_tab) });
       else                           setViewTarget(null);
     }
     window.addEventListener('app:navigate', handleNavigate);
@@ -128,7 +128,7 @@ export default function Home() {
           />
           <div className={`flex-1 transition-all duration-300 overflow-y-auto bg-[#F8F3D9] p-0`}>
             {activeTab === "Dashboard" ? (
-              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTabPersisted} onCreatePO={(item) => { setReorderItem(item); setActiveTabPersisted('Purchases'); }} />
+              <Dashboard role={userInfo.roleName} onLogout={handleLogout} onNavigate={setActiveTabPersisted} />
             ) : activeTab === "Inventory" ? (
               <Inventory role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Inventory' ? pendingSearch.term : ''} permissions={userInfo.permissions?.inventory} initialViewId={viewTarget?.tab === 'Inventory' ? viewTarget.id : undefined} onViewOpened={() => setViewTarget(null)} />
             ) : activeTab === "Sales" ? (
@@ -136,17 +136,13 @@ export default function Home() {
             ) : activeTab === "Orders" ? (
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} permissions={userInfo.permissions?.orders} />
             ) : activeTab === "Reports" ? (
-              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} initialTab={viewTarget?.tab === 'Reports' ? viewTarget.id as TabKey : undefined} onViewOpened={() => setViewTarget(null)} onNavigate={(tab, item?) => {
-                setActiveTabPersisted(tab);
-                if (typeof item === 'string') setViewTarget({ tab, id: item });
-                else if (item) setReorderItem(item);
-              }} />
+              <Reports role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.reports} onNavigate={(tab, item?) => { setActiveTabPersisted(tab); if (item) setReorderItem(item); }} />
             ) : activeTab === "Settings" ? (
-            <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} isSystem={userInfo.isSystem} permissions={userInfo.permissions} onLogout={handleLogout} />
+              <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} onLogout={handleLogout} />
             ) : activeTab === "Help" ? (
               <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (
-              <Suppliers role={userInfo.roleName} onLogout={handleLogout} onNavigate={(tab, id) => { setActiveTabPersisted(tab); if (id) setViewTarget({ tab, id }); }} />
+              <Suppliers role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Purchases" ? (
               <Purchases role={userInfo.roleName} onLogout={handleLogout} permissions={userInfo.permissions?.purchases} initialViewId={viewTarget?.tab === 'Purchases' ? viewTarget.id : undefined} onViewOpened={() => setViewTarget(null)} reorderItem={reorderItem} />
             ) : null}
