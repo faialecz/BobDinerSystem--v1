@@ -5,10 +5,11 @@ import "../css/global.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Bob Diner Inventory and Sales System",
-  description: "An Inventory and Sales System for Bob Diner",
+  title: "Bob's Diner Inventory and Sales System",
+  description: "An Inventory and Sales System for Bob's Diner",
   icons: {
-    icon: "/ae-logo.png", // or "/logo.png" if that's your file name in the public folder
+    // Make sure this matches the actual file name in /public
+    icon: "/bob-logo.png", 
   },
 };
 

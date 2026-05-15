@@ -9,9 +9,8 @@ import ExportRequestModal from '@/components/features/ExportRequestModal'
 import ArchiveTable from './archiveSalesModal'
 import {
   LuSearch, LuChevronUp, LuChevronDown, LuChevronLeft, LuChevronRight,
-  LuArchive, LuX, LuPrinter
+  LuArchive, LuX
 } from 'react-icons/lu'
-import { printSalesInvoice, printDeliveryReceipt } from './salesPrint'
 
 interface SalesSummary {
   totalSales: number; totalSalesChange: number
@@ -761,12 +760,7 @@ if (isLoading === null) return (
               )}
             </div>
 
-            <div className={s.viewModalFooter}>
-              <button className={s.viewBtnPrint} onClick={() => activeTab === 'invoice' ? printSalesInvoice(selectedTx) : printDeliveryReceipt(selectedTx)}>
-                <LuPrinter size={15} />
-                Print {activeTab === 'invoice' ? 'Invoice' : 'Receipt'}
-              </button>
-            </div>
+    
           </div>
         </div>
       )}
