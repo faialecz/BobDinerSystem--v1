@@ -32,6 +32,9 @@ type PurchaseOrder = {
   notes:             string | null;
   total_items:       number;
   total_cost:        number;
+  contact_person:    string | null;
+  supplier_contact:  string | null;
+  supplier_email:    string | null;
 };
 
 type SortKey = keyof PurchaseOrder;
@@ -732,7 +735,7 @@ export default function PurchasesPage({
 
               {/* Supplier / Dates info box */}
               <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div>
                     <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '4px' }}>Supplier</p>
                     <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: '#1e293b' }}>{selectedPO.supplier_name}</p>
@@ -746,6 +749,29 @@ export default function PurchasesPage({
                     <p style={{ margin: 0, fontSize: '0.9rem', color: '#475569' }}>{fmtDate(selectedPO.expected_delivery)}</p>
                   </div>
                 </div>
+                
+                {/* Supplier Contact Info */}
+                {(selectedPO.contact_person || selectedPO.supplier_contact || selectedPO.supplier_email) && (
+                  <div style={{ paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
+                    <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '6px' }}>Supplier Contact</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {selectedPO.contact_person && (
+                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#1e293b' }}>{selectedPO.contact_person}</p>
+                      )}
+                      {selectedPO.supplier_contact && (
+                        <a href={`tel:${selectedPO.supplier_contact}`} style={{ margin: 0, fontSize: '0.875rem', color: '#3b82f6', textDecoration: 'none', cursor: 'pointer' }}>
+                          {selectedPO.supplier_contact}
+                        </a>
+                      )}
+                      {selectedPO.supplier_email && (
+                        <a href={`mailto:${selectedPO.supplier_email}`} style={{ margin: 0, fontSize: '0.875rem', color: '#3b82f6', textDecoration: 'none', cursor: 'pointer' }}>
+                          {selectedPO.supplier_email}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
                 {selectedPO.notes && (
                   <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
                     <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', marginBottom: '4px' }}>Notes</p>
