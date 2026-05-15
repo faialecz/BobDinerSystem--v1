@@ -45,10 +45,10 @@ type SortDir = 'asc' | 'desc' | null;
 const ROWS_PER_PAGE = 10;
 const MOCK_ORDERS: PurchaseOrder[] = [];
 
-const ALL_STATUSES = ['All Status', 'DRAFT', 'SENT', 'APPROVED', 'COMPLETED', 'CANCELLED'];
+const ALL_STATUSES = ['All Status', 'DRAFT', 'SENT', 'APPROVED', 'COMPLETED', 'RECEIVED', 'CANCELLED'];
 
 const STATUS_ORDER: Record<string, number> = {
-  DRAFT: 0, SENT: 1, APPROVED: 2, COMPLETED: 3, CANCELLED: 4, ARCHIVED: 5,
+  DRAFT: 0, SENT: 1, APPROVED: 2, COMPLETED: 3, RECEIVED: 4, CANCELLED: 5, ARCHIVED: 6,
 };
 
 const STATUS_STYLE: Record<string, { badge: string }> = {
@@ -56,6 +56,7 @@ const STATUS_STYLE: Record<string, { badge: string }> = {
   SENT:      { badge: 'border border-blue-300   bg-blue-50   text-blue-700'   },
   APPROVED:  { badge: 'border border-indigo-300 bg-indigo-50 text-indigo-700' },
   COMPLETED: { badge: 'border border-green-300  bg-green-50  text-green-700'  },
+  RECEIVED:  { badge: 'border border-emerald-300 bg-emerald-50 text-emerald-700' },
   CANCELLED: { badge: 'border border-red-300    bg-red-50    text-red-600'    },
   ARCHIVED:  { badge: 'border border-slate-300  bg-slate-50  text-slate-500'  },
 };
@@ -65,6 +66,7 @@ const STATUS_DOT: Record<string, string> = {
   SENT:      '#3b82f6',
   APPROVED:  '#6366f1',
   COMPLETED: '#22c55e',
+  RECEIVED:  '#22c55e',
   CANCELLED: '#f87171',
   ARCHIVED:  '#94a3b8',
 };
@@ -295,8 +297,7 @@ export default function PurchasesPage({
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase();
     let list = orders.filter(o => {
-      const upperStatus = o.status.toUpperCase();
-      if (upperStatus === 'RECEIVED') return false;           // treat as COMPLETED, hide
+      const upperStatus = o.status?.toUpperCase() ?? '';
       const isArchived = upperStatus === 'ARCHIVED';
       if (!isArchiveView &&  isArchived) return false;
       if ( isArchiveView && !isArchived) return false;
