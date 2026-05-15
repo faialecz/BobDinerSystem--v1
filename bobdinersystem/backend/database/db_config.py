@@ -23,11 +23,11 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
         # Explicitly hardcoding everything so Windows global variables cannot interfere
         _pool = psycopg2.pool.ThreadedConnectionPool(
             minconn=1,
-            maxconn=8,
+            maxconn=4,
             user="postgres.lkswsrcqdfktymltowxy",
             password="BobsDinerDB26!",
             host="aws-1-ap-northeast-1.pooler.supabase.com",
-            port="5432",
+            port="6543",
             database="postgres",
             sslmode="require"
         )

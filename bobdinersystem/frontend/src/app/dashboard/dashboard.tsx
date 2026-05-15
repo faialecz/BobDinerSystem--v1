@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,84 +12,92 @@ import {
 } from "lucide-react";
 import TopHeader from "@/components/layout/TopHeader";
 import styles from "@/css/dashboard.module.css";
-import { Metrics } from "./types";
 
-// ─── Internal fetch-layer types ───────────────────────────────────────────────
+// ─── API response shape ───────────────────────────────────────────────────────
 
-interface LowStockItem {
-  inventory_id: number;
-  item_name: string;
-  sku: string;
-  current_qty: number;
-  uom: string;
-  reorder_qty: number;
-  brand?: string;
-  description?: string;
-  unit_price?: number;
-  selling_price?: number;
-  status?: string;
-  supplier_name?: string;
+interface DashboardApiResponse {
+  metrics: {
+    salesToday:       number;
+    salesChange:      number;
+    lowStockCount:    number;
+    activeItemsCount: number;
+    criticalAlerts:   number;
+    warningAlerts:    number;
+    avgFillRate:      number;
+    optimalItems:     number;
+  };
+  alerts: Array<{
+    id:         number;
+    name:       string;
+    stock:      number;
+    alertLevel: string;
+    status:     "critical" | "low_stock";
+  }>;
+  health: {
+    optimal:  number;
+    lowStock: number;
+    critical: number;
+  };
+  smartReorder: {
+    itemName:         string;
+    sku:              string;
+    unit:             string;
+    brand:            string;
+    inventoryBrandId: number;
+    unitCost:         number;
+    current:          number;
+    target:           number;
+    suggested:        number;
+  } | null;
 }
 
 interface ReorderPayload {
   inventory_brand_id: number;
-  item_name: string;
-  brand_name: string;
-  uom_name: string;
-  quantity_ordered: number;
-  unit_cost: number;
-}
-
-interface ForecastItem {
-  item_name: string;
-  uom: string;
-  sku: string;
-  brand: string;
-  current_stock: number;
-  daily_rate: number;
-  suggested_reorder_qty: number;
-  inventory_brand_id: number;
-  unit_cost: number;
+  item_name:          string;
+  brand_name:         string;
+  uom_name:           string;
+  quantity_ordered:   number;
+  unit_cost:          number;
 }
 
 // ─── Public prop interfaces ───────────────────────────────────────────────────
 
 export interface DashboardMetrics {
-  salesToday: number;
-  salesChange: number;
-  lowStockCount: number;
+  salesToday:       number;
+  salesChange:      number;
+  lowStockCount:    number;
   activeItemsCount: number;
-  criticalAlerts: number;
-  warningAlerts: number;
-  avgFillRate: number;
-  optimalItems: number;
+  criticalAlerts:   number;
+  warningAlerts:    number;
+  avgFillRate:      number;
+  optimalItems:     number;
 }
 
 export interface AlertItem {
-  name: string;
-  stock: number;
+  name:       string;
+  stock:      number;
   alertLevel: string;
-  status: "critical" | "low_stock";
+  status:     "critical" | "low_stock";
 }
 
 export interface HealthDistribution {
-  optimal: number;
+  optimal:  number;
   lowStock: number;
   critical: number;
 }
 
 export interface SmartReorderData {
-  itemName: string;
-  sku: string;
-  unit: string;
-  target: number;
-  current: number;
+  itemName:  string;
+  sku:       string;
+  unit:      string;
+  target:    number;
+  current:   number;
   suggested: number;
 }
 
 interface DashboardProps {
-  role?: string;
-  onLogout: () => void;
+  role?:       string;
+  onLogout:    () => void;
   onNavigate?: (tab: string) => void;
   onCreatePO?: (payload: ReorderPayload) => void;
 }
@@ -98,12 +105,12 @@ interface DashboardProps {
 // ─── MetricCard ───────────────────────────────────────────────────────────────
 
 interface MetricCardProps {
-  label: string;
-  value: string | number;
-  icon: ReactNode;
-  iconBg: string;
+  label:    string;
+  value:    string | number;
+  icon:     ReactNode;
+  iconBg:   string;
   iconColor: string;
-  pills: Array<{ label: string; bg: string; text: string }>;
+  pills:    Array<{ label: string; bg: string; text: string }>;
 }
 
 function MetricCard({ label, value, icon, iconBg, iconColor, pills }: MetricCardProps) {
@@ -135,14 +142,14 @@ function MetricCard({ label, value, icon, iconBg, iconColor, pills }: MetricCard
 // ─── DonutChart ───────────────────────────────────────────────────────────────
 
 interface DonutChartProps {
-  health: HealthDistribution;
+  health:   HealthDistribution;
   fillRate: number;
 }
 
 function DonutChart({ health, fillRate }: DonutChartProps) {
-  const r = 44;
+  const r            = 44;
   const circumference = 2 * Math.PI * r;
-  const total = Math.max(1, health.optimal + health.lowStock + health.critical);
+  const total        = Math.max(1, health.optimal + health.lowStock + health.critical);
 
   const segmentDefs = [
     { value: health.optimal,  color: "#22c55e" },
@@ -152,9 +159,9 @@ function DonutChart({ health, fillRate }: DonutChartProps) {
 
   let cumulative = 0;
   const segments = segmentDefs.map((seg) => {
-    const len = (seg.value / total) * circumference;
+    const len    = (seg.value / total) * circumference;
     const offset = cumulative;
-    cumulative += len;
+    cumulative  += len;
     return { ...seg, len, offset };
   });
 
@@ -189,12 +196,12 @@ function DonutChart({ health, fillRate }: DonutChartProps) {
 // ─── SmartReorderCard ─────────────────────────────────────────────────────────
 
 interface SmartReorderCardProps {
-  data: SmartReorderData;
-  totalItems: number;
+  data:         SmartReorderData;
+  totalItems:   number;
   currentIndex: number;
-  onPrev: () => void;
-  onNext: () => void;
-  onCreatePO?: () => void;
+  onPrev:       () => void;
+  onNext:       () => void;
+  onCreatePO?:  () => void;
 }
 
 function SmartReorderCard({
@@ -311,169 +318,92 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "";
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Dashboard({ role = "Admin", onLogout, onCreatePO }: DashboardProps) {
-  const [metrics, setMetrics]                   = useState<Metrics | null>(null);
-  const [lowStockItems, setLowStockItems]        = useState<LowStockItem[]>([]);
-  const [totalActiveItems, setTotalActiveItems]  = useState(0);
-  const [forecastItems, setForecastItems]        = useState<ForecastItem[]>([]);
-  const [forecastIndex, setForecastIndex]        = useState(0);
-  const [loading, setLoading]                    = useState(true);
+  const [data, setData]       = useState<DashboardApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = () => {
-      Promise.all([
-        fetch(`${API}/api/dashboard/all`, { headers: { "Cache-Control": "no-cache" } })
-          .then((r) => { if (!r.ok) throw new Error(`Dashboard API ${r.status}`); return r.json(); }),
-        fetch(`${API}/api/inventory`, { headers: { "Cache-Control": "no-cache" } })
-          .then((r) => { if (!r.ok) throw new Error(`Inventory API ${r.status}`); return r.json(); }),
-        fetch(`${API}/api/dashboard/inventory-forecast`, { headers: { "Cache-Control": "no-cache" } })
-          .then((r) => r.ok ? r.json() : []),
-      ])
-        .then(([dashData, inventoryData, forecastData]) => {
-          const { metrics: m, lowStockItems: dashLowStock } = dashData;
-
-          // Build enrichment maps from the joined dashboard response
-          const supplierMap     = new Map<string, string>();
-          const unitPriceMap    = new Map<string, number>();
-          const sellingPriceMap = new Map<string, number>();
-          const reorderMap      = new Map<string, number>();
-
-          if (Array.isArray(dashLowStock)) {
-            for (const item of dashLowStock) {
-              const key = String(item.inventory_id);
-              if (item.supplier_name) supplierMap.set(key, item.supplier_name);
-              if (item.unit_price)    unitPriceMap.set(key, item.unit_price);
-              if (item.selling_price) sellingPriceMap.set(key, item.selling_price);
-              if (item.reorder_qty)   reorderMap.set(key, item.reorder_qty);
-            }
-          }
-
-          // Build alerts from full inventory list (authoritative count)
-          let stockAlerts: LowStockItem[] = [];
-          if (Array.isArray(inventoryData)) {
-            const activeProducts = inventoryData.filter((p: any) => !p.is_archived);
-            setTotalActiveItems(activeProducts.length);
-
-            stockAlerts = activeProducts
-              .filter((p: any) =>
-                p.qty === 0 ||
-                p.status?.toLowerCase().includes("out of stock") ||
-                p.status?.toLowerCase().includes("low stock")
-              )
-              .map((p: any) => {
-                const key = String(p.id);
-                return {
-                  inventory_id:  p.id,
-                  item_name:     p.item_name,
-                  sku:           p.sku,
-                  current_qty:   p.qty,
-                  uom:           p.uom,
-                  status:        p.status,
-                  brand:         p.brand,
-                  description:   p.item_description,
-                  supplier_name:  supplierMap.get(key)     || "",
-                  unit_price:     unitPriceMap.get(key)    ?? p.unitPrice    ?? 0,
-                  selling_price:  sellingPriceMap.get(key) ?? p.price        ?? 0,
-                  reorder_qty:    reorderMap.get(key)      ?? p.reorderPoint ?? 0,
-                };
-              });
-
-            setLowStockItems(stockAlerts);
-          }
-
-          if (m && !m.error) {
-            setMetrics({ ...m, lowStock: stockAlerts.length });
-          }
-
-          if (Array.isArray(forecastData)) {
-            setForecastItems(forecastData);
-            setForecastIndex(0);
-          }
+      fetch(`${API}/api/dashboard`, { headers: { "Cache-Control": "no-cache" } })
+        .then((r) => {
+          if (!r.ok) throw new Error(`Dashboard API ${r.status}`);
+          return r.json() as Promise<DashboardApiResponse>;
+        })
+        .then((json) => {
+          if (!cancelled) setData(json);
         })
         .catch((e) => console.error("Dashboard fetch error:", e))
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
     };
 
     fetchData();
     const interval = setInterval(fetchData, 30_000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
-  // ─── Derived values ─────────────────────────────────────────────────────────
+  // ─── Derived display values ─────────────────────────────────────────────────
 
-  const criticalAlerts = lowStockItems.filter(
-    (i) => i.current_qty === 0 || i.status?.toLowerCase().includes("out of stock")
-  ).length;
-
-  const warningAlerts = lowStockItems.filter(
-    (i) => i.current_qty > 0 && i.status?.toLowerCase().includes("low stock")
-  ).length;
-
-  const activeItemsCount = Math.max(0, totalActiveItems - lowStockItems.length);
-  const avgFillRate      = Math.round((activeItemsCount / Math.max(1, totalActiveItems)) * 100);
+  const m = data?.metrics;
 
   const dashMetrics: DashboardMetrics = {
-    salesToday:      metrics?.salesToday  ?? 0,
-    salesChange:     metrics?.salesChange ?? 0,
-    lowStockCount:   lowStockItems.length,
-    activeItemsCount,
-    criticalAlerts,
-    warningAlerts,
-    avgFillRate,
-    optimalItems: activeItemsCount,
+    salesToday:       m?.salesToday       ?? 0,
+    salesChange:      m?.salesChange      ?? 0,
+    lowStockCount:    m?.lowStockCount    ?? 0,
+    activeItemsCount: m?.activeItemsCount ?? 0,
+    criticalAlerts:   m?.criticalAlerts   ?? 0,
+    warningAlerts:    m?.warningAlerts    ?? 0,
+    avgFillRate:      m?.avgFillRate      ?? 0,
+    optimalItems:     m?.optimalItems     ?? 0,
   };
 
-  const alertItems: AlertItem[] = lowStockItems.map((i) => ({
-    name:       i.item_name,
-    stock:      i.current_qty,
-    alertLevel: i.status ?? "Low Stock",
-    status:
-      i.current_qty === 0 || i.status?.toLowerCase().includes("out of stock")
-        ? "critical"
-        : "low_stock",
+  const alertItems: AlertItem[] = (data?.alerts ?? []).map((a) => ({
+    name:       a.name,
+    stock:      a.stock,
+    alertLevel: a.alertLevel,
+    status:     a.status,
   }));
 
   const healthDist: HealthDistribution = {
-    optimal:  dashMetrics.optimalItems,
-    lowStock: dashMetrics.warningAlerts,
-    critical: dashMetrics.criticalAlerts,
+    optimal:  data?.health.optimal  ?? 0,
+    lowStock: data?.health.lowStock ?? 0,
+    critical: data?.health.critical ?? 0,
   };
 
   const healthTotal   = healthDist.optimal + healthDist.lowStock + healthDist.critical;
   const criticalCount = alertItems.filter((a) => a.status === "critical").length;
 
-  // Sales change pill — green if positive, red if negative
   const salesPill =
     dashMetrics.salesChange >= 0
       ? { label: `+${dashMetrics.salesChange}% today`, bg: "bg-green-100", text: "text-green-700" }
       : { label: `${dashMetrics.salesChange}% today`,  bg: "bg-red-100",   text: "text-red-700"   };
 
-  // Smart reorder — derive SmartReorderData from the currently-selected forecast item
-  const activeForecast = forecastItems[forecastIndex] ?? null;
-  const smartReorder: SmartReorderData | null = activeForecast
+  const sr = data?.smartReorder ?? null;
+  const smartReorder: SmartReorderData | null = sr
     ? {
-        itemName:  activeForecast.item_name,
-        sku:       activeForecast.sku,
-        unit:      activeForecast.uom,
-        target:    Math.round(activeForecast.daily_rate * 30),
-        current:   activeForecast.current_stock,
-        suggested: activeForecast.suggested_reorder_qty,
+        itemName:  sr.itemName,
+        sku:       sr.sku,
+        unit:      sr.unit,
+        target:    sr.target,
+        current:   sr.current,
+        suggested: sr.suggested,
       }
     : null;
 
-  const handleForecastPrev = () =>
-    setForecastIndex((i) => (i - 1 + forecastItems.length) % forecastItems.length);
-  const handleForecastNext = () =>
-    setForecastIndex((i) => (i + 1) % forecastItems.length);
-
   const handleCreatePO = () => {
-    if (!activeForecast || !onCreatePO) return;
+    if (!sr || !onCreatePO) return;
     onCreatePO({
-      inventory_brand_id: activeForecast.inventory_brand_id,
-      item_name:          activeForecast.item_name,
-      brand_name:         activeForecast.brand,
-      uom_name:           activeForecast.uom,
-      quantity_ordered:   activeForecast.suggested_reorder_qty,
-      unit_cost:          activeForecast.unit_cost,
+      inventory_brand_id: sr.inventoryBrandId,
+      item_name:          sr.itemName,
+      brand_name:         sr.brand,
+      uom_name:           sr.unit,
+      quantity_ordered:   sr.suggested,
+      unit_cost:          sr.unitCost,
     });
   };
 
@@ -492,7 +422,7 @@ export default function Dashboard({ role = "Admin", onLogout, onCreatePO }: Dash
             <p className="text-sm text-gray-400 mt-1">
               {loading
                 ? "Loading…"
-                : `${totalActiveItems} tracked items · Stock monitoring · Live data`}
+                : `${dashMetrics.activeItemsCount} tracked items · Stock monitoring · Live data`}
             </p>
           </div>
 
@@ -637,10 +567,10 @@ export default function Dashboard({ role = "Admin", onLogout, onCreatePO }: Dash
             smartReorder ? (
               <SmartReorderCard
                 data={smartReorder}
-                totalItems={forecastItems.length}
-                currentIndex={forecastIndex}
-                onPrev={handleForecastPrev}
-                onNext={handleForecastNext}
+                totalItems={1}
+                currentIndex={0}
+                onPrev={() => {}}
+                onNext={() => {}}
                 onCreatePO={handleCreatePO}
               />
             ) : (
