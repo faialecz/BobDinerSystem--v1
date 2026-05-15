@@ -69,12 +69,6 @@ export default function SettingsPage({ role = "Admin", roleId, employeeId, isSys
       action: () => setActiveView("backupRestore"),
       show: isAdmin || isManagerOrHead,
     },
-    {
-      title: "Audit Log",
-      icon: <LuClipboardList />,
-      action: () => setActiveView("auditlog"),
-      show: isAdmin,
-    }
   ];
 
   const configItems = allConfigItems.filter(item => item.show);
@@ -119,9 +113,6 @@ export default function SettingsPage({ role = "Admin", roleId, employeeId, isSys
           <BackupRestore onBack={() => setActiveView("main")} />
         )}
 
-        {activeView === "auditlog" && (
-          <AuditLog onBack={() => setActiveView("main")} onLogout={onLogout} />
-        )}
       </main>
     </div>
   );

@@ -134,9 +134,15 @@ export default function Home() {
               <Sales role={userInfo.roleName} employeeId={userInfo.employeeId} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Sales' ? pendingSearch.term : ''} permissions={userInfo.permissions?.sales} />
             ) : activeTab === "Orders" ? (
               <Orders role={userInfo.roleName} onLogout={handleLogout} initialSearch={pendingSearch?.tab === 'Orders' ? pendingSearch.term : ''} permissions={userInfo.permissions?.orders} />
-            ) : activeTab === "Settings" ? (
-              <Settings role={userInfo.roleName} roleId={userInfo.roleId} employeeId={userInfo.employeeId} onLogout={handleLogout} />
-            ) : activeTab === "Help" ? (
+           ) : activeTab === "Settings" ? (
+              <Settings 
+                role={userInfo.roleName} 
+                roleId={userInfo.roleId} 
+                employeeId={userInfo.employeeId} 
+                isSystem={userInfo.isSystem}
+                permissions={userInfo.permissions}
+                onLogout={handleLogout} 
+              /> ) : activeTab === "Help" ? (
               <Help role={userInfo.roleName} onLogout={handleLogout} />
             ) : activeTab === "Suppliers" ? (
               <Suppliers role={userInfo.roleName} onLogout={handleLogout} />
