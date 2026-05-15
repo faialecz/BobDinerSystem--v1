@@ -95,7 +95,7 @@ def orders_list():
                 COALESCE(sl_ps.status_name, NULL)            AS payment_status_name,
                 COALESCE(
                     SUM(od.order_quantity)
-                    FILTER (WHERE od.order_item_id IS NOT NULL
+                    FILTER (WHERE od.batch_id IS NOT NULL
                               AND NOT COALESCE(od.is_archived, FALSE)),
                     0
                 ) AS total_qty,
@@ -122,7 +122,7 @@ def orders_list():
                             'batch_number',        ib.batch_number,
                             'expiry_date',         ib.expiry_date
                         )
-                    ) FILTER (WHERE od.order_item_id IS NOT NULL
+                    ) FILTER (WHERE od.batch_id IS NOT NULL
                                 AND NOT COALESCE(od.is_archived, FALSE)),
                     '[]'
                 ) AS items_json

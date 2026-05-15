@@ -1499,7 +1499,7 @@ th.actionHeader .sortHeaderInner {
 .viewItemStatus { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .viewEmptyRow td { padding: 20px 8px; text-align: center; color: #94a3b8; font-size: 13px; }
 
-.viewTotalsWrapper { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.viewTotalsWrapper { display: flex; justify-content: flex-end; margin-bottom: 24px; }
 .viewTotalsBox { width: 220px; }
 
 .viewTotalLine {
