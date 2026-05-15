@@ -29,8 +29,8 @@ def orders_summary():
             cur.execute(query, params)
             return cur.fetchone()[0]
 
-        shipped_today   = count_orders("RECEIVED", today)
-        total_shipped   = count_orders("RECEIVED")
+        shipped_today   = count_orders("COMPLETED", today)
+        total_shipped   = count_orders("COMPLETED")
         cancelled_today = count_orders("CANCELLED", today)
 
         cur.execute("SELECT COUNT(*) FROM order_transaction")
@@ -703,7 +703,7 @@ def _insert_items_only(cur, order_id, items):
 
 def _create_sales_record(cur, order_id):
     """
-    Inserts a row into sales_transaction when an order is marked RECEIVED.
+    Inserts a row into sales_transaction when an order is marked COMPLETED.
     Skips silently if a record already exists for this order.
     """
     # Check if a sales record already exists
@@ -788,7 +788,7 @@ def update_order_status(order_id):
         new_status_id, new_status_code = status_row
         new_status_code = new_status_code.upper()
 
-        if new_status_code == 'RECEIVED':
+        if new_status_code == 'COMPLETED':
             _create_sales_record(cur, order_id)
         elif new_status_code == 'CANCELLED':
             cur.execute("""
@@ -975,8 +975,8 @@ def update_order(order_id):
             final_payment_date = None
 
         # --- State machine ---
-        if new_status_code == 'RECEIVED':
-            # Order is being marked as received → create sales record
+        if new_status_code == 'COMPLETED':
+            # Order is being marked as completed → create sales record
             # Stock was already deducted when order entered PREPARING/PACKED/SHIPPING
             _create_sales_record(cur, order_id)
 
@@ -1239,15 +1239,15 @@ def add_order():
         """, (customer_id, today, status_id, pm_id, payment_status_id))
         order_id = cur.fetchone()[0]
 
-        # 4. Insert items — FIFO deduction only for active/received states
-        ACTIVE_STATES = {'PREPARING', 'PACKED', 'SHIPPING', 'RECEIVED'}
+        # 4. Insert items — FIFO deduction only for active/completed states
+        ACTIVE_STATES = {'PREPARING', 'PACKED', 'SHIPPING', 'COMPLETED'}
         if initial_status_code in ACTIVE_STATES:
             _insert_and_deduct_items(cur, order_id, items)
         else:
             _insert_items_only(cur, order_id, items)
 
-        # 5a. If created directly as RECEIVED, create the sales record immediately
-        if initial_status_code == 'RECEIVED':
+        # 5a. If created directly as COMPLETED, create the sales record immediately
+        if initial_status_code == 'COMPLETED':
             _create_sales_record(cur, order_id)
 
         # 5b. Sync total_amount

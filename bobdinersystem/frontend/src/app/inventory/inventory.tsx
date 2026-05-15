@@ -722,10 +722,12 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                       </tr>
                     ))}
                   </>
-                ) : paginatedProducts.map(p => (
+                ) : paginatedProducts.map((p, index) => {
+                    const displayId = (currentPage - 1) * ROWS_PER_PAGE + index + 1;
+                    return (
 
                     <tr key={p.id} onClick={() => handleViewClick(p)} style={{ cursor: 'pointer', height: '42px' }}>
-                      <td>{p.id}</td>
+                      <td>{displayId}</td>
                       <td>{p.item_name}</td>
                       <td style={{ fontSize: '0.83rem', color: '#374151' }}>
                         {(p.brands || []).length === 0 ? (
@@ -773,7 +775,8 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

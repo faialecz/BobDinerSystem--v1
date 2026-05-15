@@ -15,7 +15,7 @@ import {
   LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX
 } from 'react-icons/lu';
 
-const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'PACKED': 2, 'SHIPPING': 3, 'CANCELLED': 4, 'RECEIVED': 5 };
+const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'PACKED': 2, 'SHIPPING': 3, 'CANCELLED': 4, 'COMPLETED': 5 };
 const ITEM_STATUS_MAP: Record<number, string> = { 1: 'AVAILABLE', 2: 'PARTIALLY_AVAILABLE', 3: 'OUT_OF_STOCK' };
 const ROWS_PER_PAGE = 10;
 
@@ -50,7 +50,7 @@ const getViewStatusClass = (status: string, s: Record<string, string>) => {
     case 'PREPARING': return s.viewStatusPreparing;
     case 'PACKED':    return s.viewStatusPacked;
     case 'SHIPPING':  return s.viewStatusToShip;
-    case 'RECEIVED':  return s.viewStatusReceived;
+    case 'COMPLETED': return s.viewStatusReceived;
     case 'CANCELLED': return s.viewStatusCancelled;
     default:          return s.viewStatusDefault;
   }
@@ -104,13 +104,13 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
 
   const s = styles;
 
-  const ORDER_STATUS_OPTIONS = ['All Status', 'PREPARING', 'PACKED', 'SHIPPING', 'CANCELLED', 'RECEIVED'];
+  const ORDER_STATUS_OPTIONS = ['All Status', 'PREPARING', 'PACKED', 'SHIPPING', 'CANCELLED', 'COMPLETED'];
 
   const getStatusBadgeColor = (status: string) => {
   if (status === 'PREPARING') return '#3b82f6';
   if (status === 'PACKED')    return '#7c3aed';
   if (status === 'SHIPPING')  return '#f59e0b';
-  if (status === 'RECEIVED')  return '#10b981';
+  if (status === 'COMPLETED') return '#10b981';
   if (status === 'CANCELLED') return '#ef4444';
   return '#9ca3af';
 };
@@ -441,7 +441,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
     case 'PREPARING': return { ...base, color: '#2563eb', border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff' };
     case 'PACKED':    return { ...base, color: '#7c3aed', border: '1.5px solid #c4b5fd', backgroundColor: '#f5f3ff' };
     case 'SHIPPING':  return { ...base, color: '#b45309', border: '1.5px solid #fcd34d', backgroundColor: '#fffbeb' };
-    case 'RECEIVED':  return { ...base, color: '#15803d', border: '1.5px solid #86efac', backgroundColor: '#f0fdf4' };
+    case 'COMPLETED': return { ...base, color: '#15803d', border: '1.5px solid #86efac', backgroundColor: '#f0fdf4' };
     case 'CANCELLED': return { ...base, color: '#dc2626', border: '1.5px solid #fca5a5', backgroundColor: '#fef2f2' };
     default:          return { ...base, color: '#6b7280', border: '1.5px solid #e5e7eb', backgroundColor: '#f9fafb' };
   }
@@ -513,7 +513,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   const getDisplayDate = (o: Order): string => {
     const st = o.status?.toLowerCase();
     if (st === 'cancelled' && o.cancelled_date) return fmtDate(o.cancelled_date) ?? o.date;
-    if ((st === 'shipping' || st === 'received') && o.shipped_date) return fmtDate(o.shipped_date) ?? o.date;
+    if ((st === 'shipping' || st === 'completed') && o.shipped_date) return fmtDate(o.shipped_date) ?? o.date;
     return o.date;
   };
 
@@ -787,10 +787,10 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                         <LuEllipsisVertical className={s.moreIcon} onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)} />
                         {openMenuId === o.id && (
                           <div className={s.popupMenu}>
-                            {o.status?.toUpperCase() !== 'RECEIVED' && (
+                            {o.status?.toUpperCase() !== 'COMPLETED' && (
                               <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
                             )}
-                            {['RECEIVED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
+                            {['COMPLETED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
                               <button className={s.popBtnArchive} onClick={() => { setArchiveConfirmId(o.id); setOpenMenuId(null); }}><LuArchive size={14} /> Archive</button>
                             )}
                             <button className={s.closeX} onClick={() => setOpenMenuId(null)}>×</button>
