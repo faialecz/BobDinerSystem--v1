@@ -284,27 +284,26 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
   // ── Item search ─────────────────────────────────────────────────────────────
 
   function handleSearchChange(idx: number, value: string) {
-  if (justPicked.current[idx]) { justPicked.current[idx] = false; return; }
-  setSearchQuery(prev => ({ ...prev, [idx]: value }));
-  setSearchOpen(prev  => ({ ...prev, [idx]: true  }));
+    if (justPicked.current[idx]) { justPicked.current[idx] = false; return; }
+    setSearchQuery(prev => ({ ...prev, [idx]: value }));
+    setSearchOpen(prev  => ({ ...prev, [idx]: true  }));
 
-  // Calculate fixed position for dropdown
-  const el = searchInputRefs.current[idx];
-  if (el) {
-    const rect = el.getBoundingClientRect();
-    setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    // Calculate fixed position for dropdown
+    const el = searchInputRefs.current[idx];
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+
+    clearTimeout(searchTimers.current[idx]);
+    searchTimers.current[idx] = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/inventory/search?q=${encodeURIComponent(value.trim())}`, { headers: authHeader() });
+        const data = await res.json();
+        if (res.ok) setSearchResults(prev => ({ ...prev, [idx]: data }));
+      } catch { /* silent */ }
+    }, 300);
   }
-
-  clearTimeout(searchTimers.current[idx]);
-  if (!value.trim()) { setSearchResults(prev => ({ ...prev, [idx]: [] })); return; }
-  searchTimers.current[idx] = setTimeout(async () => {
-    try {
-      const res  = await fetch(`/api/inventory/search?q=${encodeURIComponent(value)}`, { headers: authHeader() });
-      const data = await res.json();
-      if (res.ok) setSearchResults(prev => ({ ...prev, [idx]: data }));
-    } catch { /* silent */ }
-  }, 300);
-}
 
   function handleItemSelect(idx: number, result: any) {
     justPicked.current[idx] = true;
@@ -565,14 +564,12 @@ export default function AddPOModal({ isOpen, onClose, onSaved, initialItems }: A
                                     placeholder="Search item..."
                                     value={searchQuery[idx] ?? ''}
                                     onChange={e => handleSearchChange(idx, e.target.value)}
-                                    onFocus={() => {
-                                      setSearchOpen(prev => ({ ...prev, [idx]: true }));
-                                    }}
+                                    onFocus={() => handleSearchChange(idx, searchQuery[idx] ?? '')}
                                     onBlur={() => setTimeout(() => setSearchOpen(prev => ({ ...prev, [idx]: false })), 160)}
                                     style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', padding: '6px 0', width: '100%', color: '#374151' }}
                                   />
                                 </div>
-                                {searchOpen[idx] && searchQuery[idx]?.trim() && dropdownPos && (
+                                {searchOpen[idx] && (searchQuery[idx]?.trim() !== '' || (searchResults[idx]?.length ?? 0) > 0) && dropdownPos && (
                                 <div style={{
                                   position: 'fixed',      // ← was 'absolute'
                                   top: dropdownPos.top,   // ← was 'calc(100% + 4px)'

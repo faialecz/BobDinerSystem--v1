@@ -686,7 +686,7 @@ export default function PurchasesPage({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9' }}>
               <div>
                 <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>
-                  AE Samonte Merchandise
+                   Bob's Diner
                 </p>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
                   No. {selectedPO.po_number}
@@ -813,14 +813,6 @@ export default function PurchasesPage({
               </div>
             </div>
 
-            {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid #f1f5f9' }}>
-              <button
-                style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#1a4263', color: '#fff', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                Print PO
-              </button>
-            </div>
           </div>
         </div>
       )}

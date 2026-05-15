@@ -215,10 +215,9 @@ export default function EditPOModal({ purchaseOrder, onClose, onSaved }: EditPOM
     setSearchQuery(prev => ({ ...prev, [idx]: value }));
     setSearchOpen(prev  => ({ ...prev, [idx]: true  }));
     clearTimeout(searchTimers.current[idx]);
-    if (!value.trim()) { setSearchResults(prev => ({ ...prev, [idx]: [] })); return; }
     searchTimers.current[idx] = setTimeout(async () => {
       try {
-        const res  = await fetch(`/api/inventory/search?q=${encodeURIComponent(value)}`, { headers: authHeader() });
+        const res  = await fetch(`/api/inventory/search?q=${encodeURIComponent(value.trim())}`, { headers: authHeader() });
         const data = await res.json();
         if (res.ok) setSearchResults(prev => ({ ...prev, [idx]: data }));
       } catch { /* silent */ }
@@ -456,12 +455,12 @@ const handleCancelClick = () => {
                                   placeholder="Search item..."
                                   value={searchQuery[idx] ?? ''}
                                   onChange={e => handleSearchChange(idx, e.target.value)}
-                                  onFocus={() => setSearchOpen(prev => ({ ...prev, [idx]: true }))}
+                                  onFocus={() => handleSearchChange(idx, searchQuery[idx] ?? '')}
                                   onBlur={() => setTimeout(() => setSearchOpen(prev => ({ ...prev, [idx]: false })), 160)}
                                   style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: '0.875rem', padding: '6px 0', width: '100%', color: '#374151' }}
                                 />
                               </div>
-                              {searchOpen[idx] && searchQuery[idx]?.trim() && (
+                              {searchOpen[idx] && (searchQuery[idx]?.trim() !== '' || (searchResults[idx]?.length ?? 0) > 0) && (
                                 <div style={{
                                   position: 'absolute', top: 'calc(100% + 4px)', left: 0,
                                   minWidth: '400px', background: '#fff', border: '1px solid #e5e7eb',
