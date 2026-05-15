@@ -5,8 +5,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import styles from '@/css/sales.module.css'
 import TopHeader from '@/components/layout/TopHeader'
-import ExportButton from '@/components/features/ExportButton'
-import ExportModal from './exportModal'
 import ExportRequestModal from '@/components/features/ExportRequestModal'
 import ArchiveTable from './archiveSalesModal'
 import {
@@ -44,17 +42,12 @@ interface SalesProps {
 export default function SalesPage({ role = 'Admin', employeeId = 0, onLogout, initialSearch, permissions }: SalesProps) {
   const s = styles as Record<string, string>
 
-  // ── Permission Logic ──
-const canExport = !!permissions?.can_export
-
   // ── State ──
   const [showExportRequestModal, setShowExportRequestModal] = useState(false)
   const [summary, setSummary]           = useState<SalesSummary | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading]       = useState(true)
   const [searchTerm, setSearchTerm]     = useState(initialSearch ?? '')
-  const [showExportModal, setShowExportModal] = useState(false)
-  const [exportType, setExportType]     = useState<'pdf' | 'xlsx' | 'csv' | null>(null) // ── ADDED ──
   const [isArchiveView, setIsArchiveView]     = useState(false)
   const [currentPage, setCurrentPage]         = useState(1)
   const itemsPerPage = 10
@@ -404,21 +397,6 @@ if (isLoading === null) return (
               Track, manage, and export all sales transactions and invoices.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-           {canExport ? (
-          <ExportButton onSelect={(type) => {
-            setExportType(type)
-            setShowExportModal(true)
-          }} />
-        ) : (
-          <button
-            onClick={() => setShowExportRequestModal(true)}
-            className={s.requestExportBtn}
-          >
-            Request Export
-          </button>
-            )}
-          </div>
         </div>{/* ── END HEADER ROW ── */}
 
         {/* Summary Cards */}
@@ -686,15 +664,6 @@ if (isLoading === null) return (
           </div>
         )}
       </main>
-
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => { setShowExportModal(false); setExportType(null) }}
-        onSuccess={handleExportSuccess}
-        data={filteredTx}
-        summary={safeSummary}
-        exportType={exportType}
-      />
 
       <ExportRequestModal
         isOpen={showExportRequestModal}

@@ -5,9 +5,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import styles from '@/css/order.module.css';
 import TopHeader from '@/components/layout/TopHeader';
-import ExportButton from '@/components/features/ExportButton';
 import ExportRequestModal from '@/components/features/ExportRequestModal';
-import ExportModal from './exportModal';
 import OrderEditModal from './editOrderModal';
 import AddOrderModal from './addOrderModal';
 import ArchiveTable from './archiveOrderModal';
@@ -85,9 +83,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   const [orderStatuses, setOrderStatuses] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
-  const [showExportModal, setShowExportModal] = useState(false);
   const [showExportRequestModal, setShowExportRequestModal] = useState(false);
-  const [exportType, setExportType] = useState<'pdf' | 'xlsx' | 'csv' | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastTitle, setToastTitle] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -702,18 +698,6 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
             <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#164163', margin: 0 }}>ORDERS</h1>
             <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '2px 0 0' }}>Track, manage, and process customer orders.</p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {permissions?.can_export ? (
-              <ExportButton onSelect={(type) => { setExportType(type); setShowExportModal(true); }} />
-            ) : (
-              <button
-                onClick={() => setShowExportRequestModal(true)}  // ✅ actually opens the modal
-                className={s.requestExportBtn}
-              >
-                Request Export
-              </button>
-            )}
-          </div>
         </div>
 
         <div className={s.topGrid}>
@@ -943,14 +927,9 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
         )}
       </div>
 
-      <ExportModal isOpen={showExportModal} onClose={() => { setShowExportModal(false); setExportType(null); }} 
-                    onSuccess={(msg, type) => { setToastTitle(type === 'error' ? 'Oops!' : 'Success!'); setToastMessage(msg); setIsError(type === 'error'); setShowToast(true); }} 
-                    data={filtered}
-                    summary={summary ?? { shippedToday: { current: 0, total: 0 }, cancelled: { current: 0 }, totalOrders: { count: 0 } }}
-                    exportType={exportType} />
       <ExportRequestModal isOpen={showExportRequestModal} onClose={() => setShowExportRequestModal(false)}
                     targetModule="Orders"
-                    requesterId={/* pass employeeId if available, otherwise remove */undefined}
+                    requesterId={undefined}
                     onSuccess={(msg) => {
                       setToastTitle('Request Sent!');
                       setToastMessage(msg);

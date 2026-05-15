@@ -5,14 +5,12 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import styles from "@/css/inventory.module.css";
 import TopHeader from '@/components/layout/TopHeader';
-import ExportButton from '@/components/features/ExportButton';
 import ExportRequestModal from '@/components/features/ExportRequestModal';
 import RestrictedAccessModal from '@/components/features/RestrictedAccessModal';
 import { usePermissionGuard } from '@/hooks/usePermissionGuard';
 import type { ModulePerms } from '@/types/user';
 import AddInventoryModal from './addInventoryModal';
 import EditInventoryModal from './editInventoryModal';
-import ExportModal from './exportModal';
 import ArchiveTable from './archiveInvModal';
 import AddSupplierModal from '@/app/suppliers/addSupplierModal';
 import UomModal from './UomModal';
@@ -156,7 +154,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [showExportModal, setShowExportModal] = useState(false);
   const [showExportRequestModal, setShowExportRequestModal] = useState(false);
   const [showUomModal, setShowUomModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -168,7 +165,6 @@ const Inventory: React.FC<InventoryProps> = ({ role, employeeId = 0, onLogout, i
   const [isError, setIsError] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [exportType, setExportType] = useState<'pdf' | 'xlsx' | 'csv' | null>(null);
 
   // batch quick-view modal
   const [viewItem, setViewItem]             = useState<any | null>(null);
@@ -551,21 +547,6 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
               Manage products, stock levels, and supplier information.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {permissions?.can_export ? (
-            <ExportButton onSelect={(type) => {
-              setExportType(type);
-              setShowExportModal(true);
-            }} />
-          ) : (
-            <button
-              onClick={() => setShowExportRequestModal(true)}
-              className={s.requestExportBtn}
-            >
-              Request Export
-            </button>
-          )}
-         </div>
         </div>
 
         {/* STAT CARDS */}
@@ -817,15 +798,6 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
       </div>
 
       {/* MODALS */}
-      <ExportModal
-        isOpen={showExportModal}
-        onClose={() => { setShowExportModal(false); setExportType(null); }}
-        onSuccess={handleExportSuccess}
-        data={filteredProducts}
-        summary={data}
-        exportType={exportType}
-      />
-
       <ExportRequestModal
         isOpen={showExportRequestModal}
         onClose={() => setShowExportRequestModal(false)}
