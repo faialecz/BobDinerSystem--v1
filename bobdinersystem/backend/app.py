@@ -15,6 +15,7 @@ from routes.backup import backup_bp
 from routes.dashboard import dashboard_bp
 from routes.notifications import notifications_bp
 from routes.purchases import purchases_bp
+from routes.event_log import event_log_bp
 
 def _ensure_schema():
     from database.db_config import get_connection
@@ -53,6 +54,7 @@ app.register_blueprint(backup_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(purchases_bp)
+app.register_blueprint(event_log_bp)
 
 
 @app.errorhandler(Exception)

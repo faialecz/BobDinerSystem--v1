@@ -40,63 +40,16 @@ type PurchaseOrder = {
 type SortKey = keyof PurchaseOrder;
 type SortDir = 'asc' | 'desc' | null;
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
-
-const MOCK_ORDERS: PurchaseOrder[] = [
-  {
-    purchase_order_id: 1,
-    po_number:        'PO-2026-001',
-    supplier_name:    'XYZ Distributors',
-    status:           'DRAFT',
-    order_date:       '2026-04-28',
-    expected_delivery:'2026-05-01',
-    notes:            null,
-    total_items:      150,
-    total_cost:       12500,
-  },
-  {
-    purchase_order_id: 2,
-    po_number:        'PO-2026-002',
-    supplier_name:    'Metro Supply Inc.',
-    status:           'SENT',
-    order_date:       '2026-04-20',
-    expected_delivery:'2026-04-30',
-    notes:            'Urgent restock',
-    total_items:      80,
-    total_cost:       54300,
-  },
-  {
-    purchase_order_id: 3,
-    po_number:        'PO-2026-003',
-    supplier_name:    'Avelino Trading Co.',
-    status:           'COMPLETED',
-    order_date:       '2026-04-10',
-    expected_delivery:'2026-04-18',
-    notes:            null,
-    total_items:      200,
-    total_cost:       98750,
-  },
-  {
-    purchase_order_id: 5,
-    po_number:        'PO-2026-005',
-    supplier_name:    'Luntian Fresh Farms',
-    status:           'CANCELLED',
-    order_date:       '2026-03-28',
-    expected_delivery:'2026-04-08',
-    notes:            'Supplier unavailable',
-    total_items:      30,
-    total_cost:       8900,
-  },
-];
+// NOTE: Removed mock data — purchases are fetched from the backend API.
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ROWS_PER_PAGE = 10;
 
-const ALL_STATUSES = ['All Status', 'DRAFT', 'SENT', 'APPROVED', 'COMPLETED', 'CANCELLED'];
+const ALL_STATUSES = ['All Status', 'DRAFT', 'SENT', 'APPROVED', 'COMPLETED', 'RECEIVED', 'CANCELLED'];
 
 const STATUS_ORDER: Record<string, number> = {
-  DRAFT: 0, SENT: 1, APPROVED: 2, COMPLETED: 3, CANCELLED: 4, ARCHIVED: 5,
+  DRAFT: 0, SENT: 1, APPROVED: 2, COMPLETED: 3, RECEIVED: 4, CANCELLED: 5, ARCHIVED: 6,
 };
 
 const STATUS_STYLE: Record<string, { badge: string }> = {
@@ -104,6 +57,7 @@ const STATUS_STYLE: Record<string, { badge: string }> = {
   SENT:      { badge: 'border border-blue-300   bg-blue-50   text-blue-700'   },
   APPROVED:  { badge: 'border border-indigo-300 bg-indigo-50 text-indigo-700' },
   COMPLETED: { badge: 'border border-green-300  bg-green-50  text-green-700'  },
+  RECEIVED:  { badge: 'border border-emerald-300 bg-emerald-50 text-emerald-700' },
   CANCELLED: { badge: 'border border-red-300    bg-red-50    text-red-600'    },
   ARCHIVED:  { badge: 'border border-slate-300  bg-slate-50  text-slate-500'  },
 };
@@ -113,6 +67,7 @@ const STATUS_DOT: Record<string, string> = {
   SENT:      '#3b82f6',
   APPROVED:  '#6366f1',
   COMPLETED: '#22c55e',
+  RECEIVED:  '#10b981',
   CANCELLED: '#f87171',
   ARCHIVED:  '#94a3b8',
 };
@@ -196,6 +151,7 @@ export default function PurchasesPage({
 }) {
   const [orders, setOrders]             = useState<PurchaseOrder[]>([]);
   const [isLoading, setIsLoading]       = useState(true);
+  const [fetchError, setFetchError]     = useState<string | null>(null);
   const [searchTerm, setSearchTerm]     = useState('');
   const [currentPage, setCurrentPage]   = useState(1);
   const [sortKey, setSortKey]           = useState<SortKey | null>(null);
@@ -268,16 +224,25 @@ export default function PurchasesPage({
 
   async function fetchOrders() {
     setIsLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch('/api/purchases', { headers: authHeader() });
       if (res.ok) {
         const data = await res.json();
-        setOrders(Array.isArray(data) && data.length > 0 ? data : MOCK_ORDERS);
+        setOrders(Array.isArray(data) ? data : []);
+      } else if (res.status === 401) {
+        setOrders([]);
+        setFetchError('Not authenticated. Please sign in.');
+      } else if (res.status === 403) {
+        setOrders([]);
+        setFetchError('You do not have permission to view purchases.');
       } else {
-        setOrders(MOCK_ORDERS);
+        setOrders([]);
+        setFetchError('Failed to load purchase orders.');
       }
-    } catch {
-      setOrders(MOCK_ORDERS);
+    } catch (err) {
+      setOrders([]);
+      setFetchError('Network error while fetching purchase orders.');
     } finally {
       setIsLoading(false);
     }
@@ -344,7 +309,6 @@ export default function PurchasesPage({
     const term = searchTerm.toLowerCase();
     let list = orders.filter(o => {
       const upperStatus = o.status.toUpperCase();
-      if (upperStatus === 'RECEIVED') return false;           // treat as COMPLETED, hide
       const isArchived = upperStatus === 'ARCHIVED';
       if (!isArchiveView &&  isArchived) return false;
       if ( isArchiveView && !isArchived) return false;
@@ -428,6 +392,15 @@ export default function PurchasesPage({
           title="PURCHASE ORDERS"
           subtitle="Draft, track, and receive inventory deliveries."
         />
+
+        {fetchError && (
+          <div style={{ margin: '12px 0', padding: '10px 14px', borderRadius: 8, background: '#fff4f4', color: '#7f1d1d', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '0.95rem' }}>{fetchError}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => fetchOrders()} style={{ background: '#7f1d1d', color: 'white', border: 'none', padding: '6px 10px', borderRadius: 6, cursor: 'pointer' }}>Retry</button>
+            </div>
+          </div>
+        )}
 
         {/* ── Card ── */}
         <div className={s.tableContainer}>
