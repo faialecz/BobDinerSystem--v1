@@ -767,8 +767,10 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                         {openMenuId === o.id && (
                           <div className={s.popupMenu}>
                             {o.status?.toUpperCase() !== 'COMPLETED' && (
+                            {o.status?.toUpperCase() !== 'COMPLETED' && (
                               <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
                             )}
+                            {['COMPLETED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
                             {['COMPLETED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
                               <button className={s.popBtnArchive} onClick={() => { setArchiveConfirmId(o.id); setOpenMenuId(null); }}><LuArchive size={14} /> Archive</button>
                             )}

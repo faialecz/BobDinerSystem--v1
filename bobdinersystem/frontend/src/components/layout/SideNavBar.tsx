@@ -46,7 +46,7 @@ export default function Sidebar({
   const { permissions } = userInfo;
 
   const PURCHASE_ROLES = ['Super Admin', 'Manager', 'Inventory Head'];
-  const canAccessPurchases = PURCHASE_ROLES.includes(userInfo.roleName);
+  const canAccessPurchases = PURCHASE_ROLES.includes(userInfo.roleName) || !!permissions.purchases?.can_view;
 
   useEffect(() => {
     const key = `profilePicture_${userInfo.employeeId}`;
@@ -69,8 +69,7 @@ export default function Sidebar({
     { name: "Orders",         icon: <PiShoppingBag />,      show: !!permissions.orders?.can_view },
     { name: "Purchases",      icon: <LuClipboardList />,    show: canAccessPurchases },
     { name: "Suppliers",      icon: <BsPeople />,           show: !!permissions.supplier?.can_view },
-{ name: "Event Log",      icon: <ClipboardList size={20} />, show: true, href: "/event-log" },
-    { name: "Reorder Point",  icon: <RefreshCw size={20} />,    show: true, href: "/reorder-point" },
+    { name: "Event Log",      icon: <ClipboardList size={20} />, show: true, href: "/event-log" },
     { name: "Settings",       icon: <AiOutlineSetting />,   show: !!permissions.settings?.can_view },
   ];
 

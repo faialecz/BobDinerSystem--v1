@@ -869,7 +869,7 @@ def _insert_items_only(cur, order_id, items):
 
 def _create_sales_record(cur, order_id):
     """
-    Inserts a row into sales_transaction when an order is marked RECEIVED.
+    Inserts a row into sales_transaction when an order is marked COMPLETED.
     Skips silently if a record already exists for this order.
     """
     # Check if a sales record already exists

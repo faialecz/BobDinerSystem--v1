@@ -28,7 +28,10 @@ def require_purchase_access(f):
             token = auth_header.split(" ")[1]
             payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             role_name = payload.get('role_name', '')
-            if role_name not in PURCHASE_ALLOWED_ROLES:
+            user_permissions = payload.get('permissions', {})
+            # Allow access if role is in allowed roles OR the token contains
+            # a granular `permissions.purchases` flag set truthy.
+            if role_name not in PURCHASE_ALLOWED_ROLES and not user_permissions.get('purchases'):
                 return jsonify({"error": "You do not have permission to access the Purchase Module."}), 403
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Session expired. Please log in again."}), 401
