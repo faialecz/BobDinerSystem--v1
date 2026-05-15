@@ -179,7 +179,10 @@ def get_purchase_orders():
                 po.expected_delivery,
                 po.notes,
                 COALESCE(agg.total_items, 0)   AS total_items,
-                COALESCE(agg.total_cost,  0.0) AS total_cost
+                COALESCE(agg.total_cost,  0.0) AS total_cost,
+                s.contact_person,
+                s.supplier_contact,
+                s.supplier_email
             FROM purchase_order po
             JOIN supplier      s  ON s.supplier_id  = po.supplier_id
             JOIN static_status ss ON ss.status_id   = po.status_id
@@ -205,6 +208,9 @@ def get_purchase_orders():
                 "notes":              r[6],
                 "total_items":        int(r[7]),
                 "total_cost":         float(r[8]),
+                "contact_person":     r[9],
+                "supplier_contact":   r[10],
+                "supplier_email":     r[11],
             }
             for r in rows
         ]

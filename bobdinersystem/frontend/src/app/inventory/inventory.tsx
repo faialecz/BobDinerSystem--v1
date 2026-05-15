@@ -657,7 +657,6 @@ const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ROWS_PER_PAGE))
                   <LuSearch size={18} className={s.searchIcon} />
                   <input className={s.searchInput} placeholder="Search by ID, Item, or Brand" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <button className={s.addButton} onClick={guard(permissions?.can_create, () => { setDefaultSupplierName(''); setShowModal(true); })}>ADD</button>
               </div>
             </div>
 
