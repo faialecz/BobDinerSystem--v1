@@ -29,8 +29,8 @@ def orders_summary():
             cur.execute(query, params)
             return cur.fetchone()[0]
 
-        shipped_today   = count_orders("RECEIVED", today)
-        total_shipped   = count_orders("RECEIVED")
+        completed_today = count_orders("COMPLETED", today)
+        total_completed = count_orders("COMPLETED")
         cancelled_today = count_orders("CANCELLED", today)
 
         cur.execute("SELECT COUNT(*) FROM order_transaction")
@@ -64,9 +64,9 @@ def orders_summary():
             growth = round(((mtd_current - mtd_last) / mtd_last) * 100, 1)
 
         return jsonify({
-            "shippedToday": {"current": shipped_today, "total": total_shipped},
-            "cancelled":    {"current": cancelled_today},
-            "totalOrders":  {"count": total_orders, "growth": growth}
+            "completedToday": {"current": completed_today, "total": total_completed},
+            "cancelled":      {"current": cancelled_today},
+            "totalOrders":    {"count": total_orders, "growth": growth}
         })
     except Exception as e:
         print("Error fetching summary:", e)
@@ -83,142 +83,110 @@ def orders_list():
     cur  = conn.cursor()
 
     try:
+        # ── Query 1: order headers (no item joins — avoids schema guessing) ──
         cur.execute("""
             SELECT
                 ot.order_id,
                 c.customer_name,
-                c.customer_address,
                 c.customer_contact,
                 ot.order_date,
                 COALESCE(sl_status.status_name, 'Preparing') AS order_status,
-                COALESCE(sl_pm.status_name, 'Cash')          AS payment_method_name,
-                COALESCE(sl_ps.status_name, NULL)            AS payment_status_name,
-                COALESCE(
-                    SUM(od.order_quantity)
-                    FILTER (WHERE od.batch_id IS NOT NULL
-                              AND NOT COALESCE(od.is_archived, FALSE)),
-                    0
-                ) AS total_qty,
-                COALESCE(ot.total_amount, 0)  AS total_amount,
-                COALESCE(ot.amount_paid, 0)   AS amount_paid,
-                ot.payment_status_id,
-                ot.deposit_date,
-                ot.final_payment_date,
-                ot.shipped_date,
-                ot.cancelled_date,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'batch_id',           ib.batch_id,
-                            'inventory_brand_id',  ibr.inventory_brand_id,
-                            'order_quantity',      od.order_quantity,
-                            'available_quantity',  COALESCE(ib.quantity_on_hand, 0),
-                            'batch_status_id',     ib.batch_status_id,
-                            'item_name',           i.item_name,
-                            'brand_name',          COALESCE(b.brand_name, 'No Brand'),
-                            'item_description',    COALESCE(ibr.item_description, ''),
-                            'amount',              od.order_total,
-                            'uom',                 u.uom_name,
-                            'batch_number',        ib.batch_number,
-                            'expiry_date',         ib.expiry_date
-                        )
-                    ) FILTER (WHERE od.batch_id IS NOT NULL
-                                AND NOT COALESCE(od.is_archived, FALSE)),
-                    '[]'
-                ) AS items_json
-            FROM order_transaction ot
-            JOIN  customer          c         ON c.customer_id          = ot.customer_id
-            LEFT JOIN static_status sl_status ON sl_status.status_id    = ot.order_status_id
-            LEFT JOIN static_status sl_pm     ON sl_pm.status_id        = ot.payment_method_id
-            LEFT JOIN static_status sl_ps     ON sl_ps.status_id        = ot.payment_status_id
-            LEFT JOIN order_details  od       ON od.order_id            = ot.order_id
-            LEFT JOIN inventory_batch ib      ON ib.batch_id            = od.batch_id
-            LEFT JOIN inventory_brand ibr     ON ibr.inventory_brand_id = ib.inventory_brand_id
-            LEFT JOIN inventory       i       ON i.inventory_id         = ibr.inventory_id
-            LEFT JOIN brand           b       ON b.brand_id             = ibr.brand_id
-            LEFT JOIN unit_of_measure u       ON u.uom_id               = ibr.uom_id
-            GROUP BY
-                ot.order_id,
-                c.customer_name,
-                c.customer_address,
-                c.customer_contact,
-                ot.order_date,
-                sl_status.status_name,
-                sl_pm.status_name,
-                sl_ps.status_name,
-                ot.total_amount,
-                ot.amount_paid,
+                COALESCE(sl_pm.status_name,     'Cash')      AS payment_method_name,
+                sl_ps.status_name                            AS payment_status_name,
+                sl_ps.status_code                            AS payment_status_code,
+                COALESCE(ot.total_amount,  0)                AS total_amount,
+                COALESCE(ot.amount_paid,   0)                AS amount_paid,
                 ot.payment_status_id,
                 ot.deposit_date,
                 ot.final_payment_date,
                 ot.shipped_date,
                 ot.cancelled_date
+            FROM order_transaction ot
+            JOIN  customer          c         ON c.customer_id       = ot.customer_id
+            LEFT JOIN static_status sl_status ON sl_status.status_id = ot.order_status_id
+            LEFT JOIN static_status sl_pm     ON sl_pm.status_id     = ot.payment_method_id
+            LEFT JOIN static_status sl_ps     ON sl_ps.status_id     = ot.payment_status_id
             ORDER BY ot.order_id DESC
         """)
+        rows = cur.fetchall()
 
-        rows   = cur.fetchall()
-        orders = []
+        # ── Query 2: BOM items from order_menu_item (new system) ─────────────
+        cur.execute("""
+            SELECT
+                omi.order_id,
+                json_agg(
+                    json_build_object(
+                        'menu_item_id',   omi.menu_item_id,
+                        'item_name',      mi.menu_item_name,
+                        'order_quantity', omi.quantity,
+                        'unit_price',     omi.unit_price,
+                        'amount',         omi.unit_price * omi.quantity,
+                        'notes',          COALESCE(omi.notes, '')
+                    )
+                    ORDER BY omi.order_menu_item_id
+                ) AS items
+            FROM order_menu_item omi
+            JOIN menu_item mi ON mi.menu_item_id = omi.menu_item_id
+            GROUP BY omi.order_id
+        """)
+        bom_items_map = {row[0]: row[1] for row in cur.fetchall()}
 
-        for row in rows:
-            (order_id, customer_name, customer_address, customer_contact,
-             order_date, order_status, payment_method, payment_status,
-             total_qty, total_amount, amount_paid, payment_status_id,
-             deposit_date, final_payment_date,
-             shipped_date, cancelled_date, items_json) = row
-
-            order_status_upper = (order_status or "").upper()
-            is_archived        = order_status_upper == 'ARCHIVED'
-
-            if isinstance(items_json, str):
-                try:
-                    items_list = json.loads(items_json)
-                except json.JSONDecodeError:
-                    items_list = []
-            else:
-                items_list = items_json if isinstance(items_json, list) else []
-
-            problematic_items = []
-            if order_status_upper == "PREPARING":
-                for item in items_list:
-                    order_qty     = item.get('order_quantity')    or 0
-                    available_qty = item.get('available_quantity') or 0
-                    item_name     = item.get('item_name')         or 'Unknown'
-                    if available_qty < order_qty:
-                        problematic_items.append(f"{item_name} ({available_qty}/{order_qty})")
-
-            availability_status = "Out of Stock" if problematic_items else None
-
-            orders.append({
-                "id":                 order_id,
-                "customer":           customer_name,
-                "address":            customer_address,
-                "contact":            customer_contact,
-                "date":               order_date.strftime("%m/%d/%y") if order_date else None,
-                "status":             order_status_upper.replace("_", " ").title(),
-                "paymentMethod":      payment_method,
-                "paymentStatus":      payment_status,
-                "totalQty":           int(total_qty),
-                "totalAmount":        float(total_amount) if total_amount is not None else 0.0,
-                "amount_paid":        float(amount_paid) if amount_paid is not None else 0.0,
-                "payment_status_id":  payment_status_id,
-                "deposit_date":       deposit_date.isoformat() if deposit_date else None,
-                "final_payment_date": final_payment_date.isoformat() if final_payment_date else None,
-                "availabilityStatus": availability_status,
-                "problematicItems":   problematic_items,
-                "items":              items_list,
-                "is_archived":        is_archived,
-                "shipped_date":       shipped_date.isoformat() if shipped_date else None,
-                "cancelled_date":     cancelled_date.isoformat() if cancelled_date else None,
-            })
-
-        return jsonify(orders)
     except Exception as e:
         import traceback
         traceback.print_exc()
+        conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
         conn.close()
+
+    orders = []
+    for row in rows:
+        (order_id, customer_name, customer_contact,
+         order_date, order_status, payment_method, payment_status,
+         payment_status_code,
+         total_amount, amount_paid, payment_status_id,
+         deposit_date, final_payment_date,
+         shipped_date, cancelled_date) = row
+
+        order_status_upper = (order_status or "").upper()
+        # Normalise legacy statuses that no longer exist in the workflow
+        if order_status_upper == 'RECEIVED':
+            order_status_upper = 'COMPLETED'
+        is_archived = order_status_upper == 'ARCHIVED'
+
+        raw_items = bom_items_map.get(order_id)
+        if isinstance(raw_items, str):
+            try:
+                items_list = json.loads(raw_items)
+            except json.JSONDecodeError:
+                items_list = []
+        else:
+            items_list = raw_items if isinstance(raw_items, list) else []
+
+        total_qty = sum(int(it.get('order_quantity') or 0) for it in items_list)
+
+        orders.append({
+            "id":                 order_id,
+            "customer":           customer_name,
+            "contact":            customer_contact,
+            "date":               order_date.strftime("%m/%d/%y") if order_date else None,
+            "status":             order_status_upper.replace("_", " ").title(),
+            "paymentMethod":      payment_method,
+            "paymentStatus":      (payment_status_code or "").upper(),
+            "totalQty":           total_qty,
+            "totalAmount":        float(total_amount) if total_amount is not None else 0.0,
+            "amount_paid":        float(amount_paid)  if amount_paid  is not None else 0.0,
+            "payment_status_id":  payment_status_id,
+            "deposit_date":       deposit_date.isoformat()        if deposit_date        else None,
+            "final_payment_date": final_payment_date.isoformat()  if final_payment_date  else None,
+            "is_archived":        is_archived,
+            "shipped_date":       shipped_date.isoformat()        if shipped_date        else None,
+            "cancelled_date":     cancelled_date.isoformat()      if cancelled_date      else None,
+            "items":              items_list,
+        })
+
+    return jsonify(orders)
 
 
 # ===================== TOGGLE ARCHIVE =====================
@@ -242,20 +210,26 @@ def toggle_order_archive(order_id):
         if not row:
             return jsonify({"error": "Order not found."}), 404
 
-        current_status = row[0]
+        current_status = row[0].upper()
 
+        # Unarchive: ARCHIVED → COMPLETED
         if current_status == 'ARCHIVED':
             cur.execute("""
-                SELECT status_id, status_name FROM static_status
-                WHERE status_scope = 'ORDER_STATUS' AND status_code = 'PREPARING'
+                SELECT status_id FROM static_status
+                WHERE status_scope = 'ORDER_STATUS' AND status_code = 'COMPLETED'
+                LIMIT 1
             """)
             res         = cur.fetchone()
             is_archived = False
             action_msg  = "Order restored from Archive"
         else:
+            # Only COMPLETED orders can be archived
+            if current_status != 'COMPLETED':
+                return jsonify({"error": "Only completed orders can be archived."}), 400
             cur.execute("""
-                SELECT status_id, status_name FROM static_status
+                SELECT status_id FROM static_status
                 WHERE status_scope = 'ORDER_STATUS' AND status_code = 'ARCHIVED'
+                LIMIT 1
             """)
             res         = cur.fetchone()
             is_archived = True
@@ -304,7 +278,94 @@ def get_order_statuses():
         conn.close()
 
 
+# ===================== PAYMENT HELPERS =====================
+
+def _get_paid_status_id(cur):
+    """Return the status_id for PAYMENT_STATUS = 'PAID'. Raises on missing."""
+    cur.execute("""
+        SELECT status_id FROM static_status
+        WHERE status_scope = 'PAYMENT_STATUS'
+          AND (status_code IN ('PAID', 'Paid', 'paid')
+               OR status_name ILIKE 'Paid')
+        LIMIT 1
+    """)
+    row = cur.fetchone()
+    if not row:
+        raise Exception("'PAID' payment status not found in static_status.")
+    return row[0]
+
+
+def _get_pending_status_id(cur):
+    """Return the status_id for the default unpaid/pending payment status. Raises on missing."""
+    cur.execute("""
+        SELECT status_id FROM static_status
+        WHERE status_scope = 'PAYMENT_STATUS'
+          AND (status_code IN ('PENDING', 'Pending', 'pending', 'UNPAID', 'Unpaid', 'unpaid')
+               OR status_name ILIKE 'Unpaid'
+               OR status_name ILIKE 'Pending')
+        LIMIT 1
+    """)
+    row = cur.fetchone()
+    if not row:
+        raise Exception(
+            "'PENDING'/'UNPAID' payment status not found in static_status. "
+            "Expected a row with status_scope='PAYMENT_STATUS' and "
+            "status_code IN ('PENDING','UNPAID') or status_name like 'Unpaid'."
+        )
+    return row[0]
+
+
+def _apply_completed_payment(cur, order_id, new_status_id):
+    """
+    Atomically set an order to COMPLETED and force full payment.
+    Called whenever an order transitions to COMPLETED from any route.
+    """
+    paid_id = _get_paid_status_id(cur)
+    cur.execute("""
+        UPDATE order_transaction
+        SET order_status_id    = %s,
+            payment_status_id  = %s,
+            amount_paid        = total_amount,
+            final_payment_date = COALESCE(final_payment_date, CURRENT_TIMESTAMP)
+        WHERE order_id = %s
+    """, (new_status_id, paid_id, order_id))
+
+
 # ===================== SHARED FIFO HELPERS =====================
+
+def _fifo_allocate_ingredient(cur, ingredient_brand_id, qty_needed):
+    """
+    Expiry-date-aware FIFO for ingredient batches.
+    Ordered by expiry_date ASC NULLS LAST, then date_created ASC so the
+    soonest-to-expire stock is consumed first.
+    Raises Exception (caught by caller as HTTP 400) if stock is insufficient.
+    """
+    cur.execute("""
+        SELECT batch_id, quantity_on_hand
+        FROM inventory_batch
+        WHERE inventory_brand_id = %s
+          AND quantity_on_hand > 0
+        ORDER BY expiry_date ASC NULLS LAST, date_created ASC
+    """, (ingredient_brand_id,))
+    batches         = cur.fetchall()
+    total_available = sum(r[1] for r in batches)
+
+    if total_available < qty_needed:
+        raise Exception(
+            f"Insufficient stock for ingredient ID {ingredient_brand_id}: "
+            f"need {qty_needed}, have {total_available}."
+        )
+
+    allocation = []
+    remaining  = qty_needed
+    for batch_id, on_hand in batches:
+        if remaining <= 0:
+            break
+        take      = min(on_hand, remaining)
+        allocation.append((batch_id, take))
+        remaining -= take
+    return allocation
+
 
 def _fifo_allocate(cur, inv_brand_id, qty_needed):
     """
@@ -663,6 +724,111 @@ def _insert_and_deduct_items(cur, order_id, items):
             """, (inv_id,))
 
 
+def _insert_menu_items_bom(cur, order_id, items):
+    """
+    BOM/Recipe-aware order item insertion with ingredient-level customizations
+    and expiry-first FIFO batch deduction.
+
+    Steps performed for each item:
+      B  — INSERT into order_menu_item → get order_menu_item_id
+      C  — INSERT each modification into order_menu_item_ingredient
+      D  — Fetch default recipe from menu_item_ingredient, scale by qty
+      E  — Apply modifications in-memory (REMOVED skips, EXTRA adds delta)
+      F  — FIFO-deduct each required ingredient from inventory_batch
+      G  — Audit every deduction in order_menu_item_ingredient_batch
+    """
+    for item in items:
+        menu_item_id = item.get("menu_item_id")
+        if not menu_item_id:
+            raise Exception("Each item must include a menu_item_id.")
+
+        try:
+            qty        = int(item.get("quantity") or 1) or 1
+            unit_price = float(item.get("unit_price") or 0)
+        except (ValueError, TypeError):
+            qty, unit_price = 1, 0.0
+
+        notes         = item.get("notes") or ""
+        modifications = item.get("modifications") or []
+
+        # ── Step B: Insert the menu-item line ────────────────────────────────
+        line_total = round(qty * unit_price, 2)
+        cur.execute("""
+            INSERT INTO order_menu_item
+                (order_id, menu_item_id, quantity, unit_price, line_total, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING order_menu_item_id
+        """, (order_id, menu_item_id, qty, unit_price, line_total, notes))
+        order_menu_item_id = cur.fetchone()[0]
+
+        # ── Step C: Persist customizations ───────────────────────────────────
+        for mod in modifications:
+            ing_brand_id   = mod.get("ingredient_brand_id")
+            action_code    = (mod.get("action_code") or "").upper()
+            quantity_delta = mod.get("quantity_delta") or None
+            if not ing_brand_id or not action_code:
+                continue
+            cur.execute("""
+                INSERT INTO order_menu_item_ingredient
+                    (order_menu_item_id, ingredient_brand_id, action_code, quantity_delta)
+                VALUES (%s, %s, %s, %s)
+            """, (order_menu_item_id, ing_brand_id, action_code, quantity_delta))
+
+        # ── Step D: Fetch recipe and scale by order quantity ─────────────────
+        cur.execute("""
+            SELECT ingredient_inventory_brand_id, quantity_required
+            FROM menu_item_ingredient
+            WHERE menu_item_id = %s
+        """, (menu_item_id,))
+        # required = { ingredient_inventory_brand_id: total_qty_needed }
+        required = {
+            row[0]: float(row[1]) * qty
+            for row in cur.fetchall()
+        }
+
+        # ── Step E: Apply modifications in-memory ────────────────────────────
+        for mod in modifications:
+            ing_brand_id = mod.get("ingredient_brand_id")
+            action       = (mod.get("action_code") or "").upper()
+            if not ing_brand_id:
+                continue
+            if action == "REMOVED":
+                required.pop(ing_brand_id, None)
+            elif action == "EXTRA":
+                delta = float(mod.get("quantity_delta") or 0)
+                if ing_brand_id in required:
+                    required[ing_brand_id] += delta
+                else:
+                    # EXTRA on an ingredient not in the base recipe adds it
+                    required[ing_brand_id] = delta
+
+        # ── Steps F + G: FIFO deduction and audit trail ───────────────────────
+        for ing_brand_id, qty_needed in required.items():
+            if qty_needed <= 0:
+                continue
+
+            # F — raises Exception (→ 400) if stock is insufficient
+            allocation = _fifo_allocate_ingredient(cur, ing_brand_id, qty_needed)
+
+            for batch_id, qty_taken in allocation:
+                # Deduct stock from this batch
+                cur.execute("""
+                    UPDATE inventory_batch
+                    SET quantity_on_hand = quantity_on_hand - %s
+                    WHERE batch_id = %s
+                """, (qty_taken, batch_id))
+
+                # G — audit trail row
+                cur.execute("""
+                    INSERT INTO order_menu_item_ingredient_batch
+                        (order_menu_item_id, inventory_brand_id, batch_id, quantity_deducted)
+                    VALUES (%s, %s, %s, %s)
+                """, (order_menu_item_id, ing_brand_id, batch_id, qty_taken))
+
+            # Mark ingredient OUT_OF_STOCK if all its batches are now empty
+            _mark_out_of_stock_if_empty(cur, ing_brand_id)
+
+
 def _insert_items_only(cur, order_id, items):
     """
     Inserts order_details rows for a PENDING order without touching stock.
@@ -766,7 +932,7 @@ def update_order_status(order_id):
     conn = get_connection()
     cur  = conn.cursor()
     try:
-        # Block updates on already-cancelled orders
+        # Fetch current status — terminal states block all edits
         cur.execute("""
             SELECT ss.status_code
             FROM order_transaction ot
@@ -774,9 +940,13 @@ def update_order_status(order_id):
             WHERE ot.order_id = %s
         """, (order_id,))
         row = cur.fetchone()
-        if row and row[0].upper() == 'CANCELLED':
-            return jsonify({"error": "Cannot edit an order that is already CANCELLED."}), 400
+        if not row:
+            return jsonify({"error": "Order not found."}), 404
+        current_code = row[0].upper()
+        if current_code in ('COMPLETED', 'CANCELLED'):
+            return jsonify({"error": f"Cannot edit an order that is already {current_code}."}), 400
 
+        # Resolve target status
         cur.execute("""
             SELECT status_id, status_code FROM static_status
             WHERE status_scope = 'ORDER_STATUS' AND status_name ILIKE %s
@@ -788,58 +958,34 @@ def update_order_status(order_id):
         new_status_id, new_status_code = status_row
         new_status_code = new_status_code.upper()
 
+        # Treat legacy RECEIVED as COMPLETED
         if new_status_code == 'RECEIVED':
-            _create_sales_record(cur, order_id)
-        elif new_status_code == 'CANCELLED':
-            cur.execute("""
-                SELECT ss.status_code FROM order_transaction ot
-                JOIN static_status ss ON ot.order_status_id = ss.status_id
-                WHERE ot.order_id = %s
-            """, (order_id,))
-            old_row = cur.fetchone()
-            if old_row and old_row[0].upper() in {'PREPARING', 'PACKED', 'SHIPPING'}:
-                _restore_batch_items(cur, order_id)
+            new_status_code = 'COMPLETED'
 
-        shipped_date   = None
+        # Only COMPLETED and CANCELLED are valid from PREPARING
+        if new_status_code not in ('COMPLETED', 'CANCELLED'):
+            return jsonify({"error": "Orders can only transition to Completed or Cancelled."}), 400
+
         cancelled_date = None
-        if new_status_code == 'SHIPPING':
-            cur.execute("""
-                UPDATE order_transaction
-                SET order_status_id = %s,
-                    shipped_date    = CURRENT_TIMESTAMP
-                WHERE order_id = %s
-                RETURNING shipped_date, cancelled_date
-            """, (new_status_id, order_id))
-            row = cur.fetchone()
-            shipped_date   = row[0].isoformat() if row and row[0] else None
-            cancelled_date = row[1].isoformat() if row and row[1] else None
+
+        if new_status_code == 'COMPLETED':
+            _apply_completed_payment(cur, order_id, new_status_id)
+
         elif new_status_code == 'CANCELLED':
-            cur.execute("""
-                UPDATE order_transaction
-                SET order_status_id  = %s,
-                    cancelled_date   = CURRENT_TIMESTAMP
-                WHERE order_id = %s
-                RETURNING shipped_date, cancelled_date
-            """, (new_status_id, order_id))
-            row = cur.fetchone()
-            shipped_date   = row[0].isoformat() if row and row[0] else None
-            cancelled_date = row[1].isoformat() if row and row[1] else None
-        elif new_status_code in ('PREPARING', 'PACKED'):
+            _restore_batch_items(cur, order_id)
             cur.execute("""
                 UPDATE order_transaction
                 SET order_status_id = %s,
-                    shipped_date    = NULL
+                    cancelled_date  = CURRENT_TIMESTAMP
                 WHERE order_id = %s
+                RETURNING cancelled_date
             """, (new_status_id, order_id))
-        else:
-            cur.execute("""
-                UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
-            """, (new_status_id, order_id))
+            row = cur.fetchone()
+            cancelled_date = row[0].isoformat() if row and row[0] else None
 
         conn.commit()
         return jsonify({
             "message":        "Order status updated successfully",
-            "shipped_date":   shipped_date,
             "cancelled_date": cancelled_date,
         }), 200
 
@@ -864,7 +1010,7 @@ def update_order(order_id):
     cur  = conn.cursor()
 
     try:
-        # --- BLOCK UPDATES IF ALREADY CANCELLED ---
+        # Terminal states block all edits
         cur.execute("""
             SELECT ss.status_code
             FROM order_transaction ot
@@ -872,12 +1018,13 @@ def update_order(order_id):
             WHERE ot.order_id = %s
         """, (order_id,))
         row = cur.fetchone()
-        if row:
-            current_status = row[0].upper()
-            if current_status == 'CANCELLED':
-                return jsonify({"error": "Cannot edit an order that is already CANCELLED."}), 400
+        if not row:
+            return jsonify({"error": "Order not found."}), 404
+        current_status = row[0].upper()
+        if current_status in ('COMPLETED', 'CANCELLED'):
+            return jsonify({"error": f"Cannot edit an order that is already {current_status}."}), 400
 
-        # --- Resolve new status (id + code) ---
+        # Resolve target status
         status_name = data.get('status', '').strip()
         cur.execute("""
             SELECT status_id, status_code
@@ -888,7 +1035,7 @@ def update_order(order_id):
         new_status_id   = status_row[0] if status_row else None
         new_status_code = status_row[1].upper() if status_row else None
 
-        # --- Resolve payment method ---
+        # Resolve payment method
         pm_name = data.get('paymentMethod', '').strip()
         cur.execute("""
             SELECT status_id FROM static_status
@@ -897,258 +1044,50 @@ def update_order(order_id):
         pm_row    = cur.fetchone()
         new_pm_id = pm_row[0] if pm_row else None
 
-        # --- Extract payment and debt management fields ---
-        try:
-            amount_paid = float(data.get('amount_paid') or 0)
-        except (ValueError, TypeError):
-            amount_paid = 0.0
-        try:
-            frontend_payment_status_id = int(data.get('payment_status_id') or 0)
-        except (ValueError, TypeError):
-            frontend_payment_status_id = 0
-        deposit_date = data.get('deposit_date')
-        final_payment_date = None
-
-        # --- Update customer info ---
+        # Update customer info
         cur.execute("SELECT customer_id FROM order_transaction WHERE order_id = %s", (order_id,))
         cust_row = cur.fetchone()
         if cust_row:
-            customer_id = cust_row[0]
             cur.execute("""
                 UPDATE customer
-                SET customer_name = %s, customer_contact = %s, customer_address = %s
+                SET customer_name = %s, customer_contact = %s
                 WHERE customer_id = %s
-            """, (data.get('customerName'), data.get('contact'), data.get('address'), customer_id))
+            """, (data.get('customerName'), data.get('contact'), cust_row[0]))
 
-        # --- Fetch old status code ---
-        cur.execute("""
-            SELECT ss.status_code
-            FROM order_transaction ot
-            JOIN static_status ss ON ot.order_status_id = ss.status_id
-            WHERE ot.order_id = %s
-        """, (order_id,))
-        old_row         = cur.fetchone()
-        old_status_code = old_row[0].upper() if old_row else 'PENDING'
-
-        # States where stock has already been deducted
-        DEDUCTED_STATES = {'PREPARING', 'PACKED', 'SHIPPING'}
-        old_is_deducted = old_status_code in DEDUCTED_STATES
-        new_is_active   = new_status_code in DEDUCTED_STATES if new_status_code else False
-
-        # --- Compute total for status recalculation + pre-validate payment ---
-        incoming_items = data.get('items') or []
-        if incoming_items:
-            total_for_status = sum(
-                float(it.get('amount') or it.get('order_total') or 0)
-                for it in incoming_items
-                if str(it.get('inventory_brand_id') or '').strip() != ''
-            )
-            if total_for_status < amount_paid:
-                return jsonify({
-                    "error": "Cannot update: The new order total is less than the amount already paid. Please adjust the payment/refund first."
-                }), 400
-        else:
-            cur.execute("SELECT total_amount FROM order_transaction WHERE order_id = %s", (order_id,))
-            tot_row = cur.fetchone()
-            total_for_status = float(tot_row[0]) if tot_row and tot_row[0] is not None else 0.0
-
-        # --- Payment status resolution: manual Paid override, then math fallback ---
-        if frontend_payment_status_id == 29:
-            # Manual "Paid" override (e.g. Shopee/e-commerce): align amount_paid to total
-            payment_status_id = 29
-            amount_paid = total_for_status
-        elif amount_paid > 0 and amount_paid >= total_for_status:
-            payment_status_id = 29  # Paid
-        elif amount_paid > 0:
-            payment_status_id = 31  # Partial
-        else:
-            payment_status_id = 30  # Unpaid
-
-        # --- Handle date stamping based on recalculated payment_status_id ---
-        if payment_status_id == 29:
-            final_payment_date = 'CURRENT_TIMESTAMP'
-            deposit_date = None
-        elif payment_status_id == 31:
-            final_payment_date = None
-        elif payment_status_id == 30:
-            deposit_date = None
-            final_payment_date = None
-
-        # --- State machine ---
+        # Treat legacy RECEIVED as COMPLETED
         if new_status_code == 'RECEIVED':
-            # Order is being marked as received → create sales record
-            # Stock was already deducted when order entered PREPARING/PACKED/SHIPPING
-            _create_sales_record(cur, order_id)
+            new_status_code = 'COMPLETED'
 
-        elif old_is_deducted and new_status_code == 'CANCELLED':
-            # Restore stock, preserve order_details for audit trail
+        cancelled_date = None
+
+        if new_status_code == 'COMPLETED':
+            _apply_completed_payment(cur, order_id, new_status_id)
+
+        elif new_status_code == 'CANCELLED':
             _restore_batch_items(cur, order_id)
+            cur.execute("""
+                UPDATE order_transaction
+                SET order_status_id = %s,
+                    cancelled_date  = CURRENT_TIMESTAMP
+                WHERE order_id = %s
+                RETURNING cancelled_date
+            """, (new_status_id, order_id))
+            row = cur.fetchone()
+            cancelled_date = row[0].isoformat() if row and row[0] else None
 
-        elif old_is_deducted and new_is_active:
-            # Delta update: INSERT new → UPDATE changed → DELETE removed
-            # Preserves total_amount >= amount_paid at every intermediate step
-            if incoming_items:
-                _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=True)
-
-        elif not old_is_deducted and new_is_active:
-            # Promoting from PENDING: existing rows are reference-only (no stock held)
-            # Delta strategy still applies; return_stock_on_delete=False skips stock returns
-            _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=False)
-
-        else:
-            # No stock change (PENDING → PENDING, PENDING → CANCELLED)
-            if new_status_code != 'CANCELLED' and incoming_items:
-                _delta_update_items(cur, order_id, incoming_items, return_stock_on_delete=False)
-
-        # --- Apply status, payment, and debt management updates ---
-        shipped_date    = None
-        cancelled_date  = None
-        returned_amount_paid = amount_paid
-        returned_payment_status_id = payment_status_id
-        returned_deposit_date = deposit_date
-        returned_final_payment_date = final_payment_date if final_payment_date != 'CURRENT_TIMESTAMP' else None
-
-        if new_status_id:
-            if new_status_code == 'SHIPPING':
-                if payment_status_id is not None and amount_paid is not None:
-                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
-                    cur.execute(f"""
-                        UPDATE order_transaction
-                        SET order_status_id = %s,
-                            shipped_date    = CURRENT_TIMESTAMP,
-                            amount_paid     = %s,
-                            payment_status_id = %s,
-                            deposit_date    = %s,
-                            final_payment_date = {final_payment_date_sql}
-                        WHERE order_id = %s
-                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
-                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
-                else:
-                    cur.execute("""
-                        UPDATE order_transaction
-                        SET order_status_id = %s,
-                            shipped_date    = CURRENT_TIMESTAMP
-                        WHERE order_id = %s
-                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
-                    """, (new_status_id, order_id))
-                row = cur.fetchone()
-                shipped_date   = row[0].isoformat() if row and row[0] else None
-                cancelled_date = row[1].isoformat() if row and row[1] else None
-                if row and len(row) > 2:
-                    returned_amount_paid = row[2]
-                    returned_payment_status_id = row[3]
-                    returned_deposit_date = row[4].isoformat() if row[4] else None
-                    returned_final_payment_date = row[5].isoformat() if row[5] else None
-            elif new_status_code == 'CANCELLED':
-                if payment_status_id is not None and amount_paid is not None:
-                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
-                    cur.execute(f"""
-                        UPDATE order_transaction
-                        SET order_status_id  = %s,
-                            cancelled_date   = CURRENT_TIMESTAMP,
-                            amount_paid     = %s,
-                            payment_status_id = %s,
-                            deposit_date    = %s,
-                            final_payment_date = {final_payment_date_sql}
-                        WHERE order_id = %s
-                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
-                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
-                else:
-                    cur.execute("""
-                        UPDATE order_transaction
-                        SET order_status_id  = %s,
-                            cancelled_date   = CURRENT_TIMESTAMP
-                        WHERE order_id = %s
-                        RETURNING shipped_date, cancelled_date, amount_paid, payment_status_id, deposit_date, final_payment_date
-                    """, (new_status_id, order_id))
-                row = cur.fetchone()
-                shipped_date   = row[0].isoformat() if row and row[0] else None
-                cancelled_date = row[1].isoformat() if row and row[1] else None
-                if row and len(row) > 2:
-                    returned_amount_paid = row[2]
-                    returned_payment_status_id = row[3]
-                    returned_deposit_date = row[4].isoformat() if row[4] else None
-                    returned_final_payment_date = row[5].isoformat() if row[5] else None
-            elif new_status_code in ('PREPARING', 'PACKED'):
-                if payment_status_id is not None and amount_paid is not None:
-                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
-                    cur.execute(f"""
-                        UPDATE order_transaction
-                        SET order_status_id = %s,
-                            shipped_date    = NULL,
-                            amount_paid     = %s,
-                            payment_status_id = %s,
-                            deposit_date    = %s,
-                            final_payment_date = {final_payment_date_sql}
-                        WHERE order_id = %s
-                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
-                else:
-                    cur.execute("""
-                        UPDATE order_transaction
-                        SET order_status_id = %s,
-                            shipped_date    = NULL
-                        WHERE order_id = %s
-                    """, (new_status_id, order_id))
-            else:
-                if payment_status_id is not None and amount_paid is not None:
-                    final_payment_date_sql = 'CURRENT_TIMESTAMP' if payment_status_id == 29 else 'NULL'
-                    cur.execute(f"""
-                        UPDATE order_transaction
-                        SET order_status_id = %s,
-                            amount_paid     = %s,
-                            payment_status_id = %s,
-                            deposit_date    = %s,
-                            final_payment_date = {final_payment_date_sql}
-                        WHERE order_id = %s
-                    """, (new_status_id, amount_paid, payment_status_id, deposit_date, order_id))
-                else:
-                    cur.execute("""
-                        UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
-                    """, (new_status_id, order_id))
+        elif new_status_code == 'PREPARING' and new_status_id:
+            cur.execute("""
+                UPDATE order_transaction SET order_status_id = %s WHERE order_id = %s
+            """, (new_status_id, order_id))
 
         if new_pm_id:
             cur.execute("""
                 UPDATE order_transaction SET payment_method_id = %s WHERE order_id = %s
             """, (new_pm_id, order_id))
 
-        # Sync total_amount from order_details
-        cur.execute("""
-            UPDATE order_transaction
-            SET total_amount = (
-                SELECT COALESCE(SUM(order_total), 0) FROM order_details WHERE order_id = %s
-            )
-            WHERE order_id = %s
-        """, (order_id, order_id))
-
-        # --- Python enforcement (replaces dropped DB constraints) ---
-        cur.execute("""
-            SELECT ot.total_amount, ot.amount_paid, ss.status_code
-            FROM   order_transaction ot
-            JOIN   static_status     ss ON ss.status_id = ot.payment_status_id
-            WHERE  ot.order_id = %s
-        """, (order_id,))
-        fin = cur.fetchone()
-        if fin:
-            fin_total       = float(fin[0]) if fin[0] is not None else 0.0
-            fin_paid        = float(fin[1]) if fin[1] is not None else 0.0
-            fin_pay_status  = (fin[2] or '').upper()
-
-            if fin_paid > fin_total:
-                conn.rollback()
-                return jsonify({
-                    "error": "Cannot reduce order total below the amount already paid. Please adjust payments first."
-                }), 400
-
-            if fin_pay_status in ('PARTIAL', 'PAID') and fin_paid == 0:
-                conn.rollback()
-                return jsonify({
-                    "error": f"Payment status is '{fin_pay_status}' but amount paid is 0. Please correct the payment details."
-                }), 400
-
         conn.commit()
         return jsonify({
             "message":        "Order updated successfully",
-            "shipped_date":   shipped_date,
             "cancelled_date": cancelled_date,
         }), 200
 
@@ -1156,7 +1095,6 @@ def update_order(order_id):
         conn.rollback()
         import traceback
         traceback.print_exc()
-        print("Error updating order:", e)
         return jsonify({"error": str(e)}), 500
     finally:
         cur.close()
@@ -1174,39 +1112,39 @@ def add_order():
     cur  = conn.cursor()
 
     try:
-        customer_name    = data.get('customerName', '').strip()
-        contact_number   = data.get('contactNumber', '').strip()
-        delivery_address = data.get('deliveryAddress', '').strip()
+        customer_name  = data.get('customerName', '').strip()
+        contact_number = (data.get('contactNumber') or data.get('contact') or '').strip() or 'N/A'
+        items          = data.get('items', [])
 
-        # 1. Customer handling
+        if not customer_name:
+            return jsonify({"error": "customerName is required."}), 400
+
+        # 1. Customer upsert
         cur.execute("SELECT customer_id FROM customer WHERE customer_name = %s", (customer_name,))
         existing_cust = cur.fetchone()
-
         if existing_cust:
             customer_id = existing_cust[0]
-            cur.execute("""
-                UPDATE customer
-                SET customer_contact = %s, customer_address = %s
-                WHERE customer_id = %s
-            """, (contact_number, delivery_address, customer_id))
+            cur.execute("UPDATE customer SET customer_contact = %s WHERE customer_id = %s",
+                        (contact_number, customer_id))
         else:
             cur.execute("""
-                INSERT INTO customer (customer_name, customer_contact, customer_address, customer_email)
+                INSERT INTO customer (customer_name, customer_contact, customer_email, customer_address)
                 VALUES (%s, %s, %s, %s) RETURNING customer_id
-            """, (customer_name, contact_number, delivery_address, 'no-email@placeholder.com'))
+            """, (customer_name, contact_number, 'no-email@placeholder.com', 'Walk-in'))
             customer_id = cur.fetchone()[0]
 
-        # 2. Resolve status & payment IDs
-        items             = data.get('items', [])
-        first_item_status = items[0].get('orderStatus', 'Preparing').strip() if items else 'Preparing'
+        # 2. All new orders start as PREPARING
         cur.execute("""
-            SELECT status_id, status_code FROM static_status
-            WHERE status_scope = 'ORDER_STATUS' AND status_name ILIKE %s
-        """, (first_item_status,))
-        status_row          = cur.fetchone()
-        status_id           = status_row[0] if status_row else None
-        initial_status_code = status_row[1].upper() if status_row else 'PENDING'
+            SELECT status_id FROM static_status
+            WHERE status_scope = 'ORDER_STATUS' AND status_code = 'PREPARING'
+            LIMIT 1
+        """)
+        status_row = cur.fetchone()
+        if not status_row:
+            return jsonify({"error": "PREPARING status not found in static_status."}), 500
+        status_id = status_row[0]
 
+        # 3. Payment method from first item (optional)
         first_item_pm = items[0].get('paymentMethod', 'Cash').strip() if items else 'Cash'
         cur.execute("""
             SELECT status_id FROM static_status
@@ -1215,46 +1153,26 @@ def add_order():
         pm_row = cur.fetchone()
         pm_id  = pm_row[0] if pm_row else None
 
-        payment_status_code = data.get('paymentStatus', 'UNPAID').strip().upper()
-        cur.execute("""
-            SELECT status_id FROM static_status
-            WHERE status_scope = 'PAYMENT_STATUS' AND status_code = %s
-        """, (payment_status_code,))
-        ps_row = cur.fetchone()
-        if not ps_row:
-            cur.execute("""
-                SELECT status_id FROM static_status
-                WHERE status_scope = 'PAYMENT_STATUS' AND status_code = 'UNPAID'
-                LIMIT 1
-            """)
-            ps_row = cur.fetchone()
-        payment_status_id = ps_row[0] if ps_row else None
+        # 4. Payment always starts as PENDING (Unpaid)
+        payment_status_id = _get_pending_status_id(cur)
 
-        # 3. Create order transaction
-        today = date.today()
+        # 5. Create order transaction
         cur.execute("""
             INSERT INTO order_transaction
                 (customer_id, order_date, order_status_id, payment_method_id, payment_status_id)
-            VALUES (%s, %s, %s, %s, %s) RETURNING order_id
-        """, (customer_id, today, status_id, pm_id, payment_status_id))
+            VALUES (%s, CURRENT_DATE, %s, %s, %s) RETURNING order_id
+        """, (customer_id, status_id, pm_id, payment_status_id))
         order_id = cur.fetchone()[0]
 
-        # 4. Insert items — FIFO deduction only for active/received states
-        ACTIVE_STATES = {'PREPARING', 'PACKED', 'SHIPPING', 'RECEIVED'}
-        if initial_status_code in ACTIVE_STATES:
-            _insert_and_deduct_items(cur, order_id, items)
-        else:
-            _insert_items_only(cur, order_id, items)
+        # 6. Insert BOM items with ingredient-level FIFO deduction
+        _insert_menu_items_bom(cur, order_id, items)
 
-        # 5a. If created directly as RECEIVED, create the sales record immediately
-        if initial_status_code == 'RECEIVED':
-            _create_sales_record(cur, order_id)
-
-        # 5b. Sync total_amount
+        # 7. Sync total_amount from inserted BOM lines
         cur.execute("""
             UPDATE order_transaction
             SET total_amount = (
-                SELECT COALESCE(SUM(order_total), 0) FROM order_details WHERE order_id = %s
+                SELECT COALESCE(SUM(line_total), 0)
+                FROM order_menu_item WHERE order_id = %s
             )
             WHERE order_id = %s
         """, (order_id, order_id))
@@ -1264,8 +1182,161 @@ def add_order():
 
     except Exception as e:
         conn.rollback()
-        print("Error adding order:", e)
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ================= CREATE ORDER — BOM/Recipe (POST /api/orders) =================
+@orders_bp.route("", methods=["POST", "OPTIONS"])
+def create_order():
+    """
+    Create an order using the BOM/Recipe system.
+
+    Expected payload:
+    {
+        "customer_id": 1,
+        "status_id": 2,
+        "payment_method_id": 3,
+        "payment_status_id": 4,
+        "items": [
+            {
+                "menu_item_id": 5,
+                "quantity": 2,
+                "unit_price": 150.00,
+                "notes": "No creamer",
+                "modifications": [
+                    { "ingredient_brand_id": 12, "action_code": "REMOVED" },
+                    { "ingredient_brand_id": 14, "action_code": "EXTRA", "quantity_delta": 5 }
+                ]
+            }
+        ]
+    }
+    """
+    if request.method == "OPTIONS":
+        return jsonify({"message": "CORS OK"}), 200
+
+    data = request.json or {}
+    conn = get_connection()
+    cur  = conn.cursor()
+
+    try:
+        customer_id       = data.get("customer_id")
+        payment_method_id = data.get("payment_method_id")
+        items             = data.get("items") or []
+
+        if not customer_id:
+            return jsonify({"error": "customer_id is required."}), 400
+        if not items:
+            return jsonify({"error": "items cannot be empty."}), 400
+
+        # All orders start as PREPARING
+        cur.execute("""
+            SELECT status_id FROM static_status
+            WHERE status_scope = 'ORDER_STATUS' AND status_code = 'PREPARING' LIMIT 1
+        """)
+        status_row = cur.fetchone()
+        if not status_row:
+            return jsonify({"error": "PREPARING status not found in static_status."}), 500
+        status_id = status_row[0]
+
+        # Payment always starts as PENDING (Unpaid)
+        payment_status_id = _get_pending_status_id(cur)
+
+        # ── Step A: Insert order_transaction ──────────────────────────────────
+        total_amount = sum(
+            float(i.get("unit_price") or 0) * int(i.get("quantity") or 1)
+            for i in items
+        )
+        cur.execute("""
+            INSERT INTO order_transaction
+                (customer_id, order_date, order_status_id, payment_method_id,
+                 payment_status_id, total_amount)
+            VALUES (%s, CURRENT_DATE, %s, %s, %s, %s)
+            RETURNING order_id
+        """, (customer_id, status_id, payment_method_id, payment_status_id, total_amount))
+        order_id = cur.fetchone()[0]
+
+        # ── Steps B–G: BOM item insertion, customizations, FIFO deduction ─────
+        _insert_menu_items_bom(cur, order_id, items)
+
+        conn.commit()
+        return jsonify({"message": "Order created successfully.", "order_id": order_id}), 201
+
+    except Exception as e:
+        conn.rollback()
+        import traceback
+        traceback.print_exc()
+        status_code = 400 if "Insufficient stock" in str(e) else 500
+        return jsonify({"error": str(e)}), status_code
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ================= MENU ITEMS — sellable products only (GET /api/orders/menu) =================
+@orders_bp.route("/menu", methods=["GET"])
+def get_menu_items():
+    """
+    Return only sellable menu items for the order-form dropdown.
+    The query starts from menu_item (the whitelist table) and INNER JOINs to
+    inventory_brand — so raw ingredients that are NOT in menu_item can never
+    appear, regardless of what lives in inventory_brand.
+
+    Query param: q  (optional — name / description search)
+    Response:    [{ menu_item_id, menu_item_name, base_price, description, inventory_brand_id }]
+    """
+    print(f"[GET /api/orders/menu] hit — q={request.args.get('q', '')!r}")
+    q    = request.args.get("q", "").strip()
+    conn = get_connection()
+    cur  = conn.cursor()
+    try:
+        # menu_item is self-contained: name, price, and category are stored directly
+        # on the row. linked_inventory_brand_id is the optional FK used only for
+        # ingredient fetching. No joins to inventory_brand/inventory needed here.
+        sql = """
+            SELECT
+                mi.menu_item_id,
+                mi.menu_item_name,
+                mi.base_price,
+                COALESCE(mi.menu_category, '')         AS description,
+                mi.linked_inventory_brand_id
+            FROM  menu_item mi
+            WHERE mi.is_active = TRUE
+        """
+        if q:
+            like = f"%{q}%"
+            cur.execute(sql + " AND (mi.menu_item_name ILIKE %s OR mi.menu_category ILIKE %s)"
+                              " ORDER BY mi.menu_item_name LIMIT 40", (like, like))
+        else:
+            cur.execute(sql + " ORDER BY mi.menu_item_name LIMIT 40")
+
+        rows   = cur.fetchall()
+        result = [
+            {
+                "menu_item_id":             row[0],
+                "menu_item_name":           row[1],
+                "base_price":               float(row[2]),
+                "description":              row[3],
+                "inventory_brand_id":       row[4],   # linked_inventory_brand_id — may be None
+            }
+            for row in rows
+        ]
+        print(f"[GET /api/orders/menu] returning {len(result)} item(s)")
+        return jsonify(result), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[GET /api/orders/menu] ERROR: {e}")
+        conn.rollback()
+        # Return an empty list so the dropdown shows "No menu items found"
+        # instead of an unhandled 500 that leaves the spinner running.
+        return jsonify([]), 200
+
     finally:
         cur.close()
         conn.close()
