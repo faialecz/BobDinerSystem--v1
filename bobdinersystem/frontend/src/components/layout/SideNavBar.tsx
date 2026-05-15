@@ -16,7 +16,7 @@ import { BsPeople } from "react-icons/bs";
 import { LuClipboardList } from "react-icons/lu";
 import { RiLogoutBoxRLine } from "react-icons/ri";
 import { IoCloseCircleOutline } from "react-icons/io5";
-import { ClipboardList, RefreshCw } from "lucide-react";
+import { ClipboardList, RefreshCw, ShoppingCart } from "lucide-react";
 import styles from "@/css/sidenavbar.module.css";
 import type { UserInfo } from "@/types/user";
 
@@ -67,7 +67,7 @@ export default function Sidebar({
     { name: "Sales",          icon: <GrLineChart />,        show: !!permissions.sales?.can_view },
     { name: "Inventory",      icon: <MdOutlineInventory />, show: !!permissions.inventory?.can_view },
     { name: "Orders",         icon: <PiShoppingBag />,      show: !!permissions.orders?.can_view },
-    { name: "Purchases",      icon: <LuClipboardList />,    show: canAccessPurchases },
+    { name: "Purchases", icon: <ShoppingCart size={20} />, show: canAccessPurchases },
     { name: "Suppliers",      icon: <BsPeople />,           show: !!permissions.supplier?.can_view },
     { name: "Event Log",      icon: <ClipboardList size={20} />, show: true, href: "/event-log" },
     { name: "Settings",       icon: <AiOutlineSetting />,   show: !!permissions.settings?.can_view },
