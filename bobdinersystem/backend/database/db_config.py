@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import atexit
 import time
+import pathlib
 import psycopg2
 import psycopg2.pool
-from dotenv import load_dotenv
 import os
+from dotenv import dotenv_values, load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
+
+# Resolve .env relative to this file so it works regardless of cwd
+_ENV_PATH = pathlib.Path(__file__).resolve().parent.parent / ".env"
+_ENV: dict = dotenv_values(str(_ENV_PATH))
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 
@@ -15,15 +20,16 @@ _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
     global _pool
     if _pool is None or _pool.closed:
+        # Explicitly hardcoding everything so Windows global variables cannot interfere
         _pool = psycopg2.pool.ThreadedConnectionPool(
             minconn=1,
             maxconn=8,
-            user=os.getenv("PGUSER"),
-            password=os.getenv("PGPASSWORD"),
-            host=os.getenv("PGHOST"),
-            port=os.getenv("PGPORT"),
-            dbname=os.getenv("PGDATABASE"),
-            sslmode="require",
+            user="postgres.lkswsrcqdfktymltowxy",
+            password="BobsDinerDB26!",
+            host="aws-1-ap-northeast-1.pooler.supabase.com",
+            port="5432",
+            database="postgres",
+            sslmode="require"
         )
     return _pool
 
