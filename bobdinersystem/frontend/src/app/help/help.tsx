@@ -55,17 +55,12 @@ const guides = [
     title: 'Getting Started',
     icon: Icons.gettingStarted,
     description:
-      'New to the AE system? This guide walks you through logging in, resetting your password, and creating your own password before accessing the dashboard.',
+      'New to the Bob\'s Diner system? This guide walks you through logging in, resetting your password, and creating your own password before accessing the dashboard.',
     allowedRoles: ['all'],
     features: [
       { name: 'Login', description: 'Enter your username and password to access the system. Your account is created by an administrator — no self-registration.' },
-      { name: 'Remember Me', description: 'Check this on the login screen to save your username so you don\'t have to retype it next time.' },
-      { name: 'Forgot Password', description: 'Click "Forgot Password?" on the login screen, enter your username and registered email, then verify the OTP sent to your inbox. A temporary password will be emailed to you.' },
-      { name: 'Create Your Password', description: 'After logging in with a temporary password, you\'ll be taken to a Create Password screen before the dashboard. Enter the temporary password as verification, then set and confirm your new password.' },
     ],
     faqs: [
-      { question: "I forgot my password. What do I do?", answer: "Click 'Forgot Password?' on the login screen. Enter your username and registered email address, then verify the 6-digit OTP sent to your inbox. Once confirmed, a temporary password will be emailed to you. Log in with it and you'll be prompted to create a new password right away." },
-      { question: "I didn't receive the OTP or temporary password email. What should I check?", answer: "Check your spam or junk folder first. Make sure the email address you entered matches the one registered to your account. If the issue persists, contact your administrator to verify your registered email." },
       { question: "Can I use my account on multiple devices?", answer: "Yes — your account is not tied to a specific device. You can log in from any authorized terminal using your username and password." },
     ],
   },
@@ -115,21 +110,21 @@ const guides = [
     title: 'Purchases',
     icon: Icons.purchases,
     description:
-      'Manage all inbound stock purchases from suppliers. Purchases are directly linked to your Inventory — when a purchase is received, stock levels update automatically.',
+      'Track incoming stock orders and receive items into inventory. Purchases are directly linked to your Inventory — when a purchase is received, stock levels update automatically.',
     allowedRoles: ['head', 'inventory head', 'staff'],
     features: [
       { name: 'Purchase Orders List', description: 'Displays all purchase orders with supplier name, item/s ordered, quantity, unit cost, total amount, date, and status.' },
-      { name: 'Supplier Link', description: 'Each purchase is tied to a supplier record. You can jump directly to the supplier profile from within a purchase.' },
-      { name: 'Status Pipeline', description: 'Purchase orders move through: Ordered → Received → Stocked. Once marked Stocked, inventory quantities are updated.' },
-      { name: 'Unit Cost & Total Amount', description: 'Tracks how much was paid per unit and in total — used in cost-of-goods calculations in Reports.' },
+      { name: 'Supplier Details', description: 'Each purchase includes supplier information so you can verify the vendor and contact details from the order.' },
+      { name: 'Status Pipeline', description: 'Purchase orders move through Draft → Sent → Approved → Completed → Received, with Cancelled orders kept for reference.' },
+      { name: 'Unit Cost & Total Amount', description: 'Tracks how much was paid per unit and in total — used for inventory costing and purchasing analysis.' },
       { name: 'Inventory Integration', description: 'Marking a purchase as Received automatically adds the quantity to the corresponding product in the Inventory module.' },
       { name: 'Create Purchase Order', description: 'Raise a new PO by selecting a supplier, adding items and quantities, and setting an expected delivery date.' },
     ],
     faqs: [
       { question: "Does creating a Purchase Order immediately update inventory?", answer: "No. Inventory only updates when the purchase status is changed to 'Received'. This ensures stock is only counted once the items have physically arrived." },
-      { question: "Can I purchase from a supplier not yet in the system?", answer: "No — you must add the supplier to the Suppliers module first before you can create a purchase order tied to them." },
+      { question: "Can I create a purchase order for a supplier not already listed?", answer: "No — choose an existing supplier record when creating a purchase order. If the supplier is missing, add it first so the order can be linked properly." },
       { question: "What if I received fewer items than ordered?", answer: "Edit the purchase before marking it Received. Adjust the quantity to what was actually delivered, then save and mark as Received. The correct amount will reflect in inventory." },
-      { question: "Who can approve Purchase Orders?", answer: "Depending on your setup, Head and Manager roles may need to approve POs before they are sent to the supplier. Check your organization's workflow with your Admin." },
+      { question: "Who can approve Purchase Orders?", answer: "Depending on your setup, Head and Manager roles may need to approve POs before they are sent to the vendor. Check your organization's workflow with your Admin." },
     ],
   },
   {
@@ -154,46 +149,24 @@ const guides = [
     ],
   },
   {
-    key: 'suppliers',
-    title: 'Suppliers',
-    icon: Icons.suppliers,
-    description:
-      'Manage your vendor directory. Keep supplier contact details, payment terms, and transaction history organized so purchasing is always smooth and traceable.',
-    allowedRoles: ['head', 'inventory head', 'staff'],
-    features: [
-      { name: 'Supplier Directory', description: 'A searchable list of all registered suppliers, showing name, contact person, phone, email, and address.' },
-      { name: 'Contact Details', description: 'Stores primary contact person, phone number, and email for quick communication.' },
-      { name: 'Supplier Profile', description: 'Each supplier has a dedicated profile page listing all associated purchase orders, making it easy to review purchase history.' },
-      { name: 'Add Supplier', description: 'Register a new vendor by filling in their business name, contact info, and payment terms. Required before creating a purchase order from them.' },
-      { name: 'Edit Supplier', description: 'Update any supplier\'s information — contacts change, addresses move. Keep records accurate.' },
-      { name: 'Purchase History Link', description: 'From within a supplier profile, view all past and pending purchase orders tied to that vendor.' },
-    ],
-    faqs: [
-      { question: "Can I have two supplier records for the same company?", answer: "The system doesn't prevent it, but it's not recommended — it fragments purchase history. If you find a duplicate, consolidate records by editing one and archiving the other." },
-      { question: "A supplier changed their contact info. How do I update it?", answer: "Go to Suppliers, find the record, click Edit, update the fields, and save. The change reflects immediately across all linked purchase orders." },
-      { question: "What happens to purchase orders if I delete a supplier?", answer: "Existing purchase orders remain intact — they are not deleted. The supplier name may show as 'Archived' in those records. Always archive instead of delete when possible." },
-    ],
-  },
-  {
-    key: 'reports',
-    title: 'System Reports & Business Analytics',
+    key: 'eventLog',
+    title: 'Event Log',
     icon: Icons.reports,
     description:
-      'Get a bird\'s-eye view of your entire business. Sales performance, inventory health, top clients, and key trends — all in one exportable dashboard.',
-    allowedRoles: [],
+      'Review recent system activity across inventory, purchases, and adjustments. The Event Log helps you audit changes and investigate operational events quickly.',
+    allowedRoles: ['head', 'inventory head', 'manager'],
     features: [
-      { name: 'Sales Report', description: 'Total revenue over a selected date range, broken down by product, order, or customer.' },
-      { name: 'Inventory Report', description: 'Current stock health — how many products are optimal, low, or out of stock.' },
-      { name: 'Top Clients Ordered', description: 'Ranks customers by volume or value of orders placed, helping identify key accounts.' },
-      { name: 'Top Selling Items', description: 'Shows which products move the fastest — useful for procurement and promotion planning.' },
-      { name: 'Most Stock Items', description: 'Highlights products with the highest quantities — useful for spotting slow-moving stock.' },
-      { name: 'Export Button', description: 'Downloads the current report view as a file for record keeping, presentations, or sharing with stakeholders.' },
+      { name: 'Event Feed', description: 'See a chronological list of system events over the last 7 days, including reorders, alerts, and adjustments.' },
+      { name: 'Event Type Tabs', description: 'Filter the feed by All, Reorder, Alert, or Adjustment events to focus on specific activity.' },
+      { name: 'Summary Cards', description: 'Quick totals for total entries, reorder events, and stock alerts appear at the top of the page.' },
+      { name: 'Item and Quantity Detail', description: 'Each event shows the related item, event label, quantity change, and timestamp.' },
+      { name: 'Fixed Event Window', description: 'The page displays recent activity for the last 7 days so you can quickly review the latest system events.' },
     ],
     faqs: [
-      { question: "How far back does the Sales Report go?", answer: "The report pulls all historical data in the system. Use the date range filter to narrow down to a specific period." },
-      { question: "Can I schedule a report to run automatically?", answer: "Scheduled exports are not yet available. For now, reports are generated on-demand. This is on the roadmap." },
-      { question: "The numbers in my report don't match what I see in the Sales module. Why?", answer: "Reports aggregate only Paid and Completed transactions. Any Pending items are excluded. Ensure all transactions are correctly marked before running a report." },
-      { question: "Who can access System Reports?", answer: "Only Super Admin, Admin, and Manager roles have access to this module by default." },
+      { question: "What can I see in the Event Log?", answer: "The Event Log shows recent activity like reorder events, stock alerts, adjustments, and other system-generated actions from the last 7 days." },
+      { question: "Can I filter the Event Log?", answer: "Yes — you can filter by event type using the tabs for All, Reorder, Alert, or Adjustment." },
+      { question: "Why is an item adjustment logged?", answer: "Adjustments appear when inventory counts are corrected or manually changed, so you can trace stock discrepancies back to the source." },
+      { question: "Who can access the Event Log?", answer: "Users with Manager, Inventory Head, or Head roles can access the Event Log for auditing and operational review." },
     ],
   },
 ];
@@ -297,7 +270,7 @@ const Help: React.FC<HelpProps> = ({ role, onLogout }) => {
               Help Center
             </h1>
             <p style={{ margin: 0, fontSize: '14.5px', color: '#5b7fa6' }}>
-              Learn how to use each section of the system.
+              Learn how to use each section of the system, including Event Log and purchase workflows.
             </p>
           </div>
 

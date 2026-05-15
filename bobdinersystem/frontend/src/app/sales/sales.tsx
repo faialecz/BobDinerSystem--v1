@@ -677,7 +677,7 @@ if (isLoading === null) return (
           <div className={s.viewModal} onClick={e => e.stopPropagation()}>
             <div className={s.viewModalHeader}>
               <div className={s.viewModalHeaderLeft}>
-                <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
+                <h2 className={s.viewCompanyName}>Bob's Diner</h2>
                 <p className={s.viewOrderNumber}>No. {selectedTx.no}</p>
               </div>
               <div className={s.viewModalHeaderRight}>
