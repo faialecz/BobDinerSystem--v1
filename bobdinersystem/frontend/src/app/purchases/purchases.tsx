@@ -40,58 +40,10 @@ type PurchaseOrder = {
 type SortKey = keyof PurchaseOrder;
 type SortDir = 'asc' | 'desc' | null;
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
-
-const MOCK_ORDERS: PurchaseOrder[] = [
-  {
-    purchase_order_id: 1,
-    po_number:        'PO-2026-001',
-    supplier_name:    'XYZ Distributors',
-    status:           'DRAFT',
-    order_date:       '2026-04-28',
-    expected_delivery:'2026-05-01',
-    notes:            null,
-    total_items:      150,
-    total_cost:       12500,
-  },
-  {
-    purchase_order_id: 2,
-    po_number:        'PO-2026-002',
-    supplier_name:    'Metro Supply Inc.',
-    status:           'SENT',
-    order_date:       '2026-04-20',
-    expected_delivery:'2026-04-30',
-    notes:            'Urgent restock',
-    total_items:      80,
-    total_cost:       54300,
-  },
-  {
-    purchase_order_id: 3,
-    po_number:        'PO-2026-003',
-    supplier_name:    'Avelino Trading Co.',
-    status:           'COMPLETED',
-    order_date:       '2026-04-10',
-    expected_delivery:'2026-04-18',
-    notes:            null,
-    total_items:      200,
-    total_cost:       98750,
-  },
-  {
-    purchase_order_id: 5,
-    po_number:        'PO-2026-005',
-    supplier_name:    'Luntian Fresh Farms',
-    status:           'CANCELLED',
-    order_date:       '2026-03-28',
-    expected_delivery:'2026-04-08',
-    notes:            'Supplier unavailable',
-    total_items:      30,
-    total_cost:       8900,
-  },
-];
-
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const ROWS_PER_PAGE = 10;
+const MOCK_ORDERS: PurchaseOrder[] = [];
 
 const ALL_STATUSES = ['All Status', 'DRAFT', 'SENT', 'APPROVED', 'COMPLETED', 'CANCELLED'];
 

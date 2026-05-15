@@ -29,6 +29,7 @@ type OrderItemBackend = {
 
 export type Order = {
   id: number; customer: string; contact?: string;
+  address: string;
   date: string; status: string; paymentMethod: string; paymentStatus?: string;
   totalQty: number; totalAmount: number; items?: OrderItemBackend[]; is_archived?: boolean;
   amount_paid?: number;
@@ -40,8 +41,8 @@ export type Order = {
 };
 
 type Summary = {
-  shippedToday: { current: number; total: number};
-  cancelled: { current: number};
+  completedToday: { current: number; total: number };
+  cancelled: { current: number };
   totalOrders: { count: number; growth: number };
 };
 
@@ -404,9 +405,9 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
     for (const o of orders) {
       if (o.is_archived) continue;
       const st = o.status?.toLowerCase();
-      if (st === 'shipping'  && isTodayISO(o.shipped_date))   shipped++;
+      if (st === 'completed' && isTodayISO(o.shipped_date))   shipped++;
       if (st === 'cancelled' && isTodayISO(o.cancelled_date)) cancelled++;
-      if (st === 'preparing' || st === 'packed')               queue++;
+      if (st === 'preparing')                                  queue++;
     }
     return { shippedTodayCount: shipped, activeQueueCount: queue, cancelledTodayCount: cancelled };
   }, [orders]);
@@ -767,10 +768,8 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                         {openMenuId === o.id && (
                           <div className={s.popupMenu}>
                             {o.status?.toUpperCase() !== 'COMPLETED' && (
-                            {o.status?.toUpperCase() !== 'COMPLETED' && (
                               <button className={s.popBtnEdit} onClick={() => handleOpenEdit(o)}><LuPencil size={14} /> Edit</button>
                             )}
-                            {['COMPLETED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
                             {['COMPLETED', 'CANCELLED'].includes(o.status?.toUpperCase()) && (
                               <button className={s.popBtnArchive} onClick={() => { setArchiveConfirmId(o.id); setOpenMenuId(null); }}><LuArchive size={14} /> Archive</button>
                             )}

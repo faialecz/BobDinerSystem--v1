@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from database.db_config import get_connection
 from datetime import date, timedelta
 import json
+import psycopg2
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/api/orders")
 
@@ -82,25 +83,49 @@ def orders_list():
     conn = get_connection()
     cur  = conn.cursor()
 
+    # ── Detect which optional columns exist in order_transaction ────────────
+    _OPTIONAL_OT_COLS = ('amount_paid', 'deposit_date', 'final_payment_date',
+                         'shipped_date', 'cancelled_date')
     try:
-        # ── Query 1: order headers (no item joins — avoids schema guessing) ──
         cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'order_transaction'
+              AND column_name = ANY(%s)
+        """, (list(_OPTIONAL_OT_COLS),))
+        _existing = {r[0] for r in cur.fetchall()}
+    except Exception:
+        _existing = set()
+
+    def _col(name, alias=None, coalesce_val=None):
+        """Return a SQL fragment for a column that may not exist yet."""
+        label = alias or name
+        if name in _existing:
+            if coalesce_val is not None:
+                return f"COALESCE(ot.{name}, {coalesce_val}) AS {label}"
+            return f"ot.{name} AS {label}"
+        if coalesce_val is not None:
+            return f"{coalesce_val} AS {label}"
+        return f"NULL AS {label}"
+
+    try:
+        # ── Query 1: order headers ────────────────────────────────────────────
+        cur.execute(f"""
             SELECT
                 ot.order_id,
                 c.customer_name,
-                c.customer_contact,
+                COALESCE(c.customer_contact, 'N/A')          AS customer_contact,
                 ot.order_date,
                 COALESCE(sl_status.status_name, 'Preparing') AS order_status,
                 COALESCE(sl_pm.status_name,     'Cash')      AS payment_method_name,
                 sl_ps.status_name                            AS payment_status_name,
                 sl_ps.status_code                            AS payment_status_code,
-                COALESCE(ot.total_amount,  0)                AS total_amount,
-                COALESCE(ot.amount_paid,   0)                AS amount_paid,
+                COALESCE(ot.total_amount, 0)                 AS total_amount,
+                {_col('amount_paid',        coalesce_val='0')},
                 ot.payment_status_id,
-                ot.deposit_date,
-                ot.final_payment_date,
-                ot.shipped_date,
-                ot.cancelled_date
+                {_col('deposit_date')},
+                {_col('final_payment_date')},
+                {_col('shipped_date')},
+                {_col('cancelled_date')}
             FROM order_transaction ot
             JOIN  customer          c         ON c.customer_id       = ot.customer_id
             LEFT JOIN static_status sl_status ON sl_status.status_id = ot.order_status_id
@@ -110,7 +135,7 @@ def orders_list():
         """)
         rows = cur.fetchall()
 
-        # ── Query 2: BOM items from order_menu_item (new system) ─────────────
+        # ── Query 2: BOM items from order_menu_item ───────────────────────────
         cur.execute("""
             SELECT
                 omi.order_id,
@@ -120,7 +145,7 @@ def orders_list():
                         'item_name',      mi.menu_item_name,
                         'order_quantity', omi.quantity,
                         'unit_price',     omi.unit_price,
-                        'amount',         omi.unit_price * omi.quantity,
+                        'amount',         omi.line_total,
                         'notes',          COALESCE(omi.notes, '')
                     )
                     ORDER BY omi.order_menu_item_id
@@ -166,6 +191,9 @@ def orders_list():
 
         total_qty = sum(int(it.get('order_quantity') or 0) for it in items_list)
 
+        def _iso(val):
+            return val.isoformat() if val else None
+
         orders.append({
             "id":                 order_id,
             "customer":           customer_name,
@@ -178,11 +206,11 @@ def orders_list():
             "totalAmount":        float(total_amount) if total_amount is not None else 0.0,
             "amount_paid":        float(amount_paid)  if amount_paid  is not None else 0.0,
             "payment_status_id":  payment_status_id,
-            "deposit_date":       deposit_date.isoformat()        if deposit_date        else None,
-            "final_payment_date": final_payment_date.isoformat()  if final_payment_date  else None,
+            "deposit_date":       _iso(deposit_date),
+            "final_payment_date": _iso(final_payment_date),
             "is_archived":        is_archived,
-            "shipped_date":       shipped_date.isoformat()        if shipped_date        else None,
-            "cancelled_date":     cancelled_date.isoformat()      if cancelled_date      else None,
+            "shipped_date":       _iso(shipped_date),
+            "cancelled_date":     _iso(cancelled_date),
             "items":              items_list,
         })
 
