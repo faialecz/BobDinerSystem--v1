@@ -70,7 +70,9 @@ def get_dashboard():
         #   static_status.status_code           → 'INACTIVE' excluded
         cur.execute("""
             WITH brand_stock AS (
-                -- Current non-expired stock per brand
+                -- Current non-expired stock per brand — raw ingredients only.
+                -- Exclude any inventory_brand that is a finished menu item
+                -- (i.e. referenced by menu_item.linked_inventory_brand_id).
                 SELECT
                     ib.inventory_brand_id,
                     COALESCE(SUM(bat.quantity_on_hand), 0)::int AS qty
@@ -79,7 +81,10 @@ def get_dashboard():
                        ON bat.inventory_brand_id = ib.inventory_brand_id
                       AND bat.expiry_date > CURRENT_DATE
                 JOIN static_status ss ON ss.status_id = ib.item_status_id
+                LEFT JOIN menu_item mi
+                       ON mi.linked_inventory_brand_id = ib.inventory_brand_id
                 WHERE ss.status_code != 'INACTIVE'
+                  AND mi.menu_item_id IS NULL
                 GROUP BY ib.inventory_brand_id
             ),
             brand_threshold AS (
@@ -104,8 +109,8 @@ def get_dashboard():
                 LEFT JOIN brand_threshold bt USING (inventory_brand_id)
             )
             SELECT
-                -- Health counts
-                COUNT(*)                                             AS active_total,
+                -- active_total counts distinct inventory items (matches inventory module)
+                COUNT(DISTINCT i.inventory_id)                       AS active_total,
                 COUNT(*) FILTER (WHERE status_class = 'critical')   AS critical,
                 COUNT(*) FILTER (WHERE status_class = 'low')        AS low_stock,
                 COUNT(*) FILTER (WHERE status_class = 'optimal')    AS optimal,

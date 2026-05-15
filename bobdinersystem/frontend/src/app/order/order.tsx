@@ -15,7 +15,7 @@ import {
   LuArchive, LuChevronRight, LuChevronLeft, LuPencil, LuX
 } from 'react-icons/lu';
 
-const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'PACKED': 2, 'SHIPPING': 3, 'CANCELLED': 4, 'COMPLETED': 5 };
+const STATUS_PRIORITY: Record<string, number> = { 'PREPARING': 1, 'COMPLETED': 2, 'CANCELLED': 3 };
 const ITEM_STATUS_MAP: Record<number, string> = { 1: 'AVAILABLE', 2: 'PARTIALLY_AVAILABLE', 3: 'OUT_OF_STOCK' };
 const ROWS_PER_PAGE = 10;
 
@@ -23,10 +23,13 @@ type OrderItemBackend = {
   inventory_id: number; order_quantity: number; available_quantity: number;
   item_status_id: number; item_status?: string; item_name?: string; amount?: number; uom?: string;
   brand_name?: string; item_description?: string;
+  ingredients?: Array<{ ingredient_brand_id: number; ingredient_name: string }>;
+  modifications?: Array<{ ingredient_brand_id: number; action_code: string }>;
 };
 
 export type Order = {
-  id: number; customer: string; contact?: string; address: string;
+  id: number; customer: string; contact?: string;
+  address: string;
   date: string; status: string; paymentMethod: string; paymentStatus?: string;
   totalQty: number; totalAmount: number; items?: OrderItemBackend[]; is_archived?: boolean;
   amount_paid?: number;
@@ -38,21 +41,19 @@ export type Order = {
 };
 
 type Summary = {
-  shippedToday: { current: number; total: number};
-  cancelled: { current: number};
+  completedToday: { current: number; total: number };
+  cancelled: { current: number };
   totalOrders: { count: number; growth: number };
 };
 
-type SortKey = 'id' | 'customer' | 'address' | 'totalQty' | 'totalAmount' | 'paymentMethod' | 'date' | 'status' | null;
+type SortKey = 'id' | 'customer' | 'totalQty' | 'totalAmount' | 'paymentMethod' | 'date' | 'status' | null;
 
 const getViewStatusClass = (status: string, s: Record<string, string>) => {
   switch (status?.toUpperCase()) {
-    case 'PREPARING': return s.viewStatusPreparing;
-    case 'PACKED':    return s.viewStatusPacked;
-    case 'SHIPPING':  return s.viewStatusToShip;
-    case 'COMPLETED': return s.viewStatusReceived;
-    case 'CANCELLED': return s.viewStatusCancelled;
-    default:          return s.viewStatusDefault;
+    case 'PREPARING':  return s.viewStatusPreparing;
+    case 'COMPLETED':  return s.viewStatusReceived;
+    case 'CANCELLED':  return s.viewStatusCancelled;
+    default:           return s.viewStatusDefault;
   }
 };
 
@@ -104,14 +105,12 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
 
   const s = styles;
 
-  const ORDER_STATUS_OPTIONS = ['All Status', 'PREPARING', 'PACKED', 'SHIPPING', 'CANCELLED', 'COMPLETED'];
+  const ORDER_STATUS_OPTIONS = ['All Status', 'PREPARING', 'COMPLETED', 'CANCELLED'];
 
   const getStatusBadgeColor = (status: string) => {
-  if (status === 'PREPARING') return '#3b82f6';
-  if (status === 'PACKED')    return '#7c3aed';
-  if (status === 'SHIPPING')  return '#f59e0b';
-  if (status === 'COMPLETED') return '#10b981';
-  if (status === 'CANCELLED') return '#ef4444';
+  if (status === 'PREPARING')  return '#3b82f6';
+  if (status === 'COMPLETED')  return '#10b981';
+  if (status === 'CANCELLED')  return '#ef4444';
   return '#9ca3af';
 };
 
@@ -174,7 +173,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   const fetchSummary = async () => {
     try {
       const r = await fetch('/api/orders/summary');
-      if (r.ok) { const d = await r.json(); if (d && d.shippedToday) setSummary(d); }
+      if (r.ok) { const d = await r.json(); if (d && d.completedToday) setSummary(d); }
     } catch (err) { console.error('Error fetching summary:', err); }
   };
 
@@ -240,7 +239,6 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
       const itemsChanged   = JSON.stringify(updatedOrder.items)   !== JSON.stringify(original?.items);
       const detailsChanged = updatedOrder.customerName !== original?.name ||
                              updatedOrder.contact      !== original?.contact ||
-                             updatedOrder.address      !== original?.address ||
                              updatedOrder.paymentMethod !== original?.paymentMethod;
 
       const isStatusOnly = statusChanged && !itemsChanged && !detailsChanged;
@@ -264,7 +262,6 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                 ...o,
                 customer:           updatedOrder.customerName ?? o.customer,
                 contact:            updatedOrder.contact      ?? o.contact,
-                address:            updatedOrder.address      ?? o.address,
                 status:             updatedOrder.status       ?? o.status,
                 paymentMethod:      updatedOrder.paymentMethod ?? o.paymentMethod,
                 totalAmount:        updatedOrder.totalAmt      ?? o.totalAmount,
@@ -306,7 +303,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   };
 
   const handleOpenEdit = (order: Order) => {
-    setSelectedOrderForEdit({ id: order.id, name: order.customer, contact: order.contact || '', address: order.address, status: order.status, paymentMethod: order.paymentMethod, items: order.items, amount_paid: order.amount_paid ?? 0, payment_status_id: order.payment_status_id ?? 30, deposit_date: order.deposit_date ?? '', final_payment_date: order.final_payment_date ?? '' });
+    setSelectedOrderForEdit({ id: order.id, name: order.customer, contact: order.contact || '', status: order.status, paymentMethod: order.paymentMethod, items: order.items, amount_paid: order.amount_paid ?? 0, payment_status_id: order.payment_status_id ?? 30, deposit_date: order.deposit_date ?? '', final_payment_date: order.final_payment_date ?? '' });
     setOpenMenuId(null); setShowEditModal(true);
   };
 
@@ -334,19 +331,17 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
           o.id.toString() === term || // Strict ID match first
           o.id.toString().toLowerCase().includes(term) ||
           o.customer.toLowerCase().includes(term) ||
-          (o.address ?? '').toLowerCase().includes(term) ||
           (o.contact ?? '').toLowerCase().includes(term) ||
           (o.paymentMethod ?? '').toLowerCase().includes(term) ||
           o.date.toLowerCase().includes(term) ||
           o.status.toLowerCase().includes(term)
         );
       }
-      
+
       // For text search, use standard includes check
       return matchesArchiveView && matchesStatus && matchesDate && (
         o.id.toString().toLowerCase().includes(term) ||
         o.customer.toLowerCase().includes(term) ||
-        (o.address ?? '').toLowerCase().includes(term) ||
         (o.contact ?? '').toLowerCase().includes(term) ||
         (o.paymentMethod ?? '').toLowerCase().includes(term) ||
         o.date.toLowerCase().includes(term) ||
@@ -410,9 +405,9 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
     for (const o of orders) {
       if (o.is_archived) continue;
       const st = o.status?.toLowerCase();
-      if (st === 'shipping'  && isTodayISO(o.shipped_date))   shipped++;
+      if (st === 'completed' && isTodayISO(o.shipped_date))   shipped++;
       if (st === 'cancelled' && isTodayISO(o.cancelled_date)) cancelled++;
-      if (st === 'preparing' || st === 'packed')               queue++;
+      if (st === 'preparing')                                  queue++;
     }
     return { shippedTodayCount: shipped, activeQueueCount: queue, cancelledTodayCount: cancelled };
   }, [orders]);
@@ -438,12 +433,10 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
     fontSize: '0.78rem', fontWeight: 600,
   };
   switch (status?.toUpperCase()) {
-    case 'PREPARING': return { ...base, color: '#2563eb', border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff' };
-    case 'PACKED':    return { ...base, color: '#7c3aed', border: '1.5px solid #c4b5fd', backgroundColor: '#f5f3ff' };
-    case 'SHIPPING':  return { ...base, color: '#b45309', border: '1.5px solid #fcd34d', backgroundColor: '#fffbeb' };
-    case 'COMPLETED': return { ...base, color: '#15803d', border: '1.5px solid #86efac', backgroundColor: '#f0fdf4' };
-    case 'CANCELLED': return { ...base, color: '#dc2626', border: '1.5px solid #fca5a5', backgroundColor: '#fef2f2' };
-    default:          return { ...base, color: '#6b7280', border: '1.5px solid #e5e7eb', backgroundColor: '#f9fafb' };
+    case 'PREPARING':  return { ...base, color: '#2563eb', border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff' };
+    case 'COMPLETED':  return { ...base, color: '#15803d', border: '1.5px solid #86efac', backgroundColor: '#f0fdf4' };
+    case 'CANCELLED':  return { ...base, color: '#dc2626', border: '1.5px solid #fca5a5', backgroundColor: '#fef2f2' };
+    default:           return { ...base, color: '#6b7280', border: '1.5px solid #e5e7eb', backgroundColor: '#f9fafb' };
   }
 };
 
@@ -482,29 +475,17 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   };
 
   const getPaymentStatusBadge = (o: Order) => {
-    const id = o.payment_status_id;
-    if (id === 29) {
+    const ps = o.paymentStatus?.toUpperCase();
+    if (ps === 'PAID') {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac' }}>
           Paid
         </span>
       );
     }
-    if (id === 31) {
-      return (
-        <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#fef9c3', color: '#a16207', border: '1.5px solid #fde047' }}>
-            Partial
-          </span>
-          {o.deposit_date && (
-            <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Dep: {fmtDate(o.deposit_date)}</span>
-          )}
-        </span>
-      );
-    }
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: '#f3f4f6', color: '#6b7280', border: '1.5px solid #e5e7eb' }}>
-        Unpaid
+        Pending
       </span>
     );
   };
@@ -512,8 +493,8 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
   // Returns the most contextually relevant date for a row.
   const getDisplayDate = (o: Order): string => {
     const st = o.status?.toLowerCase();
-    if (st === 'cancelled' && o.cancelled_date) return fmtDate(o.cancelled_date) ?? o.date;
-    if ((st === 'shipping' || st === 'completed') && o.shipped_date) return fmtDate(o.shipped_date) ?? o.date;
+    if (st === 'cancelled'  && o.cancelled_date) return fmtDate(o.cancelled_date) ?? o.date;
+    if (st === 'completed'  && o.shipped_date)   return fmtDate(o.shipped_date)   ?? o.date;
     return o.date;
   };
 
@@ -705,7 +686,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                 {/* ── SEARCH (updated to match Sales style) ── */}
                 <div className={s.searchWrapper}>
                   <LuSearch size={18} className={s.searchIcon} />
-                  <input className={s.searchInput} placeholder="Search No, Name, Address, Payment" value={searchTerm} onChange={handleSearchChange} />
+                  <input className={s.searchInput} placeholder="Search ID, Name, Contact, Payment" value={searchTerm} onChange={handleSearchChange} />
                 </div>
 
                 <button className={s.addButton} onClick={() => setShowAddModal(true)}>ADD</button>
@@ -718,7 +699,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                   <tr>
                     {[
                       { label: 'ID', key: 'id' }, { label: 'CUSTOMER', key: 'customer' },
-                      { label: 'ADDRESS', key: 'address' }, { label: 'QTY', key: 'totalQty' },
+                      { label: 'QTY', key: 'totalQty' },
                       { label: 'TOTAL', key: 'totalAmount' }, { label: 'METHOD', key: 'paymentMethod' },
                       { label: 'DATE', key: 'date' }, { label: 'ORDER STATUS', key: 'status' },
                       { label: 'PAYMENT STATUS', key: null }, { label: 'ACTION', key: null },
@@ -757,11 +738,11 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                   <>
                     {[0,1,2,3,4,5,6,7].map(i => (
                       <tr key={i}>
-                        {[40,110,130,60,30,70,70,55,70,55].map((w,j) => (
+                        {[40,110,60,30,70,70,55,70,55].map((w,j) => (
                           <td key={j}>
                             <div style={{
                               height: '12px',
-                              borderRadius: j >= 7 ? '20px' : '4px',
+                              borderRadius: j >= 6 ? '20px' : '4px',
                               background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
                               backgroundSize: '600px 100%',
                               animation: 'shimmer 1.4s infinite linear',
@@ -776,7 +757,6 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                     <tr key={o.id} className={i % 2 ? s.altRow : ''} onClick={() => handleOpenView(o)} style={{ cursor: 'pointer' }}>
                       <td>{o.id}</td>
                       <td><strong>{o.customer}</strong></td>
-                      <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.address}</td>
                       <td>{o.totalQty}</td>
                       <td style={{ fontWeight: 'bold' }}>₱{o.totalAmount?.toLocaleString()}</td>
                       <td>{o.paymentMethod}</td>
@@ -842,7 +822,7 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
           <div className={s.viewModal} onClick={e => e.stopPropagation()}>
             <div className={s.viewModalHeader}>
               <div>
-                <h2 className={s.viewCompanyName}>AE Samonte Merchandise</h2>
+                <h2 className={s.viewCompanyName}>Bob&apos;s Diner Restaurant</h2>
                 <p className={s.viewOrderNumber}>No. OR{new Date().getFullYear()}-{String(selectedOrderForView.id).padStart(6, '0')}</p>
               </div>
               <div className={s.viewHeaderRight}>
@@ -864,21 +844,15 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                       <div key={label}><p className={s.viewInfoLabel}>{label}</p><p className={s.viewInfoValue}>{value}</p></div>
                     ))}
                   </div>
-                  <div>
-                    <p className={s.viewInfoLabel}>Address</p>
-                    <p className={s.viewInfoValue}>{selectedOrderForView.address}</p>
-                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div><p className={s.viewInfoLabel}>Payment Method</p><p className={s.viewInfoValue}>{selectedOrderForView.paymentMethod}</p></div>
                     <div>
                       <p className={s.viewInfoLabel}>Payment Status</p>
                       <p className={s.viewInfoValue}>
-                        {(() => {
-                          const id = selectedOrderForView.payment_status_id;
-                          if (id === 29) return <span style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Paid</span>;
-                          if (id === 31) return <span style={{ backgroundColor: '#fef9c3', color: '#a16207', border: '1.5px solid #fde047', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Partial</span>;
-                          return <span style={{ backgroundColor: '#f3f4f6', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Unpaid</span>;
-                        })()}
+                        {selectedOrderForView.paymentStatus?.toUpperCase() === 'PAID'
+                          ? <span style={{ backgroundColor: '#dcfce7', color: '#15803d', border: '1.5px solid #86efac', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Paid</span>
+                          : <span style={{ backgroundColor: '#f3f4f6', color: '#6b7280', border: '1.5px solid #e5e7eb', borderRadius: '4px', padding: '1px 8px', fontSize: '0.78rem' }}>Pending</span>
+                        }
                       </p>
                     </div>
                   </div>
@@ -899,8 +873,27 @@ export default function OrderPage({ role, onLogout, initialSearch, permissions }
                               {item.item_name || `Item #${item.inventory_id}`}
                               {item.brand_name && <span style={{ fontWeight: 400, color: '#475569' }}> — {item.brand_name}</span>}
                             </p>
-                            {item.item_description && <p className={s.viewItemStatus}>{item.item_description}</p>}
-                            {item.uom && <p className={s.viewItemStatus}>UOM: {item.uom}</p>}
+                            {(() => {
+                              const removedIds = new Set(
+                                (item.modifications ?? [])
+                                  .filter(m => m.action_code === 'REMOVED')
+                                  .map(m => m.ingredient_brand_id)
+                              );
+                              const active = (item.ingredients ?? []).filter(ing => !removedIds.has(ing.ingredient_brand_id));
+                              if (active.length === 0) return null;
+                              return (
+                                <>
+                                  <p style={{ margin: '4px 0 2px', fontSize: '0.75rem', color: '#9ca3af' }}>Ingredients:</p>
+                                  <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                                    {active.map(ing => (
+                                      <li key={ing.ingredient_brand_id} style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: '1.6' }}>
+                                        {ing.ingredient_name}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </>
+                              );
+                            })()}
                           </td>
                           <td>{item.order_quantity}</td>
                           <td>₱ {unitCost.toFixed(2)}</td>

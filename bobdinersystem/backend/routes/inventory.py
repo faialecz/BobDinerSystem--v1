@@ -392,6 +392,13 @@ def get_inventory():
                 WHERE  batch_status_id = 15
                 GROUP BY inventory_brand_id
             ) bat_agg ON bat_agg.inventory_brand_id = ib.inventory_brand_id
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM   inventory_brand ib_menu
+                JOIN   menu_item        mi
+                       ON mi.linked_inventory_brand_id = ib_menu.inventory_brand_id
+                WHERE  ib_menu.inventory_id = i.inventory_id
+            )
             GROUP BY
                 i.inventory_id, i.item_name,
                 s.status_name, s.status_code, i.item_status_id
@@ -437,6 +444,9 @@ def get_inventory():
             LEFT JOIN inventory_action ia
                 ON ia.inventory_brand_id = ib.inventory_brand_id
             LEFT JOIN unit_of_measure u ON ib.uom_id = u.uom_id
+            LEFT JOIN menu_item mi
+                ON mi.linked_inventory_brand_id = ib.inventory_brand_id
+            WHERE mi.menu_item_id IS NULL
             ORDER BY ib.inventory_id, COALESCE(b.brand_name, 'Generic')
         """)
         brand_rows = cur.fetchall()
@@ -453,6 +463,13 @@ def get_inventory():
             JOIN inventory_brand_supplier ibs
                 ON ibs.inventory_brand_id = ib.inventory_brand_id
             JOIN supplier s ON s.supplier_id = ibs.supplier_id
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM   inventory_brand ib_menu
+                JOIN   menu_item        mi
+                       ON mi.linked_inventory_brand_id = ib_menu.inventory_brand_id
+                WHERE  ib_menu.inventory_id = i.inventory_id
+            )
             ORDER BY i.inventory_id
         """)
         supplier_rows = cur.fetchall()
@@ -1640,6 +1657,57 @@ def get_stagnant_inventory():
             for row in rows
         ]), 200
     
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+
+@inventory_bp.route("/api/inventory/<int:inventory_brand_id>/ingredients", methods=["GET", "OPTIONS"])
+def get_menu_item_ingredients(inventory_brand_id):
+    """
+    Return the default ingredient list for a menu item identified by its
+    inventory_brand_id.  The frontend passes the selected item's brand ID
+    so we look up which menu_item rows share that brand, then return every
+    ingredient defined in menu_item_ingredient for them.
+
+    Response: [{ ingredient_brand_id, ingredient_name, quantity_required }, ...]
+    """
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+
+    conn = get_connection()
+    cur  = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT DISTINCT ON (mii.ingredient_brand_id)
+                mii.ingredient_brand_id,
+                i.item_name          AS ingredient_name,
+                mii.quantity_required
+            FROM menu_item_ingredient mii
+            JOIN menu_item mi
+               ON mi.menu_item_id = mii.menu_item_id
+            JOIN inventory_brand ib
+               ON ib.inventory_brand_id = mii.ingredient_brand_id
+            JOIN inventory i
+               ON i.inventory_id = ib.inventory_id
+            WHERE mi.inventory_brand_id = %s
+            ORDER BY mii.ingredient_brand_id, mii.menu_item_id
+        """, (inventory_brand_id,))
+
+        rows = cur.fetchall()
+        result = [
+            {
+                "ingredient_brand_id": r[0],
+                "ingredient_name":     r[1],
+                "quantity_required":   float(r[2]) if r[2] is not None else None,
+            }
+            for r in rows
+        ]
+        return jsonify(result), 200
+
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
